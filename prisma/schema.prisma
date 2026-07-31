@@ -1,0 +1,354 @@
+// ═══════════════════════════════════════════════════════════════
+//  Fast Trans CRM — مخطط قاعدة البيانات
+//  كل "model" هنا = جدول في قاعدة البيانات (مثل شيت في إكسل)
+// ═══════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────────────────────────
+//  المستخدمون والصلاحيات
+// ───────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("AGENT") // ADMIN | MANAGER | AGENT
+  phone        String?
+  jobTitle     String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // العلاقات
+  ownedCompanies Company[]  @relation("CompanyOwner")
+  ownedContacts  Contact[]  @relation("ContactOwner")
+  ownedLeads     Lead[]     @relation("LeadOwner")
+  ownedDeals     Deal[]     @relation("DealOwner")
+  assignedTasks  Task[]     @relation("TaskAssignee")
+  createdTasks   Task[]     @relation("TaskCreator")
+  notes          Note[]
+  activities     Activity[]
+  quotes         Quote[]
+
+  @@index([email])
+}
+
+// ───────────────────────────────────────────────
+//  الشركات (الحسابات) — العميل المؤسسي
+// ───────────────────────────────────────────────
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  nameAr      String?
+  industry    String? // القطاع: محاماة، طبي، حكومي...
+  website     String?
+  phone       String?
+  email       String?
+  country     String?
+  city        String?
+  address     String?
+  taxNumber   String? // الرقم الضريبي / السجل التجاري
+  paymentTerms String? // شروط الدفع: فوري، 30 يوم...
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ownerId String?
+  owner   User?   @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  contacts   Contact[]
+  deals      Deal[]
+  tasks      Task[]
+  noteItems  Note[]
+  quotes     Quote[]
+  activities Activity[]
+
+  @@index([name])
+  @@index([ownerId])
+}
+
+// ───────────────────────────────────────────────
+//  جهات الاتصال — الأشخاص داخل الشركات
+// ───────────────────────────────────────────────
+
+model Contact {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String?
+  email     String?
+  phone     String?
+  mobile    String?
+  jobTitle  String?
+  language  String? // لغة التواصل المفضلة
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User?   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  deals      Deal[]
+  tasks      Task[]
+  noteItems  Note[]
+  quotes     Quote[]
+  activities Activity[]
+
+  @@index([email])
+  @@index([companyId])
+  @@index([ownerId])
+}
+
+// ───────────────────────────────────────────────
+//  العملاء المحتملون (Leads) — قبل التأهيل
+// ───────────────────────────────────────────────
+
+model Lead {
+  id          String   @id @default(cuid())
+  firstName   String
+  lastName    String?
+  companyName String?
+  email       String?
+  phone       String?
+  source      String? // مصدر العميل: موقع، فيسبوك، توصية...
+  status      String   @default("NEW") // NEW | CONTACTED | QUALIFIED | UNQUALIFIED | CONVERTED
+  serviceInterest String? // نوع الخدمة المطلوبة
+  sourceLang  String?
+  targetLang  String?
+  estimatedValue Float?
+  notes       String?
+  convertedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ownerId String?
+  owner   User?   @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  tasks      Task[]
+  noteItems  Note[]
+  activities Activity[]
+
+  @@index([status])
+  @@index([ownerId])
+}
+
+// ───────────────────────────────────────────────
+//  الصفقات / الفرص البيعية
+// ───────────────────────────────────────────────
+
+model Deal {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  stage       String   @default("NEW") // NEW | QUOTED | NEGOTIATION | WON | LOST
+  amount      Float    @default(0)
+  currency    String   @default("EGP")
+  probability Int      @default(20) // نسبة احتمال الإغلاق %
+
+  // حقول خاصة بمكتب الترجمة
+  serviceType String? // ترجمة معتمدة، فورية، توطين، تدقيق...
+  sourceLang  String?
+  targetLang  String?
+  wordCount   Int?
+  pageCount   Int?
+  deliveryDate DateTime?
+
+  expectedCloseDate DateTime?
+  closedAt    DateTime?
+  lostReason  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User?   @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  tasks      Task[]
+  noteItems  Note[]
+  quotes     Quote[]
+  activities Activity[]
+
+  @@index([stage])
+  @@index([ownerId])
+  @@index([companyId])
+}
+
+// ───────────────────────────────────────────────
+//  المهام
+// ───────────────────────────────────────────────
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      String    @default("OPEN") // OPEN | IN_PROGRESS | DONE | CANCELLED
+  priority    String    @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  type        String    @default("TODO") // CALL | EMAIL | MEETING | FOLLOW_UP | TODO
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  assigneeId String?
+  assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  creatorId String?
+  creator   User?   @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+
+  // المهمة قد ترتبط بأي كيان
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  dealId    String?
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([assigneeId, status])
+  @@index([dueDate])
+}
+
+// ───────────────────────────────────────────────
+//  الملاحظات
+// ───────────────────────────────────────────────
+
+model Note {
+  id        String   @id @default(cuid())
+  body      String
+  createdAt DateTime @default(now())
+
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  dealId    String?
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+// ───────────────────────────────────────────────
+//  عروض الأسعار
+// ───────────────────────────────────────────────
+
+model Quote {
+  id         String   @id @default(cuid())
+  number     String   @unique // QT-2026-0001
+  title      String
+  status     String   @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED
+  currency   String   @default("EGP")
+  subtotal   Float    @default(0)
+  discount   Float    @default(0)
+  taxRate    Float    @default(0)
+  taxAmount  Float    @default(0)
+  total      Float    @default(0)
+  validUntil DateTime?
+  notes      String?
+  terms      String?
+  sentAt     DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  items QuoteItem[]
+
+  dealId    String?
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  ownerId   String?
+  owner     User?    @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+model QuoteItem {
+  id          String  @id @default(cuid())
+  description String
+  serviceType String?
+  sourceLang  String?
+  targetLang  String?
+  unit        String  @default("WORD") // WORD | PAGE | HOUR | PROJECT
+  quantity    Float   @default(1)
+  unitPrice   Float   @default(0)
+  lineTotal   Float   @default(0)
+  sortOrder   Int     @default(0)
+
+  quoteId String
+  quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+}
+
+// ───────────────────────────────────────────────
+//  سجل الأنشطة (من فعل ماذا ومتى)
+// ───────────────────────────────────────────────
+
+model Activity {
+  id        String   @id @default(cuid())
+  type      String // CREATED | UPDATED | STAGE_CHANGED | NOTE_ADDED | EMAIL_SENT | CALL_LOGGED
+  title     String
+  detail    String?
+  createdAt DateTime @default(now())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  dealId    String?
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+// ───────────────────────────────────────────────
+//  إعدادات النظام (أسعار اللغات، إلخ)
+// ───────────────────────────────────────────────
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model PriceRate {
+  id          String  @id @default(cuid())
+  serviceType String // ترجمة معتمدة، تدقيق...
+  sourceLang  String
+  targetLang  String
+  unit        String  @default("WORD")
+  price       Float
+  currency    String  @default("EGP")
+  active      Boolean @default(true)
+
+  @@unique([serviceType, sourceLang, targetLang, unit])
+}

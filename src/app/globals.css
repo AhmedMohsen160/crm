@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* خطوط النظام — لا تعتمد على الإنترنت، فيعمل البرنامج حتى على شبكة داخلية.
+       تُستخدم خطوط عربية مثبّتة مسبقًا على ويندوز/ماك/أندرويد/لينكس. */
+    --font-app:
+      'Segoe UI', 'Dubai', 'Geeza Pro', 'Noto Sans Arabic', 'Noto Kufi Arabic', 'Tahoma',
+      -apple-system, BlinkMacSystemFont, system-ui, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: var(--font-app);
+  }
+
+  /* الأرقام تظهر لاتينية دائمًا حتى داخل النص العربي */
+  .nums {
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    display: inline-block;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .card-pad {
+    @apply p-4 sm:p-5;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-slate-700;
+  }
+
+  .input {
+    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900
+           placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2
+           focus:ring-brand-500/20 disabled:bg-slate-50 disabled:text-slate-500;
+  }
+
+  select.input {
+    @apply cursor-pointer bg-white;
+  }
+
+  textarea.input {
+    @apply min-h-[90px] leading-relaxed;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+           transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-primary {
+    @apply btn bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800;
+  }
+
+  .btn-secondary {
+    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  }
+
+  .btn-danger {
+    @apply btn border border-rose-300 bg-white text-rose-700 hover:bg-rose-50;
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-600 hover:bg-slate-100;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1.5 text-xs;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium
+           whitespace-nowrap;
+  }
+
+  .table-wrap {
+    @apply overflow-x-auto;
+  }
+
+  .tbl {
+    @apply w-full min-w-[640px] text-right text-sm;
+  }
+
+  .tbl thead th {
+    @apply border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold
+           uppercase tracking-wide text-slate-500;
+  }
+
+  .tbl tbody td {
+    @apply border-b border-slate-100 px-4 py-3 align-middle text-slate-700;
+  }
+
+  .tbl tbody tr:hover {
+    @apply bg-slate-50/70;
+  }
+
+  .link {
+    @apply font-medium text-brand-700 hover:text-brand-900 hover:underline;
+  }
+
+  .section-title {
+    @apply text-sm font-semibold text-slate-500;
+  }
+}
+
+/* شريط تمرير أنحف */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  background-clip: content-box;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}
