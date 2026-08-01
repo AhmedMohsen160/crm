@@ -3,7 +3,7 @@ import { Plus, FileText } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requireUser, canSeeAll } from '@/lib/auth';
 import { QUOTE_STATUSES, QUOTE_STATUS_COLORS, type QuoteStatus } from '@/lib/constants';
-import { formatMoney, formatDate, isOverdue, cn } from '@/lib/utils';
+import { formatMoney, formatDate, isOverdue, cn, search } from '@/lib/utils';
 import { PageHeader, Badge, Avatar, EmptyState, StatCard } from '@/components/ui';
 import { FilterBar, SearchInput, FilterSelect, KeepParam } from '@/components/filters';
 
@@ -25,9 +25,9 @@ export default async function QuotesPage({
   if (params.status) where.status = params.status;
   if (params.q) {
     where.OR = [
-      { number: { contains: params.q } },
-      { title: { contains: params.q } },
-      { company: { name: { contains: params.q } } },
+      { number: search(params.q) },
+      { title: search(params.q) },
+      { company: { name: search(params.q) } },
     ];
   }
 

@@ -9,7 +9,7 @@ import {
   SERVICE_TYPES,
   type DealStage,
 } from '@/lib/constants';
-import { formatMoney, formatDate, fullName, cn } from '@/lib/utils';
+import { formatMoney, formatDate, fullName, cn, search } from '@/lib/utils';
 import { PageHeader, Badge, Avatar, EmptyState, StatCard } from '@/components/ui';
 import { FilterBar, SearchInput, FilterSelect, KeepParam } from '@/components/filters';
 import PipelineBoard, { type BoardDeal } from '@/components/pipeline-board';
@@ -40,9 +40,9 @@ export default async function DealsPage({
   if (params.service) where.serviceType = params.service;
   if (params.q) {
     where.OR = [
-      { title: { contains: params.q } },
-      { description: { contains: params.q } },
-      { company: { name: { contains: params.q } } },
+      { title: search(params.q) },
+      { description: search(params.q) },
+      { company: { name: search(params.q) } },
     ];
   }
 

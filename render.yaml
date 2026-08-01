@@ -1,0 +1,72 @@
+# ═══════════════════════════════════════════════════════════════
+#  إعداد النشر على منصة Render — https://render.com
+#
+#  عند ربط المستودع بـ Render، تقرأ المنصة هذا الملف وتُنشئ كل شيء
+#  تلقائيًا: قاعدة بيانات PostgreSQL + خادم التطبيق + النشر التلقائي
+#  عند كل تعديل ترفعه على GitHub.
+#
+#  الشيء الوحيد الذي تُدخله يدويًا هو كلمة مرور مدير النظام
+#  (ADMIN_PASSWORD) — لأنها سرّ لا يُكتب في الملفات.
+# ═══════════════════════════════════════════════════════════════
+
+databases:
+  - name: crm-database
+    databaseName: crm
+    user: crm
+    plan: free # يكفي للبداية — يمكن الترقية لاحقًا بضغطة
+
+services:
+  - type: web
+    name: crm
+    runtime: node
+    plan: free # يكفي للتجربة والعرض
+    region: frankfurt # الأقرب للشرق الأوسط
+    branch: main
+    autoDeploy: true
+
+    buildCommand: npm ci && npm run db:deploy && npm run build
+    startCommand: node scripts/ensure-admin.mjs && npm start
+
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: DATABASE_PROVIDER
+        value: postgresql
+
+      # يُربط تلقائيًا بقاعدة البيانات أعلاه
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crm-database
+          property: connectionString
+
+      # مفتاح تشفير الجلسات — تولّده المنصة عشوائيًا
+      - key: AUTH_SECRET
+        generateValue: true
+
+      - key: NODE_VERSION
+        value: '22'
+
+      - key: NEXT_TELEMETRY_DISABLED
+        value: '1'
+
+      # متصفح الاختبار غير مطلوب على السيرفر
+      - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+        value: '1'
+
+      # ── بيانات أول دخول ──────────────────────────────────────
+      - key: ADMIN_EMAIL
+        value: admin@fasttrans.local
+
+      # ⚠ تُدخلها بنفسك في لوحة Render (8 أحرف على الأقل)
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      - key: ADMIN_NAME
+        value: مدير النظام
+
+      # ── اسم مكتبك كما يظهر في الواجهة وعروض الأسعار ─────────
+      - key: NEXT_PUBLIC_COMPANY_NAME_AR
+        value: مكتب فاست ترانس للترجمة
+
+      - key: NEXT_PUBLIC_COMPANY_NAME
+        value: Fast Trans Translation Office

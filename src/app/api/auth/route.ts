@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { type NextRequest } from 'next/server';
+import { redirectTo } from '@/lib/http';
 import { db } from '@/lib/db';
 import { createSession, destroySession, verifyPassword } from '@/lib/auth';
 
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
 
   if (mode === 'logout') {
     await destroySession();
-    return NextResponse.redirect(new URL('/login', request.url), 303);
+    return redirectTo('/login');
   }
 
   const email = String(fd.get('email') ?? '').trim().toLowerCase();
@@ -18,10 +19,9 @@ export async function POST(request: NextRequest) {
   const next = nextRaw.startsWith('/') ? nextRaw : '/';
 
   function fail(message: string) {
-    const url = new URL('/login', request.url);
-    url.searchParams.set('error', message);
-    if (next !== '/') url.searchParams.set('next', next);
-    return NextResponse.redirect(url, 303);
+    const params = new URLSearchParams({ error: message });
+    if (next !== '/') params.set('next', next);
+    return redirectTo(`/login?${params.toString()}`);
   }
 
   if (!email || !password) return fail('من فضلك أدخل البريد الإلكتروني وكلمة المرور.');
@@ -33,5 +33,5 @@ export async function POST(request: NextRequest) {
   if (!user.active) return fail('هذا الحساب موقوف. تواصل مع مدير النظام.');
 
   await createSession(user.id);
-  return NextResponse.redirect(new URL(next, request.url), 303);
+  return redirectTo(next);
 }

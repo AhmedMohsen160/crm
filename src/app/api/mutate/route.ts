@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { type NextRequest } from 'next/server';
+import { redirectTo, redirectWithError } from '@/lib/http';
 import { db } from '@/lib/db';
 import { getCurrentUser, canSeeAll, type SessionUser } from '@/lib/auth';
 import { logActivity } from '@/lib/actions/helpers';
@@ -19,7 +20,7 @@ import {
  */
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
-  if (!user) return NextResponse.redirect(new URL('/login', request.url), 303);
+  if (!user) return redirectTo('/login');
 
   const fd = await request.formData();
   const op = String(fd.get('op') ?? '');
@@ -27,17 +28,15 @@ export async function POST(request: NextRequest) {
   const value = String(fd.get('value') ?? '');
 
   const requested = String(fd.get('redirectTo') ?? '');
-  const backPath = requested.startsWith('/') ? requested : '/';
 
   try {
     const override = await handle(op, id, value, user);
-    return NextResponse.redirect(new URL(override ?? backPath, request.url), 303);
+    return redirectTo(override ?? requested, '/');
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'تعذّر تنفيذ العملية. حاول مرة أخرى.';
     console.error(`فشل تنفيذ العملية ${op}:`, error);
-    // نعود إلى الصفحة نفسها مع إشارة إلى الخطأ
-    const url = new URL(backPath, request.url);
-    url.searchParams.set('error', '1');
-    return NextResponse.redirect(url, 303);
+    return redirectWithError(requested, message);
   }
 }
 

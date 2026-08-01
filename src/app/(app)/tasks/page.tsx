@@ -11,7 +11,7 @@ import {
   type TaskPriority,
   type TaskType,
 } from '@/lib/constants';
-import { formatDate, isOverdue, cn, fullName } from '@/lib/utils';
+import { formatDate, isOverdue, cn, fullName, search } from '@/lib/utils';
 import { PageHeader, Badge, Avatar, EmptyState, StatCard } from '@/components/ui';
 import { FilterBar, SearchInput, FilterSelect, KeepParam } from '@/components/filters';
 import { TaskToggle } from '@/components/forms';
@@ -47,7 +47,7 @@ export default async function TasksPage({
 
   if (params.priority) where.priority = params.priority;
   if (params.q) {
-    where.OR = [{ title: { contains: params.q } }, { description: { contains: params.q } }];
+    where.OR = [{ title: search(params.q) }, { description: search(params.q) }];
   }
 
   const todayStart = new Date();

@@ -31,6 +31,10 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db;
  * تُنفَّذ مرة واحدة لكل عملية تشغيل.
  */
 async function tuneSqlite() {
+  // على السيرفر نستخدم PostgreSQL، وهذه الإعدادات خاصة بـ SQLite فقط
+  const provider = process.env.DATABASE_PROVIDER ?? 'sqlite';
+  if (provider !== 'sqlite') return;
+
   try {
     await db.$executeRawUnsafe('PRAGMA journal_mode = WAL;');
     await db.$executeRawUnsafe('PRAGMA busy_timeout = 5000;');

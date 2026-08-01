@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { type NextRequest } from 'next/server';
+import { redirectTo, redirectWithError } from '@/lib/http';
 import { getCurrentUser } from '@/lib/auth';
 import {
   MutationError,
@@ -25,7 +26,7 @@ import {
  */
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
-  if (!user) return NextResponse.redirect(new URL('/login', request.url), 303);
+  if (!user) return redirectTo('/login');
 
   const fd = await request.formData();
   const entity = String(fd.get('entity') ?? '');
@@ -68,17 +69,13 @@ export async function POST(request: NextRequest) {
         throw new MutationError(`نوع سجل غير معروف: ${entity}`);
     }
 
-    return NextResponse.redirect(new URL(destination, request.url), 303);
+    return redirectTo(destination);
   } catch (error) {
     const message =
       error instanceof MutationError ? error.message : 'تعذّر الحفظ. حاول مرة أخرى.';
     if (!(error instanceof MutationError)) console.error('فشل الحفظ:', error);
 
     // نعود إلى النموذج ونعرض سبب المشكلة
-    const backRaw = String(fd.get('back') ?? '');
-    const back = backRaw.startsWith('/') ? backRaw : '/';
-    const url = new URL(back, request.url);
-    url.searchParams.set('error', message);
-    return NextResponse.redirect(url, 303);
+    return redirectWithError(String(fd.get('back') ?? ''), message);
   }
 }

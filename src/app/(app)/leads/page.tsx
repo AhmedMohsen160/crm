@@ -8,7 +8,7 @@ import {
   LEAD_SOURCES,
   type LeadStatus,
 } from '@/lib/constants';
-import { formatMoney, formatDate, fullName } from '@/lib/utils';
+import { formatMoney, formatDate, fullName, search } from '@/lib/utils';
 import { PageHeader, Badge, Avatar, EmptyState } from '@/components/ui';
 import { FilterBar, SearchInput, FilterSelect, KeepParam } from '@/components/filters';
 
@@ -31,11 +31,11 @@ export default async function LeadsPage({
   if (params.source) where.source = params.source;
   if (params.q) {
     where.OR = [
-      { firstName: { contains: params.q } },
-      { lastName: { contains: params.q } },
-      { companyName: { contains: params.q } },
-      { email: { contains: params.q } },
-      { phone: { contains: params.q } },
+      { firstName: search(params.q) },
+      { lastName: search(params.q) },
+      { companyName: search(params.q) },
+      { email: search(params.q) },
+      { phone: search(params.q) },
     ];
   }
 

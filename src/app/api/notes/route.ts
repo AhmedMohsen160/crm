@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { type NextRequest } from 'next/server';
+import { redirectTo } from '@/lib/http';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { logActivity, readEntityLink, linkPath } from '@/lib/actions/helpers';
@@ -15,7 +16,7 @@ import { logActivity, readEntityLink, linkPath } from '@/lib/actions/helpers';
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
-    return NextResponse.redirect(new URL('/login', request.url), 303);
+    return redirectTo('/login');
   }
 
   const formData = await request.formData();
@@ -23,8 +24,7 @@ export async function POST(request: NextRequest) {
   const link = readEntityLink(formData);
 
   const requested = String(formData.get('redirectTo') ?? '');
-  const backPath = requested.startsWith('/') ? requested : linkPath(link, '/');
-  const back = NextResponse.redirect(new URL(backPath, request.url), 303);
+  const back = redirectTo(requested, linkPath(link, '/'));
 
   if (!body) return back;
 

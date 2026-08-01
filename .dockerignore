@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.env
+.env.local
+*.db
+*.db-wal
+*.db-shm
+tests
+test-screenshots
+README.md
+.github

@@ -157,3 +157,18 @@ export function date(fd: FormData, key: string): Date | null {
 export function fullName(first: string, last?: string | null): string {
   return [first, last].filter(Boolean).join(' ');
 }
+
+/**
+ * شرط بحث نصّي غير حسّاس لحالة الأحرف.
+ *
+ * PostgreSQL يفرّق بين الحروف الكبيرة والصغيرة في البحث، فلا يجد
+ * "Ahmed" عند كتابة "ahmed". نضيف mode: 'insensitive' لحلّ ذلك — لكن
+ * SQLite لا يدعم هذا الخيار (وهو أصلًا غير حسّاس)، لذا نضيفه فقط عند
+ * استخدام PostgreSQL. العربية بلا حالة أحرف فلا تتأثر في الحالتين.
+ */
+export function search(value: string) {
+  const insensitive = process.env.DATABASE_PROVIDER === 'postgresql';
+  return insensitive
+    ? { contains: value, mode: 'insensitive' as const }
+    : { contains: value };
+}

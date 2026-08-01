@@ -2,7 +2,7 @@ import Link from '@/components/link';
 import { Plus, Users } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requireUser, canSeeAll } from '@/lib/auth';
-import { formatDate, fullName } from '@/lib/utils';
+import { formatDate, fullName, search } from '@/lib/utils';
 import { PageHeader, Avatar, EmptyState } from '@/components/ui';
 import { FilterBar, SearchInput, FilterSelect, KeepParam } from '@/components/filters';
 
@@ -24,12 +24,12 @@ export default async function ContactsPage({
   if (params.company) where.companyId = params.company;
   if (params.q) {
     where.OR = [
-      { firstName: { contains: params.q } },
-      { lastName: { contains: params.q } },
-      { email: { contains: params.q } },
-      { phone: { contains: params.q } },
-      { mobile: { contains: params.q } },
-      { company: { name: { contains: params.q } } },
+      { firstName: search(params.q) },
+      { lastName: search(params.q) },
+      { email: search(params.q) },
+      { phone: search(params.q) },
+      { mobile: search(params.q) },
+      { company: { name: search(params.q) } },
     ];
   }
 

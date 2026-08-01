@@ -3,7 +3,7 @@ import { Plus, Building2 } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requireUser, canSeeAll } from '@/lib/auth';
 import { INDUSTRIES } from '@/lib/constants';
-import { formatDate } from '@/lib/utils';
+import { formatDate, search } from '@/lib/utils';
 import { PageHeader, Avatar, EmptyState } from '@/components/ui';
 import { FilterBar, SearchInput, FilterSelect, KeepParam } from '@/components/filters';
 
@@ -25,11 +25,11 @@ export default async function CompaniesPage({
   if (params.industry) where.industry = params.industry;
   if (params.q) {
     where.OR = [
-      { name: { contains: params.q } },
-      { nameAr: { contains: params.q } },
-      { email: { contains: params.q } },
-      { phone: { contains: params.q } },
-      { taxNumber: { contains: params.q } },
+      { name: search(params.q) },
+      { nameAr: search(params.q) },
+      { email: search(params.q) },
+      { phone: search(params.q) },
+      { taxNumber: search(params.q) },
     ];
   }
 
