@@ -21,8 +21,8 @@ services:
     runtime: node
     plan: free # يكفي للتجربة والعرض
     region: frankfurt # الأقرب للشرق الأوسط
-    # فرع العمل الحالي — غيّره إلى main بعد دمج التعديلات
-    branch: claude/crm-sales-team-system-1f54m8
+    # الفرع الرئيسي — كل تعديل يُدمج فيه يُنشر تلقائيًا
+    branch: main
     autoDeploy: true
 
     buildCommand: npm ci && npm run db:deploy && npm run build

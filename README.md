@@ -101,9 +101,7 @@ Render يقرأ ملف `render.yaml` الموجود في المشروع ويُن
 
 1. ادخل [render.com](https://render.com) وسجّل بحساب **GitHub** نفسه.
 2. اضغط **New ← Blueprint**.
-3. اختر مستودع `AhmedMohsen160/crm`. الفرع مضبوط مسبقًا في `render.yaml`
-   على فرع العمل الحالي `claude/crm-sales-team-system-1f54m8` — وإن أنشأت
-   فرع `main` لاحقًا، غيّر السطر `branch:` في `render.yaml` إليه.
+3. اختر مستودع `AhmedMohsen160/crm` — الفرع مضبوط مسبقًا على `main`.
 4. ستظهر لك خانة واحدة لتملأها: **`ADMIN_PASSWORD`** — اكتب فيها كلمة مرور
    قوية (٨ أحرف على الأقل). هذه كلمة مرور دخولك الأولى.
 5. اضغط **Apply** وانتظر ٥–١٠ دقائق.
