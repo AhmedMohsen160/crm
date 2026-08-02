@@ -988,6 +988,189 @@ check(
 // السجل لم يُمحَ (§٣ بند ٥)
 check((await go(`/projects/${projectId}`)) === 200, 'المشروع المسترد باقٍ في النظام لم يُحذف');
 
+// ── 10ح. الماليات (المرحلة ٨) ───────────────────────────────
+
+const THIS_PERIOD = new Date().toISOString().slice(0, 7);
+
+await go('/finance', '21-finance');
+check(await waitForText('الماليات'), 'لوحة الماليات تفتح');
+check(
+  await waitForText('هيكل المصروف'),
+  'هيكل المصروف بالبنود الثلاثة يظهر على اللوحة'
+);
+
+await go('/finance/accounts', '22-chart-of-accounts');
+check(
+  await waitForText('مصاريف بيعية وتسويقية') &&
+    (await waitForText('مصاريف عمومية وإدارية')) &&
+    (await waitForText('مصاريف تشغيلية وإنتاجية')),
+  'شجرة الحسابات مزروعة بالبنود الثلاثة كما في الدفاتر'
+);
+check(
+  await waitForText('تشغيل خارجي — ترجمة'),
+  'بند «خدمات تشغيلية خارجية — ترجمة» موجود (يربط الفريلانسرز بالدفاتر)'
+);
+
+// حساب جديد يُضاف من الشاشة.
+// نحصر المحددات داخل نموذج الحساب: شاشة الشجرة فيها نموذج تصفية يحمل
+// `select[name=type]` كذلك، فالمحدد المطلق يلتقط الخطأ منهما.
+const ACC_NAME = `حساب اختبار ${RUN}`;
+const accountForm = page.locator('main form:has(input[value=account])');
+await accountForm.locator('input[name=name]').fill(ACC_NAME);
+await accountForm.locator('select[name=type]').selectOption('expense');
+await accountForm.locator('select[name=expenseGroup]').selectOption('general_admin');
+await accountForm.locator('button[type=submit]').click();
+await page.waitForLoadState('networkidle');
+check(await waitForText(ACC_NAME), 'حساب جديد يُضاف من الشاشة بلا نشر');
+
+// ── قيد يدوي: الميزان يمنع الحفظ قبل التوازن ────────────────
+await go(`/finance/journal/new?period=${THIS_PERIOD}`, '23-journal-new');
+await page.fill('#description', `قيد اختبار ${RUN}`);
+
+const accountOptions = await page.evaluate(() =>
+  [...document.querySelectorAll('select[name="lines[0][accountId]"] option')]
+    .map((o) => o.value)
+    .filter(Boolean)
+);
+await page.selectOption('select[name="lines[0][accountId]"]', accountOptions[0]);
+await page.fill('input[name="lines[0][debit]"]', '1000');
+await page.selectOption('select[name="lines[1][accountId]"]', accountOptions[1]);
+await page.fill('input[name="lines[1][credit]"]', '600');
+
+const unbalancedText = await page.locator('[data-testid=entry-balance]').innerText();
+check(
+  unbalancedText.includes('الفرق'),
+  `الميزان يعرض الفرق لحظةً بلحظة — «${unbalancedText.replace(/\s+/g, ' ').trim()}»`
+);
+
+// نكمل التوازن
+await page.fill('input[name="lines[1][credit]"]', '1000');
+const balancedText = await page.locator('[data-testid=entry-balance]').innerText();
+check(balancedText.includes('متوازن'), 'وعند التساوي يعلن التوازن');
+
+await page.click('main form button[type=submit]:has-text("حفظ مسوَّدة")');
+await page.waitForURL(/\/finance\/journal\/[a-z0-9]+$/, { timeout: 25000 });
+await page.waitForLoadState('networkidle');
+const entryUrl = page.url();
+check(await waitForText('JV-'), 'القيد حصل على معرّف تسلسلي');
+check(await waitForText('مسوَّدة'), '**يُحفظ مسوَّدةً** — الترحيل فعل منفصل');
+
+await page.click('main form button[type=submit]:has-text("ترحيل القيد")');
+await page.waitForLoadState('networkidle');
+check(await waitForText('مرحَّل'), 'الترحيل يوقّع القيد باسم من رحّله');
+
+// القيد المرحَّل لا يُعدَّل
+await go(entryUrl.replace('http://localhost:3000', '') + '/edit');
+check(
+  await waitForText('لا يُعدَّل'),
+  'القيد المرحَّل لا يُعدَّل — يُلغى بسبب صريح ويبقى في السجل'
+);
+
+// ── ميزان المراجعة يتوازن ───────────────────────────────────
+await go(`/finance/reports/trial?period=${THIS_PERIOD}`, '24-trial-balance');
+const trialText = await page.locator('[data-testid=trial-status]').innerText();
+check(
+  trialText.includes('متوازن') && !trialText.includes('غير متوازن'),
+  `ميزان المراجعة متوازن — «${trialText.replace(/\s+/g, ' ').trim().slice(0, 70)}»`
+);
+
+// ── القيود المقترحة من المشغّل ──────────────────────────────
+await go(`/finance?period=${THIS_PERIOD}`);
+await page.click('main form button[type=submit]:has-text("توليد المسوَّدات")');
+await page.waitForURL(/\/finance\/journal\?/, { timeout: 30000 });
+await page.waitForLoadState('networkidle');
+check(
+  await waitForText('مقترح آليًا'),
+  'النظام يقترح قيود الشهر من التسليمات والتحصيلات — مسوَّدات لا ترحيلًا'
+);
+const sources = await page.evaluate(() => document.body.innerText);
+check(
+  sources.includes('اعتراف بالإيراد عند التسليم') || sources.includes('تحصيل'),
+  'المقترحات منسوبة لمصدرها التشغيلي فتُراجَع لا تُصدَّق'
+);
+
+// إعادة التوليد لا تُكرّر القيود
+const beforeCount = await page.locator('table tbody tr').count();
+await go(`/finance?period=${THIS_PERIOD}`);
+await page.click('main form button[type=submit]:has-text("توليد المسوَّدات")');
+await page.waitForURL(/\/finance\/journal\?/, { timeout: 30000 });
+await page.waitForLoadState('networkidle');
+const afterCount = await page.locator('table tbody tr').count();
+check(
+  afterCount === beforeCount,
+  `إعادة التوليد لا تُغرق الدفتر بقيود مكررة (${beforeCount} ← ${afterCount})`
+);
+
+// ── الأصول الثابتة والإهلاك ─────────────────────────────────
+await go('/finance/assets', '25-fixed-assets');
+await page.fill('input[name=name]', `أصل اختبار ${RUN}`);
+await page.selectOption('select[name=category]', 'computers');
+await page.fill('input[name=cost]', '174730');
+await page.fill('input[name=annualRate]', '0.25');
+await page.fill('input[name=purchaseDate]', '2026-01-01');
+await page.click('main form button[type=submit]:has-text("إضافة الأصل")');
+await page.waitForLoadState('networkidle');
+// ١٧٤٬٧٣٠ × ٢٥٪ ÷ ١٢ = ٣٬٦٤٠٫٢١ — الرقم الفعلي من جدول الإهلاك
+check(
+  await waitForText('3,640.21'),
+  'قسط الإهلاك الشهري محسوب بالقسط الثابت (١٧٤٬٧٣٠ × ٢٥٪ ÷ ١٢)'
+);
+
+// ── الموازنة والانحراف ──────────────────────────────────────
+const BUDGET_YEAR = Number(THIS_PERIOD.slice(0, 4));
+await go(`/finance/budget?year=${BUDGET_YEAR}`, '26-budget');
+if ((await page.locator('main form button:has-text("إنشاء الموازنة")').count()) > 0) {
+  await page.click('main form button[type=submit]:has-text("إنشاء الموازنة")');
+  await page.waitForLoadState('networkidle');
+}
+check(await waitForText('قيد الإعداد'), 'الموازنة السنوية تُنشأ');
+
+const budgetAccounts = await page.evaluate(() =>
+  [...document.querySelectorAll('select[name=account] option')].map((o) => o.value).filter(Boolean)
+);
+await page.selectOption('select[name=account]', budgetAccounts[0]);
+await page.click('main form button:has-text("افتح")');
+await page.waitForLoadState('networkidle');
+await page.fill('input[name=annual]', '1200000');
+await page.click('main form button[type=submit]:has-text("حفظ المستهدف")');
+await page.waitForLoadState('networkidle');
+const monthlyTargets = await page.evaluate(() =>
+  [...document.querySelectorAll('input[name^="month["]')].map((el) => Number(el.value) || 0)
+);
+check(
+  monthlyTargets.length === 12 &&
+    monthlyTargets.every((v) => v === 100000) &&
+    monthlyTargets.reduce((a, b) => a + b, 0) === 1200000,
+  `المبلغ السنوي يُوزَّع على اثني عشر شهرًا ومجموعه يطابقه بالضبط (${monthlyTargets[0]} × ١٢)`
+);
+check(await waitForText('الانحراف عن الموازنة'), 'وجدول الانحراف يظهر');
+
+// ── الإقفال يمنع التعديل ────────────────────────────────────
+await go('/finance/periods', '27-fiscal-periods');
+check(await waitForText('إقفال الشهور'), 'شاشة إقفال الشهور تفتح');
+
+// الشهر الحالي فيه مسوَّدات — الإقفال يجب أن يُرفض
+const closeRow = page.locator(`main tr:has-text("${THIS_PERIOD.slice(0, 4)}") button:has-text("إقفال")`).first();
+if ((await closeRow.count()) > 0) {
+  await closeRow.click();
+  await page.waitForLoadState('networkidle');
+  const refused =
+    page.url().includes('error=') || (await waitForText('ما زال مسوَّدة', 6000));
+  check(refused, 'لا يُقفل شهر وفيه مسوَّدة معلّقة — الإقفال فوقها يخفي عملًا لم يُراجَع');
+}
+
+// ── التقارير ────────────────────────────────────────────────
+await go(`/finance/reports/pl?period=${THIS_PERIOD}`, '28-pl-report');
+check(
+  await waitForText('مجمل الربح') && (await waitForText('صافي الربح')),
+  'قائمة الدخل بالفروع تعرض مجمل الربح وصافيه'
+);
+await go(`/finance/reports/pl?view=yearly&year=${BUDGET_YEAR}`);
+check(await waitForText('يناير') && (await waitForText('ديسمبر')), 'وقائمة الدخل السنوية بالشهور الاثني عشر');
+
+await go(`/finance/reports/branches?period=${THIS_PERIOD}`, '29-branch-report');
+check(await waitForText('كشف الفروع'), 'كشف الفروع يفتح');
+
 // ── 11. الصلاحيات — اختبارات §١٧ من المواصفة ────────────────
 
 async function loginAs(email, password = 'ChangeMe123!') {
@@ -1014,6 +1197,9 @@ const guarded = [
   '/settings/system',
   '/settings/staff-costs', // اختبار ٦: لا أحد يقرأ الرواتب إلا مدير النظام والإدارة
   '/production', // الإسناد لمن يملك صلاحيته وحده
+  '/finance', // الدفاتر للمحاسب ومدير النظام وحدهما
+  '/finance/journal',
+  '/finance/reports/trial',
 ];
 let allGuarded = true;
 for (const path of guarded) {

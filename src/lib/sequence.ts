@@ -41,6 +41,13 @@ export async function nextFreelancerCode(): Promise<string> {
   return `FL-${String(value).padStart(4, '0')}`;
 }
 
+/** `JV-2608-0001` — قيد اليومية، عدّاده يتجدّد مع كل شهر */
+export async function nextJournalCode(date = new Date()): Promise<string> {
+  const period = yearMonth(date);
+  const value = await nextValue(`journal-${period}`);
+  return `JV-${period}-${String(value).padStart(4, '0')}`;
+}
+
 /** `PR-2608-0042` — يُستخدم في المرحلة ٣ */
 export async function nextProjectCode(date = new Date()): Promise<string> {
   const period = yearMonth(date);

@@ -70,6 +70,12 @@ model User {
 
   confirmedPayments FreelancerPayment[] @relation("PaymentConfirmer")
 
+  authoredEntries JournalEntry[] @relation("EntryAuthor")
+  postedEntries   JournalEntry[] @relation("EntryPoster")
+  ledgerLines     JournalLine[]  @relation("LineSalesAdmin")
+  closedFiscal    FiscalPeriod[] @relation("PeriodCloser")
+  approvedBudgets Budget[]       @relation("BudgetApprover")
+
   @@index([email])
   @@index([reportsToId])
   @@index([branch])
@@ -103,6 +109,7 @@ model Role {
   canRecordCollection     Boolean @default(false)
   canManageFreelancers    Boolean @default(false)
   canPayFreelancers       Boolean @default(false)
+  canManageAccounting     Boolean @default(false)
   canManageUsers          Boolean @default(false)
   canManageSettings       Boolean @default(false)
   canViewCompanyAnalytics Boolean @default(false)
@@ -283,6 +290,8 @@ model Client {
 
   leads    Lead[]
   projects Project[]
+  /// حسابه الشخصي في شجرة «العملاء» — يربط بطاقته بدفتر الأستاذ
+  accounts Account[]
 
   @@index([phoneNormalized])
   @@index([phoneAltNormalized])
@@ -816,6 +825,7 @@ model Project {
   steps              ProjectStep[]
   commissions        CommissionEntry[]
   freelancerPayments FreelancerPayment[]
+  journalEntries     JournalEntry[]
 
   @@index([status])
   @@index([ownerId])
@@ -1006,5 +1016,232 @@ model PriceListItem {
   updatedAt DateTime @updatedAt
 
   @@index([serviceLine, langFrom, langTo, effectiveFrom])
+  @@index([active])
+}
+
+// ───────────────────────────────────────────────
+//  المحاسبة (docs/FINANCE-SPEC.md)
+// ───────────────────────────────────────────────
+
+/// شجرة الحسابات — أربعة مستويات، والقيد لا يقع إلا على حساب ختامي.
+/// تُعدَّل من الشاشة: إضافة حساب أو تعطيله بلا نشر جديد.
+model Account {
+  id   String  @id @default(cuid())
+  /// كود اختياري يستخدمه المحاسب (1010, 4100...)
+  code String? @unique
+
+  /// الاسم بالعربية — هو ما يظهر في كل شاشة
+  name   String
+  /// الاسم كما ورد في الدفاتر الإنجليزية — للمطابقة عند الترحيل
+  nameEn String?
+
+  /// asset | liability | equity | revenue | expense
+  type         String
+  /// للمصروفات: selling_marketing | general_admin | production_operating
+  expenseGroup String?
+
+  /// 1..4 — الرابع هو الحساب الختامي الذي تقع عليه القيود
+  level    Int       @default(1)
+  parentId String?
+  parent   Account?  @relation("AccountTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Account[] @relation("AccountTree")
+
+  /// هل يقبل قيدًا مباشرًا؟ المستويات الأعلى للتجميع وحده
+  isPostable Boolean @default(false)
+  active     Boolean @default(true)
+
+  /// حساب نظامي يربطه النظام بحدث تشغيلي (مثل: إيراد الترجمة التحريرية)
+  systemKey String? @unique
+
+  /// حساب العميل الشخصي في شجرة «العملاء»
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines       JournalLine[]
+  budgetLines BudgetLine[]
+
+  @@index([type])
+  @@index([parentId])
+  @@index([isPostable, active])
+}
+
+/// مركز التكلفة = حساب + مشروع، كما في دفاتر فاست ترانس
+model CostCenter {
+  id      String  @id @default(cuid())
+  name    String
+  project String?
+  active  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines JournalLine[]
+
+  @@unique([name, project])
+}
+
+/// رأس قيد اليومية — لا يُرحَّل إلا متوازنًا
+model JournalEntry {
+  id   String  @id @default(cuid())
+  /// معرّف تسلسلي JV-2608-0001
+  code String? @unique
+
+  date        DateTime
+  /// YYYY-MM — مفتاح تجميع التقارير والإقفال
+  period      String
+  /// unspecified | e_invoice | proforma | credit_note | receipt | payment_voucher | journal
+  docType     String   @default("journal")
+  docNumber   String?
+  description String
+
+  /// draft = مسوَّدة · posted = مرحَّل · void = ملغى
+  status String @default("draft")
+
+  /// من أنشأ القيد ومن رحّله — التوقيع جزء من الدفتر
+  createdById String?
+  createdBy   User?     @relation("EntryAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  postedById  String?
+  postedBy    User?     @relation("EntryPoster", fields: [postedById], references: [id], onDelete: SetNull)
+  postedAt    DateTime?
+  voidReason  String?
+
+  /// القيد المقترح من المشغّل — يُنسب لمصدره ليُراجَع لا ليُصدَّق
+  sourceType String?
+  sourceId   String?
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines JournalLine[]
+
+  @@index([period, status])
+  @@index([date])
+  @@index([sourceType, sourceId])
+  @@index([projectId])
+}
+
+/// سطر القيد — يحمل الحساب والمبلغ **وأبعاده الثمانية**
+model JournalLine {
+  id      String       @id @default(cuid())
+  entryId String
+  entry   JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  /// بعملة القيد
+  debit  Float @default(0)
+  credit Float @default(0)
+
+  currency   String @default("EGP")
+  /// سعر التحويل **وقت القيد** — يُخزَّن فلا تتغيّر أرباح الماضي بتحرّك الدولار
+  fxRate     Float  @default(1)
+  /// بالعملة الأساس — عليه تُبنى كل التقارير
+  debitBase  Float  @default(0)
+  creditBase Float  @default(0)
+
+  // ── الأبعاد ───────────────────────────────
+  branch          String?
+  costCenterId    String?
+  costCenter      CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  salesAdminId    String?
+  salesAdmin      User?       @relation("LineSalesAdmin", fields: [salesAdminId], references: [id], onDelete: SetNull)
+  trafficSource   String?
+  translationType String?
+
+  memo      String?
+  sortOrder Int     @default(0)
+
+  @@index([entryId])
+  @@index([accountId])
+  @@index([branch])
+  @@index([costCenterId])
+}
+
+/// إقفال شهري — بعده لا يُحرَّر قيد في الفترة ولا يُعدَّل
+model FiscalPeriod {
+  period     String    @id
+  closedAt   DateTime?
+  closedById String?
+  closedBy   User?     @relation("PeriodCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  note       String?
+  updatedAt  DateTime  @updatedAt
+}
+
+/// موازنة سنة — رأس واحد لكل سنة، وبنوده لكل حساب لكل شهر
+model Budget {
+  id     String  @id @default(cuid())
+  year   Int     @unique
+  name   String
+  notes  String?
+  /// draft = قيد الإعداد · approved = معتمدة
+  status String  @default("draft")
+
+  approvedById String?
+  approvedBy   User?     @relation("BudgetApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines BudgetLine[]
+}
+
+model BudgetLine {
+  id       String @id @default(cuid())
+  budgetId String
+  budget   Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  /// 1..12 — المستهدف الشهري
+  month  Int
+  amount Float   @default(0)
+  /// اختياري: يقيّد المستهدف بفرع بعينه
+  branch String?
+
+  @@unique([budgetId, accountId, month, branch])
+  @@index([budgetId, month])
+}
+
+/// الأصول الثابتة وإهلاكها بالقسط الثابت
+model FixedAsset {
+  id   String  @id @default(cuid())
+  code String? @unique
+  name String
+
+  /// نوع الأصل — يربطه بحساب الأصل وحساب مصروف الإهلاك
+  category String
+
+  cost         Float
+  /// النسبة السنوية: ٠٫٢٥ = ٢٥٪
+  annualRate   Float
+  salvageValue Float @default(0)
+
+  purchaseDate DateTime
+  /// من أي شهر يبدأ الإهلاك — افتراضًا شهر الشراء
+  startPeriod  String
+
+  /// مجمّع الإهلاك المحتسَب حتى الآن — يزيد بكل ترحيل شهري
+  accumulated  Float     @default(0)
+  /// آخر شهر رُحّل إهلاكه — يمنع الترحيل مرتين لنفس الشهر
+  lastPeriod   String?
+  branch       String?
+  disposedAt   DateTime?
+  disposalNote String?
+  active       Boolean   @default(true)
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
   @@index([active])
 }

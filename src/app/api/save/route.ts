@@ -20,6 +20,15 @@ import {
   saveFreelancerRate,
   payFreelancer,
   importFreelancers,
+  saveAccount,
+  saveCostCenter,
+  saveJournalEntry,
+  decideJournalEntry,
+  closeFiscalPeriod,
+  saveBudget,
+  saveBudgetLines,
+  saveFixedAsset,
+  generateDraftEntries,
   saveCommissionScheme,
   saveCommissionTier,
   saveCommissionAssignment,
@@ -113,6 +122,33 @@ export async function POST(request: NextRequest) {
         break;
       case 'freelancer.import':
         destination = await importFreelancers(fd, user);
+        break;
+      case 'account':
+        destination = await saveAccount(fd, user, id);
+        break;
+      case 'costCenter':
+        destination = await saveCostCenter(fd, user, id);
+        break;
+      case 'journalEntry':
+        destination = await saveJournalEntry(fd, user, id);
+        break;
+      case 'journalEntry.decide':
+        destination = await decideJournalEntry(fd, user, id);
+        break;
+      case 'fiscalPeriod':
+        destination = await closeFiscalPeriod(fd, user);
+        break;
+      case 'budget':
+        destination = await saveBudget(fd, user, id);
+        break;
+      case 'budgetLines':
+        destination = await saveBudgetLines(fd, user);
+        break;
+      case 'fixedAsset':
+        destination = await saveFixedAsset(fd, user, id);
+        break;
+      case 'journal.generate':
+        destination = await generateDraftEntries(fd, user);
         break;
       case 'commissionScheme':
         destination = await saveCommissionScheme(fd, user, id);

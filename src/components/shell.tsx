@@ -15,6 +15,7 @@ import {
   ListChecks,
   FileText,
   Percent,
+  Calculator,
   Settings,
   Menu,
   X,
@@ -50,6 +51,12 @@ const NAV = [
   { href: '/tasks', label: 'المهام', icon: ListChecks },
   // «نسبي» بلا صلاحية: كل موظف يرى استحقاقه هو. الترشيح في الخادم.
   { href: '/commissions', label: 'نسبي', icon: Percent },
+  {
+    href: '/finance',
+    label: 'الماليات',
+    icon: Calculator,
+    permission: 'canManageAccounting' as const,
+  },
 ];
 
 export default function Shell({

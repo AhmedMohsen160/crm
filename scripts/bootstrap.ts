@@ -18,6 +18,7 @@ import { DEFAULT_ROLES, PERMISSION_KEYS } from '../src/lib/permissions';
 import { LIST_DEFINITIONS } from '../src/lib/lists';
 import { SETTING_DEFINITIONS } from '../src/lib/settings-defs';
 import { normalizePhone } from '../src/lib/phone';
+import { CHART_OF_ACCOUNTS, SEED_COST_CENTERS } from '../src/lib/chart-of-accounts';
 import { yearMonth } from '../src/lib/sequence-keys';
 
 const db = new PrismaClient();
@@ -295,6 +296,55 @@ async function seedCommissionScheme() {
   console.log('  ✓ خطة النسب الافتراضية بثلاث شرائح (تُعدَّل من الشاشة)');
 }
 
+/**
+ * شجرة الحسابات ومراكز التكلفة — **تُزرع مرة واحدة**.
+ *
+ * بعدها يملكها المحاسب: يضيف حسابًا أو يعطّله من الشاشة، ولا يعود النشر
+ * يلمس ما عدّله. وحسابات العملاء لا تُزرع — تُنشأ مع تسجيل كل عميل.
+ */
+async function seedChartOfAccounts() {
+  if ((await db.account.count()) > 0) return;
+
+  let created = 0;
+
+  async function insert(
+    node: { en: string; ar: string; systemKey?: string; children?: unknown[] },
+    type: string,
+    group: string | null,
+    level: number,
+    parentId: string | null
+  ) {
+    const children = (node.children ?? []) as typeof node[];
+    const account = await db.account.create({
+      data: {
+        name: node.ar,
+        nameEn: node.en,
+        type,
+        expenseGroup: group,
+        level,
+        parentId,
+        // القيد لا يقع إلا على ورقة — والمستويات الأعلى للتجميع وحده
+        isPostable: children.length === 0,
+        systemKey: node.systemKey ?? null,
+      },
+    });
+    created += 1;
+    for (const child of children) {
+      await insert(child, type, group, level + 1, account.id);
+    }
+  }
+
+  for (const root of CHART_OF_ACCOUNTS) {
+    await insert(root, root.type, root.group ?? null, 1, null);
+  }
+
+  for (const centre of SEED_COST_CENTERS) {
+    await db.costCenter.create({ data: { name: centre.name, project: centre.project } });
+  }
+
+  console.log(`  ✓ شجرة الحسابات: ${created} حسابًا · ${SEED_COST_CENTERS.length} مركز تكلفة`);
+}
+
 async function migrateLeadStages() {
   const mapping: Record<string, string> = {
     QUALIFIED: 'NEGOTIATION',
@@ -523,6 +573,7 @@ async function main() {
   await seedAdmin();
   await seedFoundingTeam();
   await seedCommissionScheme();
+  await seedChartOfAccounts();
   await migrateLeadStages();
   await backfillCodes();
   await migrateProjectStatuses();
