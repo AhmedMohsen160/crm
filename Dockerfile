@@ -35,6 +35,7 @@ ENV DATABASE_PROVIDER=$DATABASE_PROVIDER
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 ENV AUTH_SECRET="build-time-placeholder-not-used-at-runtime"
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV BUILD_STANDALONE=1
 
 RUN npm run build
 

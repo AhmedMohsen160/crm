@@ -1,19 +1,32 @@
 /**
  * يضبط نوع قاعدة البيانات في ملف المخطط قبل البناء.
  *
- * Prisma لا يسمح بقراءة نوع القاعدة من متغيّر بيئة، لذا نكتبه هنا:
- *   - على جهازك:   SQLite (ملف واحد، بلا أي إعداد)
- *   - على السيرفر: PostgreSQL (يتحمّل عدة مستخدمين ولا يضيع عند إعادة النشر)
+ * Prisma لا يسمح بقراءة نوع القاعدة من متغيّر بيئة، لذا نكتبه هنا.
  *
- * يُستدعى تلقائيًا قبل npm run build و npm run dev.
- * لتغيير النوع اضبط المتغيّر DATABASE_PROVIDER=postgresql
+ * لا تحتاج ضبط أي شيء عادةً — النوع يُستنتج تلقائيًا:
+ *   - رابط يبدأ بـ postgres  ⇒ PostgreSQL (السيرفر)
+ *   - غير ذلك               ⇒ SQLite (جهازك)
+ *
+ * وإن أردت فرض نوع معيّن، اضبط DATABASE_PROVIDER=postgresql أو sqlite.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const SCHEMA = new URL('../prisma/schema.prisma', import.meta.url);
 const ALLOWED = ['sqlite', 'postgresql'];
 
-const provider = (process.env.DATABASE_PROVIDER ?? 'sqlite').trim();
+/** يستنتج نوع القاعدة من رابطها */
+function detectProvider() {
+  const explicit = process.env.DATABASE_PROVIDER?.trim();
+  if (explicit) return explicit;
+
+  const url = process.env.DATABASE_URL?.trim() ?? '';
+  if (url.startsWith('postgres://') || url.startsWith('postgresql://')) {
+    return 'postgresql';
+  }
+  return 'sqlite';
+}
+
+const provider = detectProvider();
 
 if (!ALLOWED.includes(provider)) {
   console.error(

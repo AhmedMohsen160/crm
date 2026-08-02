@@ -159,6 +159,17 @@ export function fullName(first: string, last?: string | null): string {
 }
 
 /**
+ * هل نعمل على PostgreSQL (السيرفر) أم SQLite (الجهاز)؟
+ * يُستنتج من رابط القاعدة، ويمكن فرضه بـ DATABASE_PROVIDER.
+ */
+export function isPostgres(): boolean {
+  const explicit = process.env.DATABASE_PROVIDER?.trim();
+  if (explicit) return explicit === 'postgresql';
+  const url = process.env.DATABASE_URL?.trim() ?? '';
+  return url.startsWith('postgres://') || url.startsWith('postgresql://');
+}
+
+/**
  * شرط بحث نصّي غير حسّاس لحالة الأحرف.
  *
  * PostgreSQL يفرّق بين الحروف الكبيرة والصغيرة في البحث، فلا يجد
@@ -167,8 +178,7 @@ export function fullName(first: string, last?: string | null): string {
  * استخدام PostgreSQL. العربية بلا حالة أحرف فلا تتأثر في الحالتين.
  */
 export function search(value: string) {
-  const insensitive = process.env.DATABASE_PROVIDER === 'postgresql';
-  return insensitive
+  return isPostgres()
     ? { contains: value, mode: 'insensitive' as const }
     : { contains: value };
 }

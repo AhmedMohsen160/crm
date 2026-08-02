@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { isPostgres } from './utils';
 
 // نستخدم نسخة واحدة من الاتصال بقاعدة البيانات لتجنّب فتح اتصالات كثيرة أثناء التطوير
 const globalForPrisma = globalThis as unknown as {
@@ -32,8 +33,7 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db;
  */
 async function tuneSqlite() {
   // على السيرفر نستخدم PostgreSQL، وهذه الإعدادات خاصة بـ SQLite فقط
-  const provider = process.env.DATABASE_PROVIDER ?? 'sqlite';
-  if (provider !== 'sqlite') return;
+  if (isPostgres()) return;
 
   try {
     await db.$executeRawUnsafe('PRAGMA journal_mode = WAL;');
