@@ -13,6 +13,7 @@ import {
   Factory,
   ListChecks,
   FileText,
+  Percent,
   Settings,
   Menu,
   X,
@@ -40,6 +41,8 @@ const NAV = [
   },
   { href: '/quotes', label: 'عروض الأسعار', icon: FileText },
   { href: '/tasks', label: 'المهام', icon: ListChecks },
+  // «نسبي» بلا صلاحية: كل موظف يرى استحقاقه هو. الترشيح في الخادم.
+  { href: '/commissions', label: 'نسبي', icon: Percent },
 ];
 
 export default function Shell({

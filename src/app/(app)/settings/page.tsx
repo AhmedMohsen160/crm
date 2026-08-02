@@ -9,6 +9,7 @@ import {
   Target,
   Lock,
   Tag,
+  Percent,
 } from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -61,6 +62,13 @@ export default async function SettingsPage() {
       icon: Target,
       title: 'أهداف الفروع الشهرية',
       description: 'التارجت الذي تُقاس عليه نسب المبيعات — لكل فرع ولكل شهر',
+      permission: 'canManageSettings',
+    },
+    {
+      href: '/settings/commissions',
+      icon: Percent,
+      title: 'خطط نسب المبيعات',
+      description: 'الشرائح ونسبة الأدمن ونسبة المدير — أرقام تُعدَّل، لا كود يُبرمَج',
       permission: 'canManageSettings',
     },
     {

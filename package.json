@@ -20,7 +20,8 @@
     "bootstrap": "node scripts/db-provider.mjs && prisma generate && tsx scripts/bootstrap.ts",
     "test:phone": "tsx tests/phone.mjs",
     "test:costing": "tsx tests/costing.mjs",
-    "test:unit": "npm run test:phone && npm run test:costing"
+    "test:unit": "npm run test:phone && npm run test:costing && npm run test:commission",
+    "test:commission": "tsx tests/commission.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",

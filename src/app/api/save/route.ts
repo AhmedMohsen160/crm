@@ -16,6 +16,10 @@ import {
   saveStaffCost,
   decideApproval,
   savePriceItem,
+  saveCommissionScheme,
+  saveCommissionTier,
+  saveCommissionAssignment,
+  closeCommissionPeriod,
   saveTask,
   saveQuote,
   saveUser,
@@ -93,6 +97,18 @@ export async function POST(request: NextRequest) {
         break;
       case 'priceItem':
         destination = await savePriceItem(fd, user, id);
+        break;
+      case 'commissionScheme':
+        destination = await saveCommissionScheme(fd, user, id);
+        break;
+      case 'commissionTier':
+        destination = await saveCommissionTier(fd, user, id);
+        break;
+      case 'commissionAssignment':
+        destination = await saveCommissionAssignment(fd, user);
+        break;
+      case 'commissionPeriod.close':
+        destination = await closeCommissionPeriod(fd, user);
         break;
       case 'task':
         destination = await saveTask(fd, user, id);

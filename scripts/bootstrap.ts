@@ -256,6 +256,45 @@ async function seedFoundingTeam() {
  * ترحيل مراحل الليد القديمة إلى مراحل §4.2 الست.
  * يُنفَّذ مرة واحدة عمليًا: بعد أول تشغيل لا يبقى صف بالقيم القديمة.
  */
+/**
+ * خطة النسب الافتراضية — الشرائح التي أقرّتها الإدارة.
+ *
+ * **تُزرع مرة واحدة فقط.** بعدها كل رقم فيها يُعدَّل من شاشة
+ * «الإعدادات ← خطط نسب المبيعات»: حدود الشرائح، نسبة الأدمن، نسبة المدير،
+ * بل وعدد الشرائح نفسه. لا يعود هذا الملف يلمسها أبدًا، فلا يُلغي نشرٌ
+ * جديدٌ قرارًا اتُّخذ من الواجهة.
+ */
+async function seedCommissionScheme() {
+  const existing = await db.commissionScheme.count();
+  if (existing > 0) return;
+
+  await db.commissionScheme.create({
+    data: {
+      name: 'خطة النسب الأساسية',
+      basis: 'collected', // النسبة تستحق عند التحصيل
+      tierMode: 'progressive', // كل شريحة على جزئها من المبلغ
+      isDefault: true,
+      active: true,
+      notes: 'الشرائح المعتمدة عند التأسيس — قابلة للتعديل بالكامل من الشاشة.',
+      tiers: {
+        create: [
+          { fromAmount: 0, toAmount: 200_000, adminRate: 0.03, managerRate: 0.02, sortOrder: 1 },
+          {
+            fromAmount: 200_000,
+            toAmount: 500_000,
+            adminRate: 0.035,
+            managerRate: 0.025,
+            sortOrder: 2,
+          },
+          { fromAmount: 500_000, toAmount: null, adminRate: 0.04, managerRate: 0.03, sortOrder: 3 },
+        ],
+      },
+    },
+  });
+
+  console.log('  ✓ خطة النسب الافتراضية بثلاث شرائح (تُعدَّل من الشاشة)');
+}
+
 async function migrateLeadStages() {
   const mapping: Record<string, string> = {
     QUALIFIED: 'NEGOTIATION',
@@ -483,6 +522,7 @@ async function main() {
   await seedSettings();
   await seedAdmin();
   await seedFoundingTeam();
+  await seedCommissionScheme();
   await migrateLeadStages();
   await backfillCodes();
   await migrateProjectStatuses();

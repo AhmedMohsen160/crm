@@ -144,6 +144,16 @@ async function handle(
       return null;
     }
 
+    // ── حذف شريحة نسب ─────────────────────────────────────────
+    case 'commissionTier.delete': {
+      if (!can(user, 'canManageSettings')) throw new Error('لا صلاحية');
+      const tier = await db.commissionTier.findUnique({ where: { id } });
+      if (!tier) return null;
+      await db.commissionTier.delete({ where: { id } });
+      await auditEvent(user.id, 'delete', 'CommissionTier', id, `من ${tier.fromAmount}`);
+      return null;
+    }
+
     // ── حذف ملاحظة ────────────────────────────────────────────
     case 'note.delete': {
       const note = await db.note.findUnique({ where: { id } });
@@ -181,6 +191,12 @@ async function handle(
         },
       });
       await auditEvent(user.id, 'update', 'Project', id, 'إلغاء المشروع');
+
+      // ألغِي بعد تحصيله ← نسبته تُخصم (قرار الإدارة)
+      if (rec.status === 'collected') {
+        const { reverseProjectCommission } = await import('@/lib/commission-engine');
+        await reverseProjectCommission(id, 'إلغاء المشروع بعد التحصيل');
+      }
       return `/projects/${id}`;
     }
 

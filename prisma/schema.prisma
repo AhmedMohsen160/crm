@@ -63,6 +63,11 @@ model User {
   ownedClients     Client[]      @relation("ClientOwner")
   createdClients   Client[]      @relation("ClientCreator")
 
+  commissionEntries CommissionEntry[]      @relation("CommissionBeneficiary")
+  commissionSources CommissionEntry[]      @relation("CommissionSource")
+  commissionPlans   CommissionAssignment[]
+  closedPeriods     CommissionPeriod[]
+
   @@index([email])
   @@index([reportsToId])
   @@index([branch])
@@ -348,6 +353,119 @@ model ProjectStep {
 }
 
 // ───────────────────────────────────────────────
+//  نسب المبيعات — كل رقم فيها بيانات تُعدَّل من الشاشة
+// ───────────────────────────────────────────────
+
+/// خطة نسب: الأساس وطريقة الشريحة وتاريخ سريانها.
+/// تغيير الخطة **لا يمسّ فترة مغلقة** — الشهر المغلق يحتفظ باستحقاقاته.
+model CommissionScheme {
+  id       String @id @default(cuid())
+  name     String
+  /// collected = المحصَّل فعلًا · net = إجمالي المبيعات
+  basis    String @default("collected")
+  /// progressive = كل شريحة على جزئها · whole = الشريحة تبتلع الكل
+  tierMode String @default("progressive")
+
+  effectiveFrom DateTime @default(now())
+  active        Boolean  @default(true)
+  /// الخطة التي تُطبَّق على من لا خطة مسنَدة له
+  isDefault     Boolean  @default(false)
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tiers       CommissionTier[]
+  assignments CommissionAssignment[]
+  entries     CommissionEntry[]
+}
+
+/// شريحة واحدة: من مبلغ إلى مبلغ، ونسبتا الأدمن ومديره.
+/// عددها غير محدود — تُضاف وتُحذف من الشاشة.
+model CommissionTier {
+  id       String           @id @default(cuid())
+  schemeId String
+  scheme   CommissionScheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  /// بداية الشريحة (شامل)
+  fromAmount Float
+  /// نهايتها (غير شامل) — فارغ يعني «فما فوق»
+  toAmount   Float?
+
+  adminRate   Float
+  managerRate Float
+  sortOrder   Int   @default(0)
+
+  @@index([schemeId, fromAmount])
+}
+
+/// من يخضع لأي خطة ومن متى
+model CommissionAssignment {
+  id       String           @id @default(cuid())
+  userId   String
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schemeId String
+  scheme   CommissionScheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId, effectiveFrom])
+}
+
+/// استحقاق محسوب لشخص عن مشروع في فترة.
+///
+/// **مشتق لا مُدخَل:** يُعاد بناؤه من المشاريع المحصَّلة في أي وقت، فلا
+/// إدخال يدوي ولا تعديل. كل سطر مربوط بمشروعه فيمكن تتبّع أي مبلغ لمصدره.
+model CommissionEntry {
+  id     String @id @default(cuid())
+  /// الفترة YYYY-MM
+  period String
+
+  /// المستفيد
+  userId String
+  user   User   @relation("CommissionBeneficiary", fields: [userId], references: [id], onDelete: Cascade)
+  /// دوره في هذا الاستحقاق: admin | manager
+  role   String
+
+  /// البائع صاحب المبيعة — للمدير يختلف عن المستفيد
+  sourceUserId String?
+  sourceUser   User?   @relation("CommissionSource", fields: [sourceUserId], references: [id], onDelete: SetNull)
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  /// المبلغ الذي احتُسب عليه هذا السطر
+  base   Float
+  /// النسبة الحدّية المطبَّقة — للعرض والتفسير
+  rate   Float
+  amount Float
+
+  schemeId String?
+  scheme   CommissionScheme? @relation(fields: [schemeId], references: [id], onDelete: SetNull)
+
+  /// قيد عكسي لاسترداد أو إلغاء — لا يُحذف الأصلي أبدًا (§٣ بند ٥)
+  isReversal Boolean @default(false)
+  note       String?
+
+  computedAt DateTime @default(now())
+
+  @@index([period, userId])
+  @@index([userId])
+  @@index([projectId])
+}
+
+/// إغلاق الفترة: بعده لا يُعاد بناء استحقاقاتها
+model CommissionPeriod {
+  period     String    @id
+  closedAt   DateTime?
+  closedById String?
+  closedBy   User?     @relation(fields: [closedById], references: [id], onDelete: SetNull)
+  note       String?
+  updatedAt  DateTime  @updatedAt
+}
+
+// ───────────────────────────────────────────────
 //  أهداف الفروع الشهرية — تُعدَّل من الشاشة
 // ───────────────────────────────────────────────
 
@@ -550,11 +668,12 @@ model Project {
   ownerId String?
   owner   User?   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
-  tasks      Task[]
-  noteItems  Note[]
-  quotes     Quote[]
-  activities Activity[]
-  steps      ProjectStep[]
+  tasks       Task[]
+  noteItems   Note[]
+  quotes      Quote[]
+  activities  Activity[]
+  steps       ProjectStep[]
+  commissions CommissionEntry[]
 
   @@index([status])
   @@index([ownerId])

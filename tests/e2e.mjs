@@ -652,6 +652,122 @@ check(
   'الهدف المحفوظ يظهر عند إعادة فتح الشاشة'
 );
 
+// ── 10و. نسب المبيعات (المرحلة ٦) ───────────────────────────
+
+/** يقرأ قيمة بطاقة إحصائية باسم عنوانها — الأرقام بفواصل ورمز عملة */
+async function statCard(label) {
+  return page.evaluate((wanted) => {
+    const p = [...document.querySelectorAll('p')].find(
+      (el) => el.textContent?.trim() === wanted
+    );
+    const text = p?.nextElementSibling?.textContent ?? '';
+    const match = text.replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+    return match ? Number(match[0]) : null;
+  }, label);
+}
+
+// النسبة تستحق **عند التحصيل** — نسجّل التحصيل على المشروع المسلَّم
+await go(`/projects/${projectId}`);
+await page.click('main button:has-text("محصَّل")');
+await page.waitForSelector('#collectedAmount', { timeout: 10000 });
+await page.fill('#collectedAmount', '5000');
+await page.click('main form button[type=submit]:has-text("تأكيد التحصيل")');
+await page.waitForLoadState('networkidle');
+check(await waitForText('محصَّل'), 'تسجيل التحصيل ينقل المشروع إلى «محصَّل»');
+
+await go('/commissions', '13-commissions');
+const achieved = await statCard('ما حصّلته هذا الشهر');
+const entitled = await statCard('ما استحققته');
+// مدير النظام بلا مدير مباشر، فيأخذ النسبتين معًا: ٣٪ + ٢٪ = ٥٪
+// (نتحقق من **القاعدة** لا من رقم ثابت، فالمحصَّل يتراكم بين التشغيلات)
+const expectedEntitlement = achieved <= 200000 ? achieved * 0.05 : null;
+check(
+  achieved >= 5000,
+  `«نسبي» تعرض المحصَّل من المشاريع المحصَّلة (${achieved})`
+);
+check(
+  expectedEntitlement !== null && Math.abs(entitled - expectedEntitlement) < 1,
+  `الاستحقاق ${entitled} = ${achieved} × ٥٪ (بلا مدير مباشر تُجمع الحصتان)`
+);
+
+const remainingToNext = await statCard('يتبقى للشريحة التالية');
+check(
+  remainingToNext !== null && Math.abs(remainingToNext - (200000 - achieved)) < 1,
+  `«كم يتبقى للشريحة التالية» = ${remainingToNext} (حدّ الشريحة ٢٠٠ ألف − المحقَّق)`
+);
+check(
+  await waitForText('مشاريعي المحصَّلة هذا الشهر'),
+  'تفصيل الاستحقاق بالمشروع يظهر للبائع'
+);
+
+// ── الشرائح **بيانات تُعدَّل**، لا كود يُبرمَج ────────────────
+await go('/settings/commissions', '14-commission-schemes');
+check(await waitForText('خطة النسب الأساسية'), 'خطة النسب الافتراضية مزروعة وقابلة للفتح');
+
+// نحذف الشريحة الأولى ونضع مكانها نسبة مختلفة تمامًا
+await page.click('table tbody tr:first-child button:has-text("حذف")');
+await page.waitForLoadState('networkidle');
+await page.fill('input[name=fromAmount]', '0');
+await page.fill('input[name=toAmount]', '200000');
+await page.fill('input[name=adminRate]', '0.1');
+await page.fill('input[name=managerRate]', '0');
+await page.click('main form button[type=submit]:has-text("إضافة شريحة")');
+await page.waitForLoadState('networkidle');
+
+await go('/commissions');
+const afterEdit = await statCard('ما استحققته');
+check(
+  Math.abs(afterEdit - achieved * 0.1) < 1,
+  `تعديل النسبة من الشاشة يسري فورًا: ${afterEdit} = ${achieved} × ١٠٪ (بلا نشر)`
+);
+
+// نعيد الشريحة المعتمدة كما كانت
+await go('/settings/commissions');
+await page.click('table tbody tr:first-child button:has-text("حذف")');
+await page.waitForLoadState('networkidle');
+await page.fill('input[name=fromAmount]', '0');
+await page.fill('input[name=toAmount]', '200000');
+await page.fill('input[name=adminRate]', '0.03');
+await page.fill('input[name=managerRate]', '0.02');
+await page.click('main form button[type=submit]:has-text("إضافة شريحة")');
+await page.waitForLoadState('networkidle');
+
+await go('/commissions');
+check(
+  Math.abs((await statCard('ما استحققته')) - achieved * 0.05) < 1,
+  'استعادة الشريحة تعيد الاستحقاق كما كان — لا أثر جانبي'
+);
+
+// ── الاسترداد يخصم النسبة، والمشروع لا يُحذف ─────────────────
+// «المحصَّل» نهاية المسار: المخرج الوحيد منه «مُعاد للتعديل» (§٦)، وهو
+// المسار الذي يسلكه الاسترداد فعلًا.
+await go(`/projects/${projectId}`);
+check(
+  (await page.locator('main button:has-text("إلغاء المشروع")').count()) === 0,
+  'لا إلغاء لمشروع محصَّل — المخرج الوحيد «مُعاد للتعديل» (§٦)'
+);
+await page.click('main button:has-text("مُعاد للتعديل")');
+await page.waitForLoadState('networkidle');
+check(await waitForText('مُعاد للتعديل'), 'إعادة المشروع المحصَّل للتعديل تُسجَّل');
+
+await go('/commissions', '15-commission-clawback');
+check(
+  await waitForText('خرج من حساب هذه الفترة'),
+  'المشروع المسترد يظهر في «خرج من حساب هذه الفترة»'
+);
+const afterClawback = await statCard('ما حصّلته هذا الشهر');
+check(
+  Math.abs(afterClawback - (achieved - 5000)) < 1,
+  `المحصَّل نقص بمقدار المشروع المسترد: ${afterClawback} = ${achieved} − ٥٠٠٠`
+);
+check(
+  Math.abs((await statCard('ما استحققته')) - afterClawback * 0.05) < 1,
+  'الاستحقاق أُعيد حسابه بعد الاسترداد — لا خصم مزدوج ولا بقايا قيود'
+);
+
+// السجل لم يُمحَ (§٣ بند ٥)
+check((await go(`/projects/${projectId}`)) === 200, 'المشروع المسترد باقٍ في النظام لم يُحذف');
+
 // ── 11. الصلاحيات — اختبارات §١٧ من المواصفة ────────────────
 
 async function loginAs(email, password = 'ChangeMe123!') {
@@ -688,6 +804,24 @@ for (const path of guarded) {
   }
 }
 check(allGuarded, 'أدمن المبيعات محجوب عن الإدارة والرواتب والإسناد (اختبارا ٤ و٦)');
+
+// «نسبي» مفتوحة للجميع، لكن **الترشيح في الخادم**: أدمن المبيعات يرى
+// استحقاقه هو فقط، ولا تصل حمولة الصفحة أرقام غيره أصلًا
+await go('/commissions', '16-commissions-agent');
+const agentCommissionHtml = await page.content();
+check(
+  !agentCommissionHtml.includes('كل الفريق') &&
+    !agentCommissionHtml.includes('إجمالي عبء النسب'),
+  'أدمن المبيعات لا يرى إجمالي عبء النسب على الشركة'
+);
+check(
+  !agentCommissionHtml.includes('إغلاق الفترة'),
+  'إغلاق الفترة محجوب عمّن لا يملك صلاحية تحليلات الشركة'
+);
+check(
+  !agentCommissionHtml.includes('مدير النظام'),
+  'لا تسرّب لاستحقاق غيره في حمولة الصفحة — الترشيح في الخادم'
+);
 
 // اختبار ٦ (تتمة): مؤشر التكلفة نفسه محجوب عمّن لا يملك صلاحيته
 const indicatorStatus = await page.evaluate(async () => {
