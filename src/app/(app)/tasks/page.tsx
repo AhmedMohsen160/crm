@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, ListChecks, AlertTriangle } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import {
   TASK_STATUSES,
   TASK_PRIORITIES,
@@ -32,7 +32,7 @@ export default async function TasksPage({
   }>;
 }) {
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 
   // النطاق: مهامي / كل المهام (للمديرين)

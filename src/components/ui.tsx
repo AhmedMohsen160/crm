@@ -171,6 +171,7 @@ export function FormField({
   hint,
   step,
   min,
+  dir,
   className,
 }: {
   label: string;
@@ -182,6 +183,7 @@ export function FormField({
   hint?: string;
   step?: string;
   min?: string;
+  dir?: 'rtl' | 'ltr';
   className?: string;
 }) {
   return (
@@ -195,6 +197,7 @@ export function FormField({
         type={type}
         step={step}
         min={min}
+        dir={dir}
         required={required}
         placeholder={placeholder}
         defaultValue={defaultValue ?? undefined}

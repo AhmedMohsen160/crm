@@ -2,7 +2,7 @@ import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { Pencil, Building2, User, FileText, ArrowRight, Plus } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import {
   DEAL_STAGES,
   DEAL_STAGE_COLORS,
@@ -33,7 +33,7 @@ export default async function DealDetailPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   const deal = await db.deal.findUnique({
     where: { id },

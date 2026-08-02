@@ -2,7 +2,7 @@ import Link from '@/components/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowRightLeft, Building2, User, Handshake } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { CURRENCIES, CURRENCY_LABELS } from '@/lib/constants';
 import { fullName } from '@/lib/utils';
 import { PageHeader, FormField, SelectField } from '@/components/ui';
@@ -17,7 +17,7 @@ export default async function ConvertLeadPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   const lead = await db.lead.findUnique({ where: { id } });
   if (!lead) notFound();

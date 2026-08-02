@@ -1,6 +1,11 @@
 /**
- * بيانات البداية — تنشئ حساب المدير وبعض البيانات التجريبية
- * تشغيل:  npm run db:seed
+ * بيانات تجريبية للتطوير المحلي فقط.
+ *
+ * ⚠️ الأساس (الأدوار والقوائم والإعدادات وحساب المدير) يزرعه
+ * `npm run bootstrap` — شغّله أولًا. هذا الملف يضيف فوقه شركات وصفقات
+ * وهمية لتجربة الشاشات، ولا يُشغَّل على السيرفر.
+ *
+ * تشغيل:  npm run bootstrap && npm run db:seed
  */
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -9,6 +14,17 @@ const db = new PrismaClient();
 
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@fasttrans.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
+
+/** يجلب معرّف دور بمفتاحه — يفشل بوضوح إن لم يُزرع الأساس */
+async function roleId(name: string): Promise<string> {
+  const role = await db.role.findUnique({ where: { name }, select: { id: true } });
+  if (!role) {
+    throw new Error(
+      `الدور «${name}» غير موجود. شغّل «npm run bootstrap» أولًا لزرع الأساس.`
+    );
+  }
+  return role.id;
+}
 
 function daysFromNow(n: number): Date {
   const d = new Date();
@@ -22,6 +38,11 @@ async function main() {
 
   // ── المستخدمون ──────────────────────────────────────────────
   const adminHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+  const [systemAdminRole, salesManagerRole, salesAdminRole] = await Promise.all([
+    roleId('system_admin'),
+    roleId('sales_manager'),
+    roleId('sales_admin'),
+  ]);
 
   const admin = await db.user.upsert({
     where: { email: ADMIN_EMAIL },
@@ -30,7 +51,7 @@ async function main() {
       name: 'أحمد محسن',
       email: ADMIN_EMAIL,
       passwordHash: adminHash,
-      role: 'ADMIN',
+      roleId: systemAdminRole,
       jobTitle: 'مدير المكتب',
     },
   });
@@ -43,7 +64,8 @@ async function main() {
       name: 'سارة عبد الله',
       email: 'manager@fasttrans.local',
       passwordHash: await bcrypt.hash('ChangeMe123!', 10),
-      role: 'MANAGER',
+      roleId: salesManagerRole,
+      branch: 'mokattam',
       jobTitle: 'مدير المبيعات',
     },
   });
@@ -55,7 +77,9 @@ async function main() {
       name: 'محمد إبراهيم',
       email: 'agent@fasttrans.local',
       passwordHash: await bcrypt.hash('ChangeMe123!', 10),
-      role: 'AGENT',
+      roleId: salesAdminRole,
+      branch: 'mokattam',
+      reportsToId: manager.id,
       jobTitle: 'أخصائي مبيعات',
     },
   });

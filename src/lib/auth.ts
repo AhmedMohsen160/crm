@@ -4,7 +4,13 @@ import { redirect } from 'next/navigation';
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
 import { db } from './db';
-import type { Role } from './constants';
+import {
+  PERMISSION_KEYS,
+  hasPermission,
+  hasAnyPermission,
+  type Permission,
+  type Scope,
+} from './permissions';
 
 const COOKIE_NAME = 'crm_session';
 const SESSION_DAYS = 7;
@@ -13,7 +19,7 @@ function secretKey(): Uint8Array {
   const secret = process.env.AUTH_SECRET;
   if (!secret || secret.length < 16) {
     throw new Error(
-      'AUTH_SECRET غير موجود أو قصير جدًا. أضِفه في ملف .env بقيمة نصية طويلة وعشوائية.'
+      'AUTH_SECRET غير موجود أو قصير جدًا. أضِفه في إعدادات النظام بقيمة نصية طويلة وعشوائية.'
     );
   }
   return new TextEncoder().encode(secret);
@@ -23,7 +29,15 @@ export type SessionUser = {
   id: string;
   name: string;
   email: string;
-  role: Role;
+  /** مفتاح الدور — للعرض فقط. **لا تبنِ عليه شرطًا**، استخدم can() */
+  roleName: string;
+  roleLabel: string;
+  branch: string | null;
+  /** اسم الفرع بالعربية — للعرض فقط */
+  branchLabel: string | null;
+  reportsToId: string | null;
+  isProducer: boolean;
+  permissions: Record<Permission, boolean>;
 };
 
 // ── كلمات المرور ───────────────────────────────────────────────
@@ -61,6 +75,14 @@ export async function destroySession(): Promise<void> {
   store.delete(COOKIE_NAME);
 }
 
+/** كل الصلاحيات مغلقة — الافتراضي الآمن لمستخدم بلا دور */
+function noPermissions(): Record<Permission, boolean> {
+  return Object.fromEntries(PERMISSION_KEYS.map((k) => [k, false])) as Record<
+    Permission,
+    boolean
+  >;
+}
+
 /** يقرأ المستخدم الحالي من الكوكي — يرجع null إن لم يكن مسجّل الدخول */
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const store = await cookies();
@@ -74,11 +96,38 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true, active: true },
+      include: { roleRef: true },
     });
     if (!user || !user.active) return null;
 
-    return { id: user.id, name: user.name, email: user.email, role: user.role as Role };
+    const permissions = noPermissions();
+    if (user.roleRef) {
+      for (const key of PERMISSION_KEYS) {
+        permissions[key] = Boolean(user.roleRef[key]);
+      }
+    }
+
+    const branchLabel = user.branch
+      ? (
+          await db.listItem.findUnique({
+            where: { listName_value: { listName: 'branch', value: user.branch } },
+            select: { label: true },
+          })
+        )?.label ?? user.branch
+      : null;
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      roleName: user.roleRef?.name ?? '',
+      roleLabel: user.roleRef?.label ?? 'بلا دور',
+      branch: user.branch,
+      branchLabel,
+      reportsToId: user.reportsToId,
+      isProducer: user.isProducer,
+      permissions,
+    };
   } catch {
     return null;
   }
@@ -91,25 +140,91 @@ export async function requireUser(): Promise<SessionUser> {
   return user;
 }
 
-/** يفرض صلاحية معيّنة */
-export async function requireRole(...roles: Role[]): Promise<SessionUser> {
+// ── الصلاحيات ──────────────────────────────────────────────────
+
+/** هل يملك المستخدم هذه الصلاحية؟ — الدالة الوحيدة المسموح بها للفحص */
+export function can(user: SessionUser, permission: Permission): boolean {
+  return hasPermission(user, permission);
+}
+
+/** هل يملك أيًّا من هذه الصلاحيات؟ */
+export function canAny(user: SessionUser, ...permissions: Permission[]): boolean {
+  return hasAnyPermission(user, ...permissions);
+}
+
+/** يفرض صلاحية — يحوّل للوحة التحكم إن لم يملكها */
+export async function requirePermission(permission: Permission): Promise<SessionUser> {
   const user = await requireUser();
-  if (!roles.includes(user.role)) redirect('/');
+  if (!can(user, permission)) redirect('/');
   return user;
 }
 
-// ── قواعد الرؤية (من يرى ماذا) ─────────────────────────────────
+// ── نطاق الرؤية ────────────────────────────────────────────────
 
-/** المدير ومدير المبيعات يريان كل السجلات، الموظف يرى سجلاته فقط */
-export function canSeeAll(user: SessionUser): boolean {
-  return user.role === 'ADMIN' || user.role === 'MANAGER';
+/**
+ * ما الذي يراه هذا المستخدم من السجلات؟
+ *   all  → كل الشركة
+ *   team → هو ومن يتبعونه إداريًا (reportsTo)
+ *   self → سجلاته وحده
+ */
+export function scopeOf(user: SessionUser): Scope {
+  if (can(user, 'canViewAllLeads')) return 'all';
+  if (can(user, 'canViewTeamLeads')) return 'team';
+  return 'self';
 }
 
-/** شرط Prisma لتصفية السجلات حسب صلاحية المستخدم */
-export function ownerScope(user: SessionUser): { ownerId?: string } {
-  return canSeeAll(user) ? {} : { ownerId: user.id };
+/**
+ * معرّفات المستخدمين الذين تدخل سجلاتهم في نطاق رؤية هذا المستخدم.
+ * يرجع null حين يكون النطاق «الكل» (لا ترشيح).
+ *
+ * **الترشيح يقع في الخادم** — لا يُرسل سجل خارج النطاق ثم يُخفى في الواجهة.
+ */
+export async function visibleUserIds(user: SessionUser): Promise<string[] | null> {
+  const scope = scopeOf(user);
+  if (scope === 'all') return null;
+  if (scope === 'self') return [user.id];
+
+  // نطاق الفريق: هو + كل من يتبعه (بأي عمق)
+  const ids = new Set<string>([user.id]);
+  let frontier = [user.id];
+
+  // شجرة الإدارة قد تكون بأكثر من مستوى — نتوسّع حتى لا يبقى جديد
+  while (frontier.length > 0) {
+    const reports = await db.user.findMany({
+      where: { reportsToId: { in: frontier } },
+      select: { id: true },
+    });
+    frontier = reports.map((r) => r.id).filter((id) => !ids.has(id));
+    frontier.forEach((id) => ids.add(id));
+  }
+
+  return [...ids];
 }
 
-export function isAdmin(user: SessionUser): boolean {
-  return user.role === 'ADMIN';
+/** شرط Prisma جاهز للترشيح حسب النطاق على حقل مالك السجل */
+export async function ownerFilter(
+  user: SessionUser,
+  field = 'ownerId'
+): Promise<Record<string, unknown>> {
+  const ids = await visibleUserIds(user);
+  if (ids === null) return {};
+  return { [field]: { in: ids } };
+}
+
+/**
+ * تقييد الرؤية بالفرع.
+ * مفعَّل حسب إعداد النظام `restrict_by_branch` — والإدارة قرّرت تفعيله.
+ * من يملك رؤية كل الليدز لا يُقيَّد.
+ */
+export async function branchFilter(
+  user: SessionUser
+): Promise<Record<string, unknown>> {
+  if (can(user, 'canViewAllLeads')) return {};
+  if (!user.branch) return {};
+
+  const row = await db.setting.findUnique({ where: { key: 'restrict_by_branch' } });
+  // الافتراضي المزروع `true` — الغياب يعني «لم يُزرع بعد» لا «معطَّل»
+  if (row && row.value !== 'true') return {};
+
+  return { branch: user.branch };
 }

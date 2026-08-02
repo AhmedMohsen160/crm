@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, UserPlus } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import {
   LEAD_STATUSES,
   LEAD_STATUS_COLORS,
@@ -21,7 +21,7 @@ export default async function LeadsPage({
   searchParams: Promise<{ q?: string; status?: string; owner?: string; source?: string }>;
 }) {
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 
   const where: Record<string, unknown> = {};

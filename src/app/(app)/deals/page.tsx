@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, LayoutGrid, List, Handshake } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import {
   DEAL_STAGES,
   DEAL_STAGE_COLORS,
@@ -29,7 +29,7 @@ export default async function DealsPage({
   }>;
 }) {
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
   const view = params.view === 'list' ? 'list' : 'board';
 

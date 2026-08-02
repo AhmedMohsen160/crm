@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { PageHeader, ErrorAlert } from '@/components/ui';
 import CompanyForm from '@/components/company-form';
 
@@ -12,7 +12,7 @@ export default async function NewCompanyPage({
 }) {
   const { error } = await searchParams;
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   const users = seeAll
     ? await db.user.findMany({

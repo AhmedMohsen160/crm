@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, Users } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { formatDate, fullName, search } from '@/lib/utils';
 import { PageHeader, Avatar, EmptyState } from '@/components/ui';
 import { FilterBar, SearchInput, FilterSelect, KeepParam } from '@/components/filters';
@@ -15,7 +15,7 @@ export default async function ContactsPage({
   searchParams: Promise<{ q?: string; company?: string; owner?: string }>;
 }) {
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 
   const where: Record<string, unknown> = {};

@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 import { redirectTo } from '@/lib/http';
 import { db } from '@/lib/db';
 import { createSession, destroySession, verifyPassword } from '@/lib/auth';
+import { auditEvent } from '@/lib/audit';
 
 /** تسجيل الدخول والخروج — نموذج عادي ثم تحويل */
 export async function POST(request: NextRequest) {
@@ -33,5 +34,7 @@ export async function POST(request: NextRequest) {
   if (!user.active) return fail('هذا الحساب موقوف. تواصل مع مدير النظام.');
 
   await createSession(user.id);
+  await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await auditEvent(user.id, 'login', 'User', user.id);
   return redirectTo(next);
 }

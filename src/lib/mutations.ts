@@ -1,8 +1,11 @@
 import 'server-only';
 import { db } from '@/lib/db';
-import { canSeeAll, hashPassword, verifyPassword, type SessionUser } from '@/lib/auth';
+import { can, hashPassword, verifyPassword, type SessionUser } from '@/lib/auth';
 import { str, num, date, fullName } from '@/lib/utils';
 import { logActivity, readEntityLink, linkPath, type EntityLink } from '@/lib/actions/helpers';
+import { auditEvent, auditDiff } from '@/lib/audit';
+import { PERMISSION_KEYS } from '@/lib/permissions';
+import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { STAGE_DEFAULT_PROBABILITY, DEAL_STAGES, type DealStage } from '@/lib/constants';
 
 /**
@@ -20,7 +23,7 @@ import { STAGE_DEFAULT_PROBABILITY, DEAL_STAGES, type DealStage } from '@/lib/co
 export class MutationError extends Error {}
 
 function requireOwn(ownerId: string | null, user: SessionUser, message: string) {
-  if (!canSeeAll(user) && ownerId !== user.id) throw new MutationError(message);
+  if (!can(user, 'canViewAllLeads') && ownerId !== user.id) throw new MutationError(message);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -366,7 +369,7 @@ export async function saveTask(fd: FormData, user: SessionUser, id?: string) {
   const existing = await db.task.findUnique({ where: { id } });
   if (!existing) throw new MutationError('المهمة غير موجودة');
   const allowed =
-    canSeeAll(user) || existing.assigneeId === user.id || existing.creatorId === user.id;
+    can(user, 'canViewAllLeads') || existing.assigneeId === user.id || existing.creatorId === user.id;
   if (!allowed) throw new MutationError('ليس لديك صلاحية التعديل على هذه المهمة');
 
   await db.task.update({
@@ -509,11 +512,40 @@ export async function saveQuote(fd: FormData, user: SessionUser, id?: string) {
 //  المستخدمون
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * يتحقّق أنه سيبقى في النظام **شخص واحد على الأقل يستطيع إدارة المستخدمين**.
+ * بلا هذا الفحص يمكن قفل الجميع خارج شاشة الإدارة بتعديل واحد لا رجعة فيه.
+ */
+async function assertAdminSurvives(excludeUserId: string) {
+  const remaining = await db.user.count({
+    where: {
+      active: true,
+      id: { not: excludeUserId },
+      roleRef: { canManageUsers: true },
+    },
+  });
+  if (remaining === 0) {
+    throw new MutationError(
+      'يجب أن يبقى مستخدم نشط واحد على الأقل يملك صلاحية «إدارة المستخدمين»'
+    );
+  }
+}
+
 export async function saveUser(fd: FormData, admin: SessionUser, id?: string) {
-  if (admin.role !== 'ADMIN') throw new MutationError('هذه الصفحة لمدير النظام فقط');
+  if (!can(admin, 'canManageUsers')) {
+    throw new MutationError('ليس لديك صلاحية إدارة المستخدمين');
+  }
 
   const name = str(fd, 'name');
   const password = str(fd, 'password');
+  const roleId = str(fd, 'roleId');
+  const branch = str(fd, 'branch');
+  const reportsToId = str(fd, 'reportsToId');
+  const isProducer = fd.get('isProducer') === 'on';
+
+  if (!roleId) throw new MutationError('الدور مطلوب');
+  const role = await db.role.findUnique({ where: { id: roleId } });
+  if (!role) throw new MutationError('الدور المختار غير موجود');
 
   if (!id) {
     const email = str(fd, 'email')?.toLowerCase();
@@ -525,52 +557,237 @@ export async function saveUser(fd: FormData, admin: SessionUser, id?: string) {
       throw new MutationError('هذا البريد الإلكتروني مستخدم بالفعل');
     }
 
-    await db.user.create({
+    const created = await db.user.create({
       data: {
         name,
         email,
         passwordHash: await hashPassword(password),
-        role: str(fd, 'role') ?? 'AGENT',
+        roleId,
+        branch,
+        reportsToId,
+        isProducer,
         phone: str(fd, 'phone'),
         jobTitle: str(fd, 'jobTitle'),
       },
     });
+    await auditEvent(admin.id, 'create', 'User', created.id, `${created.name} — ${role.label}`);
     return '/settings/users';
   }
 
   const existing = await db.user.findUnique({ where: { id } });
   if (!existing) throw new MutationError('المستخدم غير موجود');
 
-  const role = str(fd, 'role') ?? existing.role;
-  const active = fd.get('active') === 'on';
+  // الحقل معطَّل في الشاشة عند تعديل النفس، فلا يصل في النموذج — نُبقيه كما هو
+  const active = admin.id === id ? existing.active : fd.get('active') === 'on';
 
-  // المدير لا يستطيع تجريد نفسه من صلاحياته أو إيقاف حسابه
-  if (admin.id === id && (role !== 'ADMIN' || !active)) {
-    throw new MutationError('لا يمكنك تغيير صلاحيتك أو إيقاف حسابك بنفسك');
+  if (admin.id === id && roleId !== existing.roleId) {
+    throw new MutationError('لا يمكنك تغيير دورك بنفسك');
   }
-  // يجب أن يبقى مدير نظام نشط واحد على الأقل
-  if (existing.role === 'ADMIN' && (role !== 'ADMIN' || !active)) {
-    const others = await db.user.count({
-      where: { role: 'ADMIN', active: true, id: { not: id } },
+  if (reportsToId === id) throw new MutationError('لا يمكن أن يتبع المستخدم نفسه');
+  if (reportsToId && (await reportsToCreatesCycle(id, reportsToId))) {
+    throw new MutationError('هذا الاختيار يُنشئ حلقة في التسلسل الإداري');
+  }
+  // إن كان هذا الحساب أحد مَن يديرون المستخدمين، فلا نجرّده إلا ويبقى غيره
+  if (existing.roleId) {
+    const wasAdmin = await db.role.findUnique({
+      where: { id: existing.roleId },
+      select: { canManageUsers: true },
     });
-    if (others === 0) throw new MutationError('يجب أن يبقى مدير نظام نشط واحد على الأقل');
+    if (wasAdmin?.canManageUsers && (!role.canManageUsers || !active)) {
+      await assertAdminSurvives(id);
+    }
   }
   if (password && password.length < 8) {
     throw new MutationError('كلمة المرور يجب ألا تقل عن 8 أحرف');
   }
 
+  const after = {
+    name: name ?? existing.name,
+    phone: str(fd, 'phone'),
+    jobTitle: str(fd, 'jobTitle'),
+    roleId,
+    branch,
+    reportsToId,
+    isProducer,
+    active,
+  };
+
   await db.user.update({
     where: { id },
     data: {
-      name: name ?? existing.name,
-      phone: str(fd, 'phone'),
-      jobTitle: str(fd, 'jobTitle'),
-      role,
-      active,
+      ...after,
       ...(password ? { passwordHash: await hashPassword(password) } : {}),
     },
   });
+  await auditDiff(admin.id, 'User', id, existing, after);
   return '/settings/users';
+}
+
+/** هل يجعل هذا الاختيار المستخدمَ تابعًا لأحد مرؤوسيه؟ */
+async function reportsToCreatesCycle(userId: string, managerId: string): Promise<boolean> {
+  let current: string | null = managerId;
+  const seen = new Set<string>();
+  while (current) {
+    if (current === userId) return true;
+    if (seen.has(current)) return false; // حلقة قائمة أصلًا — لا نزيد عليها
+    seen.add(current);
+    const next: { reportsToId: string | null } | null = await db.user.findUnique({
+      where: { id: current },
+      select: { reportsToId: true },
+    });
+    current = next?.reportsToId ?? null;
+  }
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  الأدوار والصلاحيات — §٥: تُنشأ وتُعدَّل من الشاشة بلا نشر جديد
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveRole(fd: FormData, admin: SessionUser, id?: string) {
+  if (!can(admin, 'canManageUsers')) {
+    throw new MutationError('ليس لديك صلاحية إدارة الأدوار');
+  }
+
+  const label = str(fd, 'label');
+  if (!label) throw new MutationError('اسم الدور مطلوب');
+
+  // خريطة الصلاحيات تُبنى من قائمة المفاتيح نفسها — إضافة صلاحية جديدة
+  // مستقبلًا تعمل هنا تلقائيًا بلا تعديل
+  const permissions = Object.fromEntries(
+    PERMISSION_KEYS.map((key) => [key, fd.get(key) === 'on'])
+  ) as Record<(typeof PERMISSION_KEYS)[number], boolean>;
+
+  if (!id) {
+    const name = str(fd, 'name');
+    if (!name || !/^[a-z][a-z0-9_]*$/.test(name)) {
+      throw new MutationError('المفتاح البرمجي يجب أن يكون إنجليزيًا صغيرًا بلا مسافات');
+    }
+    if (await db.role.findUnique({ where: { name } })) {
+      throw new MutationError('هذا المفتاح مستخدم بالفعل');
+    }
+    const maxOrder = await db.role.aggregate({ _max: { sortOrder: true } });
+    const created = await db.role.create({
+      data: {
+        name,
+        label,
+        sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
+        ...permissions,
+      },
+    });
+    await auditEvent(admin.id, 'create', 'Role', created.id, label);
+    return '/settings/roles';
+  }
+
+  const existing = await db.role.findUnique({ where: { id } });
+  if (!existing) throw new MutationError('الدور غير موجود');
+
+  // نزع «إدارة المستخدمين» من دور يشغله آخرون قد يقفل الجميع خارج الشاشة
+  if (existing.canManageUsers && !permissions.canManageUsers) {
+    const stillAdmins = await db.user.count({
+      where: { active: true, roleRef: { canManageUsers: true, id: { not: id } } },
+    });
+    if (stillAdmins === 0) {
+      throw new MutationError(
+        'هذا آخر دور يملك «إدارة المستخدمين» — أنشئ دورًا بديلًا قبل نزعها'
+      );
+    }
+  }
+
+  await db.role.update({ where: { id }, data: { label, ...permissions } });
+  await auditDiff(admin.id, 'Role', id, existing, { label, ...permissions });
+  return '/settings/roles';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  القوائم المرجعية — §٩: قابلة للتعديل من الواجهة
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveListItem(fd: FormData, admin: SessionUser, id?: string) {
+  if (!can(admin, 'canManageSettings')) {
+    throw new MutationError('ليس لديك صلاحية إدارة القوائم');
+  }
+
+  const listName = str(fd, 'listName');
+  const label = str(fd, 'label');
+  if (!listName || !label) throw new MutationError('اسم القائمة والعنوان مطلوبان');
+
+  const extra = str(fd, 'extra');
+  if (extra && !Number.isFinite(Number(extra))) {
+    throw new MutationError('المعامل يجب أن يكون رقمًا');
+  }
+  const active = fd.get('active') === 'on';
+  const sortOrder = num(fd, 'sortOrder') ?? 0;
+
+  if (!id) {
+    const value = str(fd, 'value');
+    if (!value || !/^[a-z0-9_]+$/.test(value)) {
+      throw new MutationError('المفتاح البرمجي يجب أن يكون إنجليزيًا صغيرًا بلا مسافات');
+    }
+    const clash = await db.listItem.findUnique({
+      where: { listName_value: { listName, value } },
+    });
+    if (clash) throw new MutationError('هذا المفتاح موجود في القائمة بالفعل');
+
+    const created = await db.listItem.create({
+      data: { listName, value, label, extra, sortOrder, active: true },
+    });
+    await auditEvent(admin.id, 'create', 'ListItem', created.id, `${listName}: ${label}`);
+    return `/settings/lists?list=${listName}`;
+  }
+
+  const existing = await db.listItem.findUnique({ where: { id } });
+  if (!existing) throw new MutationError('العنصر غير موجود');
+
+  // القيمة المخزّنة في السجلات القديمة لا تتغيّر أبدًا — نغيّر العرض فقط
+  const after = { label, extra, sortOrder, active };
+  await db.listItem.update({ where: { id }, data: after });
+  await auditDiff(admin.id, 'ListItem', id, existing, after);
+  return `/settings/lists?list=${existing.listName}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  إعدادات النظام — §٩
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveSettings(fd: FormData, admin: SessionUser) {
+  if (!can(admin, 'canManageSettings')) {
+    throw new MutationError('ليس لديك صلاحية إدارة الإعدادات');
+  }
+
+  const group = str(fd, 'group');
+  const definitions = SETTING_DEFINITIONS.filter((d) => !group || d.group === group);
+
+  for (const def of definitions) {
+    const raw =
+      def.kind === 'boolean'
+        ? fd.get(def.key) === 'on'
+          ? 'true'
+          : 'false'
+        : (str(fd, def.key) ?? def.value);
+
+    if (def.kind !== 'boolean' && def.kind !== 'text' && !Number.isFinite(Number(raw))) {
+      throw new MutationError(`«${def.label}» يجب أن يكون رقمًا`);
+    }
+
+    const existing = await db.setting.findUnique({ where: { key: def.key } });
+    if (existing?.value === raw) continue;
+
+    await db.setting.upsert({
+      where: { key: def.key },
+      update: { value: raw },
+      create: { key: def.key, value: raw, label: def.label },
+    });
+    await auditDiff(
+      admin.id,
+      'Setting',
+      def.key,
+      { value: existing?.value },
+      { value: raw }
+    );
+  }
+
+  return `/settings/system?saved=1${group ? `&group=${encodeURIComponent(group)}` : ''}`;
 }
 
 /** المستخدم يغيّر كلمة مروره بنفسه */

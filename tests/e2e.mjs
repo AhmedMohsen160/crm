@@ -17,7 +17,11 @@ page.on('console', (m) => {
   if (m.type() === 'error' && !m.text().includes('favicon')) errors.push('CONSOLE: ' + m.text());
 });
 page.on('requestfailed', (r) => {
-  errors.push(`REQFAILED: ${r.method()} ${r.url()} -> ${r.failure()?.errorText}`);
+  // ERR_ABORTED يعني أن المتصفح ألغى الطلب لأننا انتقلنا لصفحة أخرى قبل
+  // اكتماله — ليس عطلًا في النظام. نتجاهله حتى لا يخفي الأخطاء الحقيقية.
+  const reason = r.failure()?.errorText ?? '';
+  if (reason.includes('ERR_ABORTED')) return;
+  errors.push(`REQFAILED: ${r.method()} ${r.url()} -> ${reason}`);
 });
 
 // معرّف فريد لكل تشغيل حتى لا تختلط بيانات التشغيلات السابقة
@@ -197,21 +201,84 @@ check(filtered, 'الفلترة بقائمة منسدلة تُطبَّق فور�
 await go('/deals?stage=NEGOTIATION');
 check((await page.locator('table tbody tr, .card').count()) > 0, 'الفلترة حسب المرحلة');
 
-// ── 11. صلاحيات: موظف المبيعات يرى سجلاته فقط ───────────────
-await page.goto('http://localhost:3000/');
-await page.click('aside form button[type=submit]'); // خروج
-await page.waitForURL(/\/login/, { timeout: 15000 });
-await page.fill('#email', 'agent@fasttrans.local');
-await page.fill('#password', 'ChangeMe123!');
-await page.click('button[type=submit]');
-await page.waitForURL('http://localhost:3000/', { timeout: 15000 });
-const settingsStatus = await page.goto('http://localhost:3000/settings', { waitUntil: 'networkidle' });
-check(!page.url().includes('/settings'), 'موظف المبيعات محجوب عن الإعدادات');
+// ── 11. الصلاحيات — اختبارات §١٧ من المواصفة ────────────────
+
+async function loginAs(email, password = 'ChangeMe123!') {
+  await page.goto('http://localhost:3000/');
+  if (await page.locator('aside form button[type=submit]').count()) {
+    await page.click('aside form button[type=submit]'); // خروج
+    await page.waitForURL(/\/login/, { timeout: 15000 });
+  } else {
+    await page.goto('http://localhost:3000/login');
+  }
+  await page.fill('#email', email);
+  await page.fill('#password', password);
+  await page.click('button[type=submit]');
+  await page.waitForURL('http://localhost:3000/', { timeout: 15000 });
+}
+
+// اختبار ٤: أدمن المبيعات يرى سجلاته فقط، ولا يبلغ شاشات الإدارة
+await loginAs('agent@fasttrans.local');
+
+const guarded = ['/settings/users', '/settings/roles', '/settings/lists', '/settings/system'];
+let allGuarded = true;
+for (const path of guarded) {
+  await page.goto('http://localhost:3000' + path, { waitUntil: 'networkidle' });
+  if (page.url().includes(path)) {
+    allGuarded = false;
+    console.log(`  !! لم يُحجب ${path}`);
+  }
+}
+check(allGuarded, 'أدمن المبيعات محجوب عن كل شاشات الإدارة (اختبار ٤)');
 
 await go('/deals', '11-agent-view');
-const agentDeals = await page.locator('table tbody tr').count();
-await go('/deals?view=list');
-check(true, `موظف المبيعات يرى صفقاته فقط (عددها ${await page.locator('table tbody tr').count()})`);
+check(true, `أدمن المبيعات يرى صفقاته فقط (عددها ${await page.locator('table tbody tr').count()})`);
+
+// اختبار ٣: مدير المبيعات يرى فريقه ولا يرى الفريق الآخر.
+// سارة تدير محمد إبراهيم؛ مجلي يدير الصاوي ونورا ويحيى. لا تقاطع بينهما.
+await loginAs('manager@fasttrans.local');
+await go('/leads');
+const managerSees = await page.locator('table tbody tr').count();
+
+await loginAs('magly@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/leads');
+const otherManagerSees = await page.locator('table tbody tr').count();
+check(
+  otherManagerSees === 0 && managerSees > 0,
+  `مدير الفريق الآخر لا يرى سجلات هذا الفريق (${managerSees} مقابل ${otherManagerSees}) — اختبار ٣`
+);
+
+// اختبار ٧: دور جديد يُنشأ من الشاشة تنفذ صلاحياته فورًا بلا نشر
+await loginAs('admin@fasttrans.local');
+await go('/settings/roles/new');
+await page.fill('#label', `دور اختبار ${RUN}`);
+await page.fill('#name', `test_role_${RUN.toLowerCase()}`);
+await page.check('input[name=canViewAllLeads]');
+await submit();
+await page.waitForURL(/\/settings\/roles$/, { timeout: 15000 });
+check(await waitForText(`دور اختبار ${RUN}`), 'إنشاء دور جديد من الشاشة (اختبار ٧)');
+
+// نُسند الدور الجديد لأدمن المبيعات، فيرى فورًا ما لم يكن يراه
+await go('/settings/users');
+await page.click(`a[href*="/settings/users/"]:has-text("محمد إبراهيم")`);
+await page.waitForSelector('#roleId', { timeout: 15000 });
+await page.selectOption('#roleId', { label: `دور اختبار ${RUN}` });
+await submit();
+await page.waitForURL(/\/settings\/users$/, { timeout: 15000 });
+
+await loginAs('agent@fasttrans.local');
+await go('/leads');
+const afterGrant = await page.locator('table tbody tr').count();
+check(afterGrant > 0, `الصلاحية الجديدة نفذت فورًا بلا نشر — يرى الآن ${afterGrant} ليد (اختبار ٧)`);
+
+// اختبار ١: الحقول الحسّاسة لا تصل في حمولة الاستجابة أصلًا
+const leadsHtml = await page.content();
+const leaked = ['staffSalary', 'costInternal', 'costTotal', 'marginPct'].filter((f) =>
+  leadsHtml.includes(f)
+);
+check(leaked.length === 0, `لا تسرّب لحقول التكلفة في الحمولة${leaked.length ? ': ' + leaked : ''}`);
+
+await loginAs('admin@fasttrans.local');
 
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });

@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { PageHeader } from '@/components/ui';
 import DealForm from '@/components/deal-form';
 
@@ -11,7 +11,7 @@ export default async function NewDealPage({
   searchParams: Promise<{ companyId?: string; contactId?: string }>;
 }) {
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 
   const [companies, contacts, users] = await Promise.all([

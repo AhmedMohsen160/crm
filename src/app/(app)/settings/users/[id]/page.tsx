@@ -1,48 +1,65 @@
 import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
-import { requireRole } from '@/lib/auth';
-import { ROLES } from '@/lib/constants';
-import { PageHeader, FormField, SelectField } from '@/components/ui';
+import { requirePermission } from '@/lib/auth';
+import { listOptions } from '@/lib/reference';
+import { PageHeader, FormField, SelectField, ErrorAlert } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
 
 export const metadata = { title: 'تعديل مستخدم' };
+export const dynamic = 'force-dynamic';
 
 export default async function EditUserPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { id } = await params;
-  const admin = await requireRole('ADMIN');
+  const { error } = await searchParams;
+  const admin = await requirePermission('canManageUsers');
 
-  const target = await db.user.findUnique({
-    where: { id },
-    include: {
-      _count: { select: { ownedDeals: true, ownedLeads: true, assignedTasks: true } },
-    },
-  });
+  const [target, roles, branches, managers] = await Promise.all([
+    db.user.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { ownedDeals: true, ownedLeads: true, assignedTasks: true, team: true },
+        },
+      },
+    }),
+    db.role.findMany({ orderBy: { sortOrder: 'asc' }, select: { id: true, label: true } }),
+    listOptions('branch'),
+    db.user.findMany({
+      where: { active: true, id: { not: id } },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    }),
+  ]);
   if (!target) notFound();
 
   const isSelf = admin.id === id;
 
+  const stats = [
+    { value: target._count.ownedDeals, label: 'صفقة' },
+    { value: target._count.ownedLeads, label: 'عميل محتمل' },
+    { value: target._count.assignedTasks, label: 'مهمة' },
+    { value: target._count.team, label: 'يتبعه' },
+  ];
+
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title="تعديل مستخدم" subtitle={target.email} />
+      <ErrorAlert message={error} />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <div className="card card-pad text-center">
-          <p className="text-2xl font-bold nums">{target._count.ownedDeals}</p>
-          <p className="text-xs text-slate-500">صفقة</p>
-        </div>
-        <div className="card card-pad text-center">
-          <p className="text-2xl font-bold nums">{target._count.ownedLeads}</p>
-          <p className="text-xs text-slate-500">عميل محتمل</p>
-        </div>
-        <div className="card card-pad text-center">
-          <p className="text-2xl font-bold nums">{target._count.assignedTasks}</p>
-          <p className="text-xs text-slate-500">مهمة</p>
-        </div>
+      <div className="mb-6 grid gap-4 sm:grid-cols-4">
+        {stats.map((s) => (
+          <div key={s.label} className="card card-pad text-center">
+            <p className="text-2xl font-bold nums">{s.value}</p>
+            <p className="text-xs text-slate-500">{s.label}</p>
+          </div>
+        ))}
       </div>
 
       <form method="post" action="/api/save" className="space-y-6">
@@ -59,12 +76,28 @@ export default async function EditUserPage({
               defaultValue={target.name}
             />
             <SelectField
-              label="الصلاحية"
-              name="role"
+              label="الدور"
+              name="roleId"
               required
-              defaultValue={target.role}
-              options={Object.entries(ROLES).map(([v, l]) => ({ value: v, label: l }))}
-              hint={isSelf ? 'لا يمكنك تغيير صلاحيتك بنفسك' : undefined}
+              defaultValue={target.roleId ?? ''}
+              placeholder="اختر الدور"
+              options={roles.map((r) => ({ value: r.id, label: r.label }))}
+              hint={isSelf ? 'لا يمكنك تغيير دورك بنفسك' : undefined}
+            />
+            <SelectField
+              label="الفرع"
+              name="branch"
+              defaultValue={target.branch ?? ''}
+              placeholder="بلا فرع"
+              options={branches.map((b) => ({ value: b.value, label: b.label }))}
+            />
+            <SelectField
+              label="يتبع إداريًا"
+              name="reportsToId"
+              defaultValue={target.reportsToId ?? ''}
+              placeholder="لا يتبع أحدًا"
+              options={managers.map((m) => ({ value: m.id, label: m.name }))}
+              hint="عليه يقوم نطاق «رؤية الفريق» ونسبة المدير"
             />
             <FormField label="رقم الهاتف" name="phone" defaultValue={target.phone} />
             <FormField
@@ -83,6 +116,21 @@ export default async function EditUserPage({
           </div>
 
           <label className="mt-4 flex items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              name="isProducer"
+              defaultChecked={target.isProducer}
+              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            />
+            <span className="text-slate-700">
+              يعمل في الإنتاج
+              <span className="mr-2 text-xs text-slate-400">
+                (يظهر في قائمة الإسناد كمنتِج أو مراجع)
+              </span>
+            </span>
+          </label>
+
+          <label className="mt-3 flex items-center gap-2.5 text-sm">
             <input
               type="checkbox"
               name="active"

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { PageHeader } from '@/components/ui';
 import DealForm from '@/components/deal-form';
 
@@ -13,7 +13,7 @@ export default async function EditDealPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   const deal = await db.deal.findUnique({ where: { id } });
   if (!deal) notFound();

@@ -11,6 +11,9 @@ import {
   saveTask,
   saveQuote,
   saveUser,
+  saveRole,
+  saveListItem,
+  saveSettings,
   changeOwnPassword,
 } from '@/lib/mutations';
 
@@ -18,7 +21,8 @@ import {
  * نقطة حفظ موحّدة لكل نماذج النظام.
  *
  * النموذج يرسل الحقول عاديًا مع:
- *   entity : نوع السجل (lead | company | contact | deal | task | quote | user | password)
+ *   entity : نوع السجل (lead | company | contact | deal | task | quote |
+ *            user | role | listItem | settings | password)
  *   id     : فارغ عند الإنشاء، ويحمل المعرّف عند التعديل
  *   back   : الصفحة التي نعود إليها عند وجود خطأ
  *
@@ -61,6 +65,15 @@ export async function POST(request: NextRequest) {
         break;
       case 'user':
         destination = await saveUser(fd, user, id);
+        break;
+      case 'role':
+        destination = await saveRole(fd, user, id);
+        break;
+      case 'listItem':
+        destination = await saveListItem(fd, user, id);
+        break;
+      case 'settings':
+        destination = await saveSettings(fd, user);
         break;
       case 'password':
         destination = await changeOwnPassword(fd, user);

@@ -16,7 +16,7 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
-import { ROLES } from '@/lib/constants';
+import { hasAnyPermission } from '@/lib/permissions';
 import type { SessionUser } from '@/lib/auth';
 import { Avatar } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -71,7 +71,7 @@ export default function Shell({
         );
       })}
 
-      {user.role === 'ADMIN' && (
+      {hasAnyPermission(user, 'canManageUsers', 'canManageSettings') && (
         <>
           <div className="my-2 border-t border-slate-200" />
           <Link
@@ -98,7 +98,10 @@ export default function Shell({
         <Avatar name={user.name} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-slate-800">{user.name}</p>
-          <p className="truncate text-xs text-slate-500">{ROLES[user.role] ?? user.role}</p>
+          <p className="truncate text-xs text-slate-500">
+            {user.roleLabel}
+            {user.branchLabel ? ` · ${user.branchLabel}` : ''}
+          </p>
         </div>
         <form method="post" action="/api/auth">
           <input type="hidden" name="mode" value="logout" />

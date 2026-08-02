@@ -1,8 +1,9 @@
 import Link from '@/components/link';
 import { Plus, ShieldCheck } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireRole } from '@/lib/auth';
-import { ROLES, type Role } from '@/lib/constants';
+import { requirePermission } from '@/lib/auth';
+import { listOptions } from '@/lib/reference';
+import { roleColor } from '@/lib/permissions';
 import { formatDate } from '@/lib/utils';
 import { PageHeader, Avatar, Badge } from '@/components/ui';
 import { ConfirmMutateButton } from '@/components/forms';
@@ -10,27 +11,28 @@ import { ConfirmMutateButton } from '@/components/forms';
 export const metadata = { title: 'المستخدمون' };
 export const dynamic = 'force-dynamic';
 
-const ROLE_COLORS: Record<Role, string> = {
-  ADMIN: 'bg-violet-100 text-violet-700 border-violet-300',
-  MANAGER: 'bg-blue-100 text-blue-700 border-blue-300',
-  AGENT: 'bg-slate-100 text-slate-700 border-slate-300',
-};
-
 export default async function UsersPage() {
-  const admin = await requireRole('ADMIN');
+  const admin = await requirePermission('canManageUsers');
 
-  const users = await db.user.findMany({
-    include: {
-      _count: {
-        select: { ownedDeals: true, ownedLeads: true, assignedTasks: true },
+  const [users, branches] = await Promise.all([
+    db.user.findMany({
+      include: {
+        roleRef: { select: { label: true, sortOrder: true } },
+        reportsTo: { select: { name: true } },
+        _count: {
+          select: { ownedDeals: true, ownedLeads: true, assignedTasks: true },
+        },
       },
-    },
-    orderBy: [{ active: 'desc' }, { name: 'asc' }],
-  });
+      orderBy: [{ active: 'desc' }, { name: 'asc' }],
+    }),
+    listOptions('branch'),
+  ]);
+
+  const branchLabel = new Map(branches.map((b) => [b.value, b.label]));
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <PageHeader title="المستخدمون والصلاحيات" subtitle="فريق المبيعات ومن يرى ماذا">
+    <div className="mx-auto max-w-6xl">
+      <PageHeader title="المستخدمون" subtitle="الفريق، فروعه، وتسلسله الإداري">
         <Link href="/settings/users/new" className="btn-primary">
           <Plus className="h-4 w-4" />
           مستخدم جديد
@@ -38,22 +40,24 @@ export default async function UsersPage() {
       </PageHeader>
 
       <div className="mb-6 card card-pad bg-slate-50/60">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
           <ShieldCheck className="h-4 w-4 text-brand-600" />
-          شرح الصلاحيات
+          كيف تُحدَّد رؤية كل موظف
         </h2>
-        <ul className="space-y-2 text-sm text-slate-600">
+        <ul className="space-y-1.5 text-sm text-slate-600">
           <li>
-            <Badge className={ROLE_COLORS.ADMIN}>مدير النظام</Badge> — يرى كل شيء، ويضيف
-            المستخدمين ويحذفهم.
+            <b>الدور</b> يحدّد ما يستطيع فعله — يُدار من{' '}
+            <Link href="/settings/roles" className="link">
+              شاشة الأدوار والصلاحيات
+            </Link>
+            .
           </li>
           <li>
-            <Badge className={ROLE_COLORS.MANAGER}>مدير مبيعات</Badge> — يرى كل سجلات الفريق
-            ويوزّع المهام، لكن لا يدير المستخدمين.
+            <b>«يتبع إداريًا»</b> يحدّد نطاق «رؤية الفريق»: من يملكها يرى سجلات كل من
+            يتبعه، بأي عمق.
           </li>
           <li>
-            <Badge className={ROLE_COLORS.AGENT}>موظف مبيعات</Badge> — يرى فقط العملاء
-            والصفقات المسنَدة إليه.
+            <b>الفرع</b> يقيّد الرؤية بسجلات الفرع نفسه لمن لا يملك «رؤية كل الليدز».
           </li>
         </ul>
       </div>
@@ -63,12 +67,12 @@ export default async function UsersPage() {
           <thead>
             <tr>
               <th>الاسم</th>
-              <th>البريد الإلكتروني</th>
-              <th>الصلاحية</th>
+              <th>الدور</th>
+              <th>الفرع</th>
+              <th>يتبع</th>
+              <th>الإنتاج</th>
               <th>الحالة</th>
-              <th>الصفقات</th>
-              <th>المهام</th>
-              <th>أُضيف</th>
+              <th>آخر دخول</th>
               <th></th>
             </tr>
           </thead>
@@ -85,17 +89,33 @@ export default async function UsersPage() {
                       <span className="text-xs text-slate-400">(أنت)</span>
                     )}
                   </span>
-                  {u.jobTitle && (
-                    <span className="block pr-8 text-xs text-slate-400">{u.jobTitle}</span>
-                  )}
-                </td>
-                <td dir="ltr" className="text-left text-xs text-slate-600">
-                  {u.email}
+                  <span className="block pr-8 text-xs text-slate-400" dir="ltr">
+                    {u.email}
+                  </span>
                 </td>
                 <td>
-                  <Badge className={ROLE_COLORS[u.role as Role]}>
-                    {ROLES[u.role as Role] ?? u.role}
-                  </Badge>
+                  {u.roleRef ? (
+                    <Badge className={roleColor(u.roleRef.sortOrder)}>
+                      {u.roleRef.label}
+                    </Badge>
+                  ) : (
+                    <Badge className="border-rose-300 bg-rose-100 text-rose-700">
+                      بلا دور
+                    </Badge>
+                  )}
+                </td>
+                <td className="text-sm text-slate-600">
+                  {u.branch ? branchLabel.get(u.branch) ?? u.branch : '—'}
+                </td>
+                <td className="text-sm text-slate-600">{u.reportsTo?.name ?? '—'}</td>
+                <td>
+                  {u.isProducer ? (
+                    <Badge className="border-emerald-300 bg-emerald-50 text-emerald-700">
+                      منتِج
+                    </Badge>
+                  ) : (
+                    <span className="text-slate-300">—</span>
+                  )}
                 </td>
                 <td>
                   {u.active ? (
@@ -108,10 +128,8 @@ export default async function UsersPage() {
                     </Badge>
                   )}
                 </td>
-                <td className="nums">{u._count.ownedDeals}</td>
-                <td className="nums">{u._count.assignedTasks}</td>
                 <td className="whitespace-nowrap text-xs text-slate-500">
-                  {formatDate(u.createdAt)}
+                  {u.lastLoginAt ? formatDate(u.lastLoginAt) : 'لم يدخل بعد'}
                 </td>
                 <td>
                   {u.id !== admin.id && (
@@ -119,8 +137,8 @@ export default async function UsersPage() {
                       op="user.delete"
                       id={u.id}
                       redirectTo="/settings/users"
-                      label="حذف"
-                      confirmText={`حذف المستخدم "${u.name}"؟ ستبقى سجلاته لكن بدون مسؤول.`}
+                      label="إيقاف"
+                      confirmText={`إيقاف حساب "${u.name}"؟ لن يستطيع الدخول، وتبقى كل سجلاته كما هي.`}
                     />
                   )}
                 </td>

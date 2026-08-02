@@ -2,7 +2,7 @@ import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { Pencil } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import {
   QUOTE_STATUSES,
   QUOTE_STATUS_COLORS,
@@ -33,7 +33,7 @@ export default async function QuoteDetailPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   const quote = await db.quote.findUnique({
     where: { id },

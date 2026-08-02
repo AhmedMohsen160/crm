@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { PageHeader } from '@/components/ui';
 import { ConfirmMutateButton } from '@/components/forms';
 import TaskForm from '@/components/task-form';
@@ -19,7 +19,7 @@ export default async function EditTaskPage({
   const { id } = await params;
   const { redirectTo } = await searchParams;
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   const task = await db.task.findUnique({
     where: { id },

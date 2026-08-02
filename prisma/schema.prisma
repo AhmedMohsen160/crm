@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -17,16 +17,31 @@ datasource db {
 // ───────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
-  email        String   @unique
+  email        String    @unique
   passwordHash String
-  role         String   @default("AGENT") // ADMIN | MANAGER | AGENT
   phone        String?
   jobTitle     String?
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // الدور مرجع إلى جدول الأدوار — الصلاحيات بيانات لا كود
+  roleId  String?
+  roleRef Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  /// فرع الموظف — يُقيّد رؤيته حسب إعداد النظام
+  branch String?
+
+  /// المدير المباشر — عليه يقوم نطاق رؤية الفريق وحصة النسب
+  reportsToId String?
+  reportsTo   User?   @relation("UserManager", fields: [reportsToId], references: [id], onDelete: SetNull)
+  team        User[]  @relation("UserManager")
+
+  /// هل ينتج فعليًا (يترجم/يراجع)؟ مستقل تمامًا عن الدور
+  isProducer Boolean @default(false)
 
   // العلاقات
   ownedCompanies Company[]  @relation("CompanyOwner")
@@ -38,8 +53,90 @@ model User {
   notes          Note[]
   activities     Activity[]
   quotes         Quote[]
+  auditEntries   AuditLog[]
 
   @@index([email])
+  @@index([reportsToId])
+  @@index([branch])
+}
+
+// ───────────────────────────────────────────────
+//  الأدوار والصلاحيات — بيانات لا كود
+// ───────────────────────────────────────────────
+
+/// دور يُنشأ ويُعدَّل من الشاشة بلا نشر جديد.
+/// الكود يفحص الصلاحية لا اسم الدور.
+model Role {
+  id        String  @id @default(cuid())
+  name      String  @unique /// مفتاح إنجليزي ثابت
+  label     String /// الاسم المعروض بالعربية
+  isSystem  Boolean @default(false) /// أدوار النظام لا تُحذف
+  sortOrder Int     @default(0)
+
+  // ── الصلاحيات الثماني عشرة (§٥ من المواصفة) ──
+  canCreateLead           Boolean @default(false)
+  canViewAllLeads         Boolean @default(false)
+  canViewTeamLeads        Boolean @default(false)
+  canConvertProject       Boolean @default(false)
+  canViewSellPrice        Boolean @default(false)
+  canDiscount             Boolean @default(false)
+  canApproveDiscount      Boolean @default(false)
+  canAssignProduction     Boolean @default(false)
+  canViewFreelancerCost   Boolean @default(false)
+  canViewStaffSalary      Boolean @default(false)
+  canViewCostIndicator    Boolean @default(false)
+  canRecordCollection     Boolean @default(false)
+  canManageFreelancers    Boolean @default(false)
+  canPayFreelancers       Boolean @default(false)
+  canManageUsers          Boolean @default(false)
+  canManageSettings       Boolean @default(false)
+  canViewCompanyAnalytics Boolean @default(false)
+  canViewTeamAnalytics    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+}
+
+// ───────────────────────────────────────────────
+//  القوائم المرجعية — تُدار من الشاشة
+// ───────────────────────────────────────────────
+
+/// كل قائمة منسدلة في النظام: الفروع، القنوات، أنماط التشغيل، خطوط الخدمة...
+/// الحقل extra يحمل المعامل حيث ينطبق (معامل الجهد أو التخصص).
+model ListItem {
+  id        String  @id @default(cuid())
+  listName  String /// اسم القائمة: branch | channel | work_mode | service_line ...
+  value     String /// المفتاح الإنجليزي
+  label     String /// المعروض بالعربية
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+  extra     String? /// المعامل رقمًا نصيًا
+
+  @@unique([listName, value])
+  @@index([listName, active])
+}
+
+// ───────────────────────────────────────────────
+//  سجل التدقيق — لا شيء يُمحى
+// ───────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  ts        DateTime @default(now())
+  action    String /// CREATE | UPDATE | DELETE | LOGIN ...
+  tableName String
+  recordId  String
+  field     String?
+  oldValue  String?
+  newValue  String?
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tableName, recordId])
+  @@index([ts])
 }
 
 // ───────────────────────────────────────────────
@@ -47,21 +144,21 @@ model User {
 // ───────────────────────────────────────────────
 
 model Company {
-  id          String   @id @default(cuid())
-  name        String
-  nameAr      String?
-  industry    String? // القطاع: محاماة، طبي، حكومي...
-  website     String?
-  phone       String?
-  email       String?
-  country     String?
-  city        String?
-  address     String?
-  taxNumber   String? // الرقم الضريبي / السجل التجاري
+  id           String   @id @default(cuid())
+  name         String
+  nameAr       String?
+  industry     String? // القطاع: محاماة، طبي، حكومي...
+  website      String?
+  phone        String?
+  email        String?
+  country      String?
+  city         String?
+  address      String?
+  taxNumber    String? // الرقم الضريبي / السجل التجاري
   paymentTerms String? // شروط الدفع: فوري، 30 يوم...
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   ownerId String?
   owner   User?   @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -116,22 +213,22 @@ model Contact {
 // ───────────────────────────────────────────────
 
 model Lead {
-  id          String   @id @default(cuid())
-  firstName   String
-  lastName    String?
-  companyName String?
-  email       String?
-  phone       String?
-  source      String? // مصدر العميل: موقع، فيسبوك، توصية...
-  status      String   @default("NEW") // NEW | CONTACTED | QUALIFIED | UNQUALIFIED | CONVERTED
+  id              String    @id @default(cuid())
+  firstName       String
+  lastName        String?
+  companyName     String?
+  email           String?
+  phone           String?
+  source          String? // مصدر العميل: موقع، فيسبوك، توصية...
+  status          String    @default("NEW") // NEW | CONTACTED | QUALIFIED | UNQUALIFIED | CONVERTED
   serviceInterest String? // نوع الخدمة المطلوبة
-  sourceLang  String?
-  targetLang  String?
-  estimatedValue Float?
-  notes       String?
-  convertedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  sourceLang      String?
+  targetLang      String?
+  estimatedValue  Float?
+  notes           String?
+  convertedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   ownerId String?
   owner   User?   @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -149,27 +246,27 @@ model Lead {
 // ───────────────────────────────────────────────
 
 model Deal {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   title       String
   description String?
-  stage       String   @default("NEW") // NEW | QUOTED | NEGOTIATION | WON | LOST
-  amount      Float    @default(0)
-  currency    String   @default("EGP")
-  probability Int      @default(20) // نسبة احتمال الإغلاق %
+  stage       String  @default("NEW") // NEW | QUOTED | NEGOTIATION | WON | LOST
+  amount      Float   @default(0)
+  currency    String  @default("EGP")
+  probability Int     @default(20) // نسبة احتمال الإغلاق %
 
   // حقول خاصة بمكتب الترجمة
-  serviceType String? // ترجمة معتمدة، فورية، توطين، تدقيق...
-  sourceLang  String?
-  targetLang  String?
-  wordCount   Int?
-  pageCount   Int?
+  serviceType  String? // ترجمة معتمدة، فورية، توطين، تدقيق...
+  sourceLang   String?
+  targetLang   String?
+  wordCount    Int?
+  pageCount    Int?
   deliveryDate DateTime?
 
   expectedCloseDate DateTime?
-  closedAt    DateTime?
-  lostReason  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  closedAt          DateTime?
+  lostReason        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
@@ -255,22 +352,22 @@ model Note {
 // ───────────────────────────────────────────────
 
 model Quote {
-  id         String   @id @default(cuid())
-  number     String   @unique // QT-2026-0001
+  id         String    @id @default(cuid())
+  number     String    @unique // QT-2026-0001
   title      String
-  status     String   @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED
-  currency   String   @default("EGP")
-  subtotal   Float    @default(0)
-  discount   Float    @default(0)
-  taxRate    Float    @default(0)
-  taxAmount  Float    @default(0)
-  total      Float    @default(0)
+  status     String    @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED
+  currency   String    @default("EGP")
+  subtotal   Float     @default(0)
+  discount   Float     @default(0)
+  taxRate    Float     @default(0)
+  taxAmount  Float     @default(0)
+  total      Float     @default(0)
   validUntil DateTime?
   notes      String?
   terms      String?
   sentAt     DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   items QuoteItem[]
 
@@ -337,6 +434,8 @@ model Activity {
 model Setting {
   key       String   @id
   value     String
+  /// الاسم العربي المعروض في شاشة الإعدادات
+  label     String?
   updatedAt DateTime @updatedAt
 }
 

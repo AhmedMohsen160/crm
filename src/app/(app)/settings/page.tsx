@@ -1,28 +1,64 @@
 import Link from '@/components/link';
-import { Users, KeyRound, Building2 } from 'lucide-react';
-import { requireRole } from '@/lib/auth';
+import { Users, KeyRound, ShieldCheck, ListOrdered, SlidersHorizontal, ScrollText } from 'lucide-react';
+import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { PageHeader } from '@/components/ui';
+import type { Permission } from '@/lib/permissions';
 
 export const metadata = { title: 'الإعدادات' };
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
-  await requireRole('ADMIN');
+  const user = await requireUser();
 
-  const [userCount, companyCount, dealCount, leadCount] = await Promise.all([
+  const [userCount, roleCount, listCount, auditCount] = await Promise.all([
     db.user.count({ where: { active: true } }),
-    db.company.count(),
-    db.deal.count(),
-    db.lead.count(),
+    db.role.count(),
+    db.listItem.count({ where: { active: true } }),
+    db.auditLog.count(),
   ]);
 
-  const cards = [
+  const cards: {
+    href: string;
+    icon: typeof Users;
+    title: string;
+    description: string;
+    permission?: Permission;
+  }[] = [
     {
       href: '/settings/users',
       icon: Users,
-      title: 'المستخدمون والصلاحيات',
-      description: `إضافة موظفي المبيعات وتحديد صلاحياتهم — ${userCount} مستخدم نشط`,
+      title: 'المستخدمون',
+      description: `الفريق وفروعه وتسلسله الإداري — ${userCount} مستخدم نشط`,
+      permission: 'canManageUsers',
+    },
+    {
+      href: '/settings/roles',
+      icon: ShieldCheck,
+      title: 'الأدوار والصلاحيات',
+      description: `أنشئ دورًا وامنحه ما تشاء من ١٨ صلاحية — ${roleCount} دور`,
+      permission: 'canManageUsers',
+    },
+    {
+      href: '/settings/lists',
+      icon: ListOrdered,
+      title: 'القوائم المرجعية',
+      description: `الفروع والقنوات وأنماط التشغيل ومعاملاتها — ${listCount} عنصر`,
+      permission: 'canManageSettings',
+    },
+    {
+      href: '/settings/system',
+      icon: SlidersHorizontal,
+      title: 'إعدادات النظام',
+      description: 'المعاملات التي تبني عليها كل الحسابات والتقارير',
+      permission: 'canManageSettings',
+    },
+    {
+      href: '/settings/audit',
+      icon: ScrollText,
+      title: 'سجل التدقيق',
+      description: `كل تغيير بقيمته القديمة والجديدة — ${auditCount} قيد`,
+      permission: 'canManageSettings',
     },
     {
       href: '/settings/password',
@@ -32,31 +68,14 @@ export default async function SettingsPage() {
     },
   ];
 
+  const visible = cards.filter((c) => !c.permission || can(user, c.permission));
+
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title="الإعدادات" subtitle="إدارة النظام والمستخدمين" />
-
-      <div className="mb-6 grid gap-4 sm:grid-cols-4">
-        <div className="card card-pad text-center">
-          <p className="text-2xl font-bold text-slate-900 nums">{userCount}</p>
-          <p className="text-xs text-slate-500">مستخدم</p>
-        </div>
-        <div className="card card-pad text-center">
-          <p className="text-2xl font-bold text-slate-900 nums">{companyCount}</p>
-          <p className="text-xs text-slate-500">شركة</p>
-        </div>
-        <div className="card card-pad text-center">
-          <p className="text-2xl font-bold text-slate-900 nums">{leadCount}</p>
-          <p className="text-xs text-slate-500">عميل محتمل</p>
-        </div>
-        <div className="card card-pad text-center">
-          <p className="text-2xl font-bold text-slate-900 nums">{dealCount}</p>
-          <p className="text-xs text-slate-500">صفقة</p>
-        </div>
-      </div>
+      <PageHeader title="الإعدادات" subtitle={`${user.roleLabel} — ${user.name}`} />
 
       <div className="space-y-3">
-        {cards.map((c) => {
+        {visible.map((c) => {
           const Icon = c.icon;
           return (
             <Link
@@ -75,28 +94,6 @@ export default async function SettingsPage() {
             </Link>
           );
         })}
-      </div>
-
-      <div className="mt-6 card card-pad">
-        <h2 className="mb-2 flex items-center gap-2 font-semibold text-slate-800">
-          <Building2 className="h-4 w-4 text-brand-600" />
-          بيانات الشركة
-        </h2>
-        <p className="text-sm text-slate-600">
-          اسم الشركة الظاهر في الواجهة وعروض الأسعار يُضبط من ملف{' '}
-          <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs" dir="ltr">
-            .env
-          </code>{' '}
-          عبر المتغيرين{' '}
-          <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs" dir="ltr">
-            NEXT_PUBLIC_COMPANY_NAME_AR
-          </code>{' '}
-          و{' '}
-          <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs" dir="ltr">
-            NEXT_PUBLIC_COMPANY_NAME
-          </code>
-          .
-        </p>
       </div>
     </div>
   );

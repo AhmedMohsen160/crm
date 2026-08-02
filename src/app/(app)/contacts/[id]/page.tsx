@@ -2,7 +2,7 @@ import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { Pencil, Plus, Mail, Phone, Building2, Handshake } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { DEAL_STAGES, DEAL_STAGE_COLORS, type DealStage } from '@/lib/constants';
 import { formatMoney, formatDate, fullName } from '@/lib/utils';
 import { PageHeader, Badge, Avatar, Field } from '@/components/ui';
@@ -27,7 +27,7 @@ export default async function ContactDetailPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   const contact = await db.contact.findUnique({
     where: { id },

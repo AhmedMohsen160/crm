@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { PageHeader } from '@/components/ui';
 import ContactForm from '@/components/contact-form';
 
@@ -11,7 +11,7 @@ export default async function NewContactPage({
   searchParams: Promise<{ companyId?: string }>;
 }) {
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 
   const [companies, users] = await Promise.all([

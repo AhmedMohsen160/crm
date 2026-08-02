@@ -1,8 +1,9 @@
 import { type NextRequest } from 'next/server';
 import { redirectTo, redirectWithError } from '@/lib/http';
 import { db } from '@/lib/db';
-import { getCurrentUser, canSeeAll, type SessionUser } from '@/lib/auth';
+import { getCurrentUser, can, type SessionUser } from '@/lib/auth';
 import { logActivity } from '@/lib/actions/helpers';
+import { auditEvent } from '@/lib/audit';
 import {
   DEAL_STAGES,
   STAGE_DEFAULT_PROBABILITY,
@@ -47,7 +48,7 @@ async function handle(
   value: string,
   user: SessionUser
 ): Promise<string | null> {
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   switch (op) {
     // ── المهام ────────────────────────────────────────────────
@@ -211,20 +212,32 @@ async function handle(
       return '/quotes';
     }
 
-    // ── حذف مستخدم (لمدير النظام فقط) ────────────────────────
+    // ── إيقاف مستخدم ──────────────────────────────────────────
+    // §٣ بند ٥: لا شيء يُمحى. الإيقاف يمنع الدخول ويُبقي كل السجلات
+    // منسوبة لصاحبها، فتظل التقارير التاريخية صحيحة.
+    case 'user.deactivate':
     case 'user.delete': {
-      if (user.role !== 'ADMIN') throw new Error('لا صلاحية');
-      if (user.id === id) throw new Error('لا يمكنك حذف حسابك الخاص');
+      if (!can(user, 'canManageUsers')) throw new Error('لا صلاحية');
+      if (user.id === id) throw new Error('لا يمكنك إيقاف حسابك الخاص');
 
-      const target = await db.user.findUnique({ where: { id } });
+      const target = await db.user.findUnique({
+        where: { id },
+        include: { roleRef: { select: { canManageUsers: true } } },
+      });
       if (!target) return '/settings/users';
-      if (target.role === 'ADMIN') {
+      if (!target.active) return '/settings/users';
+
+      if (target.roleRef?.canManageUsers) {
         const others = await db.user.count({
-          where: { role: 'ADMIN', active: true, id: { not: id } },
+          where: { active: true, id: { not: id }, roleRef: { canManageUsers: true } },
         });
-        if (others === 0) throw new Error('يجب أن يبقى مدير نظام نشط واحد على الأقل');
+        if (others === 0) {
+          throw new Error('يجب أن يبقى مستخدم نشط واحد يملك صلاحية «إدارة المستخدمين»');
+        }
       }
-      await db.user.delete({ where: { id } });
+
+      await db.user.update({ where: { id }, data: { active: false } });
+      await auditEvent(user.id, 'update', 'User', id, 'إيقاف الحساب');
       return '/settings/users';
     }
 

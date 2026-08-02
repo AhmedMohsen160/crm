@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, Building2 } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { INDUSTRIES } from '@/lib/constants';
 import { formatDate, search } from '@/lib/utils';
 import { PageHeader, Avatar, EmptyState } from '@/components/ui';
@@ -16,7 +16,7 @@ export default async function CompaniesPage({
   searchParams: Promise<{ q?: string; industry?: string; owner?: string }>;
 }) {
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 
   const where: Record<string, unknown> = {};

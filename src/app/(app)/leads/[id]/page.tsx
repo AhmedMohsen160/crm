@@ -3,7 +3,7 @@ import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { Pencil, ArrowRightLeft, Mail, Phone, ArrowRight } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { LEAD_STATUSES, LEAD_STATUS_COLORS, type LeadStatus } from '@/lib/constants';
 import { formatMoney, formatDate, fullName } from '@/lib/utils';
 import { PageHeader, Badge, Avatar, Field } from '@/components/ui';
@@ -25,7 +25,7 @@ export default async function LeadDetailPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   const lead = await db.lead.findUnique({
     where: { id },

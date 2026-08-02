@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
-import { requireUser, canSeeAll } from '@/lib/auth';
+import { requireUser, can, ownerFilter } from '@/lib/auth';
 import { PageHeader } from '@/components/ui';
 import ContactForm from '@/components/contact-form';
 import { fullName } from '@/lib/utils';
@@ -14,7 +14,7 @@ export default async function EditContactPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
-  const seeAll = canSeeAll(user);
+  const seeAll = can(user, 'canViewAllLeads');
 
   const contact = await db.contact.findUnique({ where: { id } });
   if (!contact) notFound();
