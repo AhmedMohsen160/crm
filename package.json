@@ -15,7 +15,8 @@
     "test:e2e": "node tests/e2e.mjs",
     "predev": "node scripts/db-provider.mjs",
     "prebuild": "node scripts/db-provider.mjs",
-    "db:deploy": "node scripts/db-provider.mjs && prisma generate && prisma db push --accept-data-loss"
+    "db:deploy": "node scripts/db-provider.mjs && prisma generate && prisma db push --accept-data-loss",
+    "vercel-build": "node scripts/db-provider.mjs && prisma generate && prisma db push --skip-generate && node scripts/ensure-admin.mjs && next build"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",
