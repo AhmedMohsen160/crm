@@ -3,6 +3,8 @@ import { notFound, redirect } from 'next/navigation';
 import { db } from '@/lib/db';
 import { requireUser, can } from '@/lib/auth';
 import { listOptionsMany, settingNumber } from '@/lib/reference';
+import { discountLimitOf } from '@/lib/pricing';
+import { DISCOUNT_TYPES } from '@/lib/projects';
 import { fullName } from '@/lib/utils';
 import { PageHeader, FormField, SelectField, ErrorAlert } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
@@ -39,9 +41,10 @@ export default async function ConvertLeadPage({
   if (!seeAll && lead.ownerId !== user.id) notFound();
   if (lead.status === 'WON') redirect(`/leads/${id}`);
 
-  const [lists, depositPct] = await Promise.all([
+  const [lists, depositPct, limit] = await Promise.all([
     listOptionsMany('service_line', 'language', 'currency'),
     settingNumber('default_deposit_pct'),
+    discountLimitOf(user),
   ]);
 
   const name = lead.client?.name ?? fullName(lead.firstName, lead.lastName);
@@ -58,6 +61,10 @@ export default async function ConvertLeadPage({
       <p className="mb-6 rounded-lg bg-brand-50/60 px-4 py-3 text-sm text-slate-700">
         عند الحفظ: يتولّد رقم المشروع، ويصير الليد <b>فائزًا</b>، ويدخل المشروع{' '}
         <b>قيد الإسناد</b> فيراه مدير المشاريع فورًا. المهام والملاحظات تنتقل معه.
+        <span className="mt-1 block text-xs text-slate-500">
+          السعر يُقرأ من قائمة الأسعار تلقائيًا، وخصم العميل المتكرر وشرائح الكمية
+          تُطبَّق بلا إدخال.
+        </span>
       </p>
 
       <form method="post" action="/api/save" className="space-y-5">
@@ -101,12 +108,22 @@ export default async function ConvertLeadPage({
             {can(user, 'canViewSellPrice') && (
               <>
                 <FormField
+                  label="سعر الصفحة"
+                  name="unitPrice"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  dir="ltr"
+                  hint="اتركه فارغًا ليُقرأ من قائمة الأسعار تلقائيًا"
+                />
+                <FormField
                   label="إجمالي المشروع"
                   name="netTotal"
                   type="number"
                   step="0.01"
                   min="0"
                   defaultValue={estimated || undefined}
+                  hint="اتركه فارغًا ليُحسب من السعر والصفحات"
                 />
                 <FormField
                   label="المقدم المقبوض"
@@ -123,6 +140,27 @@ export default async function ConvertLeadPage({
                   defaultValue="EGP"
                   placeholder="جنيه مصري"
                   options={lists.currency.map((c) => ({ value: c.value, label: c.label }))}
+                />
+              </>
+            )}
+            {can(user, 'canDiscount') && (
+              <>
+                <SelectField
+                  label="نوع الخصم"
+                  name="discountType"
+                  placeholder="بلا خصم"
+                  options={Object.entries(DISCOUNT_TYPES)
+                    .filter(([v]) => v === 'percent' || v === 'amount')
+                    .map(([value, label]) => ({ value, label }))}
+                />
+                <FormField
+                  label="قيمة الخصم"
+                  name="discountValue"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  dir="ltr"
+                  hint={`نسبة عشرية أو مبلغ · حدّك ${(limit * 100).toFixed(0)}٪ — ما فوقه يوقف المشروع للاعتماد`}
                 />
               </>
             )}

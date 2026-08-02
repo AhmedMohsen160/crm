@@ -8,6 +8,7 @@ import {
   ScrollText,
   Target,
   Lock,
+  Tag,
 } from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -60,6 +61,13 @@ export default async function SettingsPage() {
       icon: Target,
       title: 'أهداف الفروع الشهرية',
       description: 'التارجت الذي تُقاس عليه نسب المبيعات — لكل فرع ولكل شهر',
+      permission: 'canManageSettings',
+    },
+    {
+      href: '/settings/prices',
+      icon: Tag,
+      title: 'قائمة الأسعار',
+      description: 'سعر الصفحة لكل خط خدمة وزوج لغات — بتاريخ سريان يحمي أسعار الماضي',
       permission: 'canManageSettings',
     },
     {

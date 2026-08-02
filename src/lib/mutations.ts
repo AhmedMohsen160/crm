@@ -9,10 +9,9 @@ import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
 import { normalizePhone } from '@/lib/phone';
 import { nextLeadCode, nextClientCode, nextProjectCode } from '@/lib/sequence';
-import {
-  freezeProjectCost,
-  stepWeightedPages,
-} from '@/lib/project-costing';
+import { freezeProjectCost, stepWeightedPages } from '@/lib/project-costing';
+import { priceForProject, discountLimitOf, discountRatio } from '@/lib/pricing';
+import { allSettings } from '@/lib/reference';
 import {
   PROJECT_STATUSES,
   allowedTransitions,
@@ -222,7 +221,28 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
   const title =
     str(fd, 'title') ?? `${fullName(lead.firstName, lead.lastName)} — ${pages} صفحة`;
 
-  const netTotal = num(fd, 'netTotal') ?? lead.estimatedValue ?? 0;
+  const isRush = fd.get('isRush') === 'on';
+
+  // التسعير التلقائي من قائمة الأسعار (§١٠). السعر المُدخَل يدويًا يعلو
+  // عليها لمن يملك رؤية سعر البيع، وإلا فُرض سعر القائمة.
+  const manualUnitPrice = can(user, 'canViewSellPrice') ? num(fd, 'unitPrice') : null;
+  const priced = await priceForProject({
+    serviceLine,
+    langFrom: sourceLang,
+    langTo: targetLang,
+    pages,
+    isRush,
+    clientId,
+    manualUnitPrice,
+    manualDiscountType: can(user, 'canDiscount') ? str(fd, 'discountType') : null,
+    manualDiscountValue: can(user, 'canDiscount') ? num(fd, 'discountValue') : null,
+    user,
+  });
+
+  // إجمالي مُدخَل يدويًا يعلو على المحسوب — بعض الطلبات تُسعَّر بالاتفاق
+  const overrideTotal = can(user, 'canViewSellPrice') ? num(fd, 'netTotal') : null;
+  const netTotal = overrideTotal ?? priced.netTotal;
+
   const deposit = num(fd, 'deposit') ?? 0;
   if (deposit > netTotal) throw new MutationError('المقدم أكبر من إجمالي المشروع');
 
@@ -236,10 +256,16 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
       sourceLang,
       targetLang,
       pages,
+      unitPrice: priced.unitPrice || null,
+      gross: priced.gross,
       netTotal,
+      discountType: priced.discountType === 'none' ? null : priced.discountType,
+      discountValue: priced.discountValue || null,
+      // تجاوز الحد يوقف المشروع بانتظار اعتماد (§١٠ بند ٤)
+      approvalState: priced.needsApproval ? 'pending' : 'not_required',
       currency: str(fd, 'currency') ?? 'EGP',
       deposit,
-      isRush: fd.get('isRush') === 'on',
+      isRush,
       ...readDeadline(fd),
       description: lead.notes,
       branch: lead.branch ?? user.branch,
@@ -272,6 +298,18 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
     userId: user.id,
     link: { leadId: id, projectId: project.id, companyId },
   });
+
+  if (priced.needsApproval) {
+    await logActivity({
+      type: 'STATUS_CHANGED',
+      title: 'خصم بانتظار الاعتماد',
+      detail: `الخصم ${(priced.ratio * 100).toFixed(1)}٪ يتجاوز حدّك ${(
+        priced.limit * 100
+      ).toFixed(0)}٪`,
+      userId: user.id,
+      link: { projectId: project.id },
+    });
+  }
   await auditEvent(user.id, 'create', 'Project', project.id, project.code ?? undefined);
 
   return `/projects/${project.id}`;
@@ -476,6 +514,24 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
     delete (data as Partial<typeof data>).deposit;
   }
 
+  // الخصم: يُقبل ممّن يملك صلاحيته، ويُوقف المشروع إن تجاوز حدّ دوره
+  const discountType = can(user, 'canDiscount') ? str(fd, 'discountType') : null;
+  const discountValue = can(user, 'canDiscount') ? num(fd, 'discountValue') : null;
+  let approvalPatch: Record<string, unknown> = {};
+
+  if (discountType && discountType !== 'none' && discountValue) {
+    const settings = await allSettings();
+    const gross = (pages ?? 0) * (num(fd, 'unitPrice') ?? 0);
+    const afterRush = data.isRush
+      ? gross * (1 + (Number(settings.rush_surcharge) || 0))
+      : gross;
+    const limit = await discountLimitOf(user);
+    const ratio = discountRatio({ type: discountType, value: discountValue }, afterRush);
+    if (ratio > limit + 1e-9) {
+      approvalPatch = { approvalState: 'pending', approvedById: null, approvedAt: null };
+    }
+  }
+
   if (!id) {
     const project = await db.project.create({
       data: {
@@ -502,7 +558,13 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
   if (!existing) throw new MutationError('المشروع غير موجود');
   requireOwn(existing.ownerId, user, 'ليس لديك صلاحية تعديل هذا المشروع');
 
-  const after = { ...data, ownerId: str(fd, 'ownerId') ?? existing.ownerId };
+  const after = {
+    ...data,
+    ...(discountType ? { discountType: discountType === 'none' ? null : discountType } : {}),
+    ...(discountValue !== null ? { discountValue } : {}),
+    ...approvalPatch,
+    ownerId: str(fd, 'ownerId') ?? existing.ownerId,
+  };
   await db.project.update({ where: { id }, data: after });
   await auditDiff(user.id, 'Project', id, existing, after);
   return `/projects/${id}`;
@@ -543,9 +605,12 @@ export async function moveProject(fd: FormData, user: SessionUser, id: string) {
     throw new MutationError('ليس لديك صلاحية هذا الانتقال');
   }
 
-  // الخصم فوق الحد يجمّد المشروع حتى الاعتماد (§٦)
-  if (project.approvalState === 'pending') {
-    throw new MutationError('المشروع بانتظار اعتماد الخصم — لا ينتقل قبل الاعتماد');
+  // الخصم فوق الحد يجمّد المشروع حتى الاعتماد (§٦ و§١٠ بند ٤).
+  // الإلغاء وحده يبقى متاحًا، وإلا عَلِق المشروع بلا مخرج لو رفض الجميع.
+  if (project.approvalState === 'pending' && to !== 'cancelled') {
+    throw new MutationError(
+      'المشروع موقوف بانتظار اعتماد الخصم — لا ينتقل خطوة واحدة قبل الاعتماد'
+    );
   }
 
   const now = new Date();
@@ -944,6 +1009,11 @@ export async function saveRole(fd: FormData, admin: SessionUser, id?: string) {
     PERMISSION_KEYS.map((key) => [key, fd.get(key) === 'on'])
   ) as Record<(typeof PERMISSION_KEYS)[number], boolean>;
 
+  const discountLimit = num(fd, 'discountLimit') ?? 0;
+  if (discountLimit < 0 || discountLimit > 1) {
+    throw new MutationError('حد الخصم يجب أن يكون بين ٠ و١ (٠٫١ تعني ١٠٪)');
+  }
+
   if (!id) {
     const name = str(fd, 'name');
     if (!name || !/^[a-z][a-z0-9_]*$/.test(name)) {
@@ -958,6 +1028,7 @@ export async function saveRole(fd: FormData, admin: SessionUser, id?: string) {
         name,
         label,
         sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
+        discountLimit,
         ...permissions,
       },
     });
@@ -980,8 +1051,8 @@ export async function saveRole(fd: FormData, admin: SessionUser, id?: string) {
     }
   }
 
-  await db.role.update({ where: { id }, data: { label, ...permissions } });
-  await auditDiff(admin.id, 'Role', id, existing, { label, ...permissions });
+  await db.role.update({ where: { id }, data: { label, discountLimit, ...permissions } });
+  await auditDiff(admin.id, 'Role', id, existing, { label, discountLimit, ...permissions });
   return '/settings/roles';
 }
 
@@ -1030,6 +1101,133 @@ export async function saveListItem(fd: FormData, admin: SessionUser, id?: string
   await db.listItem.update({ where: { id }, data: after });
   await auditDiff(admin.id, 'ListItem', id, existing, after);
   return `/settings/lists?list=${existing.listName}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  اعتماد الخصم (§١٠ بند ٤)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * اعتماد الخصم أو رفضه.
+ *
+ * **ضابط رقابي بلا احتكاك:** المشروع الموقوف لا يتحرك خطوة واحدة حتى
+ * يعتمده من يملك `canApproveDiscount`، والرفض يعيده لسعره بلا خصم بدل
+ * تركه معلّقًا إلى الأبد.
+ */
+export async function decideApproval(fd: FormData, user: SessionUser, id: string) {
+  if (!can(user, 'canApproveDiscount')) {
+    throw new MutationError('ليس لديك صلاحية اعتماد الخصومات');
+  }
+
+  const project = await db.project.findUnique({ where: { id } });
+  if (!project) throw new MutationError('المشروع غير موجود');
+  if (project.approvalState !== 'pending') {
+    throw new MutationError('هذا المشروع ليس بانتظار اعتماد');
+  }
+
+  const decision = str(fd, 'decision');
+  const note = str(fd, 'approvalNote');
+  const now = new Date();
+
+  if (decision === 'approve') {
+    const after = {
+      approvalState: 'approved',
+      approvedById: user.id,
+      approvedAt: now,
+      approvalNote: note,
+    };
+    await db.project.update({ where: { id }, data: after });
+    await auditDiff(user.id, 'Project', id, project, after);
+    await logActivity({
+      type: 'STATUS_CHANGED',
+      title: 'اعتُمد الخصم',
+      detail: `${project.code} — بواسطة ${user.name}`,
+      userId: user.id,
+      link: { projectId: id },
+    });
+    return `/projects/${id}`;
+  }
+
+  if (decision === 'reject') {
+    if (!note) throw new MutationError('سبب الرفض مطلوب');
+
+    // الرفض يعيد السعر إلى ما قبل الخصم — لا يترك المشروع معلّقًا
+    const restored = project.gross ?? project.netTotal;
+    const after = {
+      approvalState: 'rejected',
+      approvedById: user.id,
+      approvedAt: now,
+      approvalNote: note,
+      discountType: null,
+      discountValue: null,
+      netTotal: restored,
+    };
+    await db.project.update({ where: { id }, data: after });
+    await auditDiff(user.id, 'Project', id, project, after);
+    await logActivity({
+      type: 'STATUS_CHANGED',
+      title: 'رُفض الخصم',
+      detail: `${project.code} — ${note}`,
+      userId: user.id,
+      link: { projectId: id },
+    });
+    return `/projects/${id}`;
+  }
+
+  throw new MutationError('قرار غير معروف');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  قائمة الأسعار (§١٠ بند ١)
+// ═══════════════════════════════════════════════════════════════
+
+export async function savePriceItem(fd: FormData, user: SessionUser, id?: string) {
+  if (!can(user, 'canManageSettings')) {
+    throw new MutationError('ليس لديك صلاحية إدارة قائمة الأسعار');
+  }
+
+  const serviceLine = str(fd, 'serviceLine');
+  const langFrom = str(fd, 'langFrom');
+  const langTo = str(fd, 'langTo');
+  const unitPrice = num(fd, 'unitPrice');
+
+  if (!serviceLine || !langFrom || !langTo) {
+    throw new MutationError('خط الخدمة وزوج اللغات مطلوبة');
+  }
+  if (!unitPrice || unitPrice <= 0) throw new MutationError('سعر الصفحة مطلوب');
+
+  const effectiveFrom = date(fd, 'effectiveFrom') ?? new Date();
+
+  const data = {
+    serviceLine,
+    langFrom,
+    langTo,
+    unitPrice,
+    currency: str(fd, 'currency') ?? 'EGP',
+    minOrder: num(fd, 'minOrder'),
+    effectiveFrom,
+    active: fd.get('active') === 'on' || !id,
+    notes: str(fd, 'notes'),
+  };
+
+  if (!id) {
+    // البند الجديد **يُضاف** ولا يستبدل القديم — أسعار الماضي تبقى كما هي
+    const item = await db.priceListItem.create({ data });
+    await auditEvent(
+      user.id,
+      'create',
+      'PriceListItem',
+      item.id,
+      `${serviceLine} ${langFrom}→${langTo} = ${unitPrice}`
+    );
+  } else {
+    const existing = await db.priceListItem.findUnique({ where: { id } });
+    if (!existing) throw new MutationError('البند غير موجود');
+    await db.priceListItem.update({ where: { id }, data });
+    await auditDiff(user.id, 'PriceListItem', id, existing, data);
+  }
+
+  return '/settings/prices?saved=1';
 }
 
 // ═══════════════════════════════════════════════════════════════

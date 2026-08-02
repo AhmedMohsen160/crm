@@ -44,6 +44,20 @@ export default async function NewRolePage({
         </section>
 
         <section className="card card-pad">
+          <h2 className="mb-3 font-semibold text-slate-800">حد الخصم</h2>
+          <FormField
+            label="أقصى خصم بلا اعتماد"
+            name="discountLimit"
+            type="number"
+            step="0.01"
+            min="0"
+            max="1"
+            dir="ltr"
+            hint="نسبة عشرية: ٠٫١ تعني ١٠٪. ما فوقها يوقف المشروع بانتظار اعتماد."
+          />
+        </section>
+
+        <section className="card card-pad">
           <h2 className="mb-3 font-semibold text-slate-800">الصلاحيات</h2>
           <PermissionGrid />
         </section>

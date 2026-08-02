@@ -21,6 +21,7 @@ import {
   roiDirect,
   roiLoaded,
   onTimeRate,
+  discountRatio,
 } from '../src/lib/costing.ts';
 
 const results = [];
@@ -193,6 +194,16 @@ price = priceProject({
 near(price.netTotal, 150, 'خصم مبالغ فيه لا ينزل تحت الحد الأدنى');
 
 near(balanceOf(1000, 500, 200), 300, 'الرصيد = الإجمالي − المقدم − المحصَّل');
+
+// ── حدّ الخصم: المبلغ الثابت لا يفلت من الحد (§١٠ بند ٤) ──────
+near(discountRatio({ type: 'percent', value: 0.3 }, 1000), 0.3, 'خصم النسبة يُقارن كما هو');
+near(
+  discountRatio({ type: 'amount', value: 500 }, 1000),
+  0.5,
+  'خصم ٥٠٠ على ألف = ٥٠٪ — المبلغ الثابت يُحوَّل لنسبة فلا يفلت من الحد'
+);
+near(discountRatio({ type: 'none', value: 0 }, 1000), 0, 'بلا خصم ← صفر');
+near(discountRatio({ type: 'amount', value: 500 }, 0), 0, 'إجمالي صفر ← صفر لا لا نهاية');
 
 // ── الهامش ───────────────────────────────────────────────────
 const m = marginOf(1000, 400);

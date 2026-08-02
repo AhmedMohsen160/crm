@@ -97,6 +97,7 @@ async function seedRoles() {
           label: def.label,
           sortOrder: def.sortOrder,
           isSystem: true,
+          discountLimit: def.discountLimit ?? 0,
           ...permissions,
         },
       });
@@ -106,6 +107,7 @@ async function seedRoles() {
 
     // دور نظامي لم تُعدّله الإدارة: نُبقيه مطابقًا للمصفوفة حتى تصل أي
     // صلاحية جديدة لأصحابها. الأدوار المخصّصة لا تُلمس أبدًا.
+    // الصلاحيات تُصحَّح، لكن **حد الخصم لا يُلمس** — قد تكون الإدارة عدّلته
     if (existing.isSystem) {
       await db.role.update({ where: { id: existing.id }, data: permissions });
     }

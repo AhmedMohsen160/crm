@@ -101,17 +101,21 @@ export const DEFAULT_ROLES: {
   label: string;
   sortOrder: number;
   permissions: Permission[];
+  /** أقصى خصم بلا اعتماد (§١٠ بند ٤) — يُعدَّل من شاشة الأدوار */
+  discountLimit?: number;
 }[] = [
   {
     name: 'system_admin',
     label: 'مدير النظام',
     sortOrder: 1,
+    discountLimit: 1,
     permissions: [...PERMISSION_KEYS],
   },
   {
     name: 'executive',
     label: 'الإدارة',
     sortOrder: 2,
+    discountLimit: 1,
     permissions: [
       'canViewAllLeads',
       'canViewSellPrice',
@@ -127,6 +131,7 @@ export const DEFAULT_ROLES: {
     name: 'sales_manager',
     label: 'مدير مبيعات',
     sortOrder: 3,
+    discountLimit: 0.2,
     permissions: [
       'canCreateLead',
       'canViewTeamLeads',
@@ -142,6 +147,7 @@ export const DEFAULT_ROLES: {
     name: 'sales_admin',
     label: 'أدمن مبيعات',
     sortOrder: 4,
+    discountLimit: 0.1,
     permissions: [
       'canCreateLead',
       'canConvertProject',

@@ -171,6 +171,7 @@ export function FormField({
   hint,
   step,
   min,
+  max,
   dir,
   className,
 }: {
@@ -183,6 +184,7 @@ export function FormField({
   hint?: string;
   step?: string;
   min?: string;
+  max?: string;
   dir?: 'rtl' | 'ltr';
   className?: string;
 }) {
@@ -197,6 +199,7 @@ export function FormField({
         type={type}
         step={step}
         min={min}
+        max={max}
         dir={dir}
         required={required}
         placeholder={placeholder}

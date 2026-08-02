@@ -101,6 +101,10 @@ model Role {
   canViewCompanyAnalytics Boolean @default(false)
   canViewTeamAnalytics    Boolean @default(false)
 
+  /// أقصى نسبة خصم يمنحها صاحب هذا الدور بلا اعتماد (٠٫١ تعني ١٠٪).
+  /// عمود في الدور لا مفتاح إعدادات باسم دور، لأن الأدوار تُنشأ من الشاشة.
+  discountLimit Float @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -114,13 +118,15 @@ model Role {
 /// كل قائمة منسدلة في النظام: الفروع، القنوات، أنماط التشغيل، خطوط الخدمة...
 /// الحقل extra يحمل المعامل حيث ينطبق (معامل الجهد أو التخصص).
 model ListItem {
-  id        String  @id @default(cuid())
-  listName  String /// اسم القائمة: branch | channel | work_mode | service_line ...
-  value     String /// المفتاح الإنجليزي
-  label     String /// المعروض بالعربية
-  sortOrder Int     @default(0)
-  active    Boolean @default(true)
-  extra     String? /// المعامل رقمًا نصيًا
+  id          String  @id @default(cuid())
+  listName    String /// اسم القائمة: branch | channel | work_mode | service_line ...
+  value       String /// المفتاح الإنجليزي
+  label       String /// المعروض بالعربية
+  sortOrder   Int     @default(0)
+  active      Boolean @default(true)
+  extra       String? /// المعامل رقمًا نصيًا
+  /// شرح أو شروط نصية — تظهر في عرض السعر لخطوط الخدمة (§١٠ بند ٥)
+  description String?
 
   @@unique([listName, value])
   @@index([listName, active])
@@ -474,9 +480,12 @@ model Project {
 
   // ── الاعتماد (يُفعَّل في مرحلة التسعير) ────────
   /// not_required | pending | approved | rejected
-  approvalState String  @default("not_required")
+  approvalState String    @default("not_required")
+  approvedAt    DateTime?
+  /// سبب رفض الاعتماد إن رُفض
+  approvalNote  String?
   approvedById  String?
-  approvedBy    User?   @relation("ProjectApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedBy    User?     @relation("ProjectApprover", fields: [approvedById], references: [id], onDelete: SetNull)
 
   // ── التشغيل (تُملأ في مرحلة الإسناد) ───────────
   projectManagerId  String?
@@ -710,15 +719,31 @@ model Setting {
   updatedAt DateTime @updatedAt
 }
 
-model PriceRate {
-  id          String  @id @default(cuid())
-  serviceType String // ترجمة معتمدة، تدقيق...
-  sourceLang  String
-  targetLang  String
-  unit        String  @default("WORD")
-  price       Float
-  currency    String  @default("EGP")
-  active      Boolean @default(true)
+/// بند في قائمة الأسعار: خط الخدمة × من لغة × إلى لغة ← سعر الصفحة.
+///
+/// **`effectiveFrom` إلزامي** (§١٠ بند ١): تعديل سعر اليوم لا يغيّر أسعار
+/// الماضي. البند الجديد يُضاف بتاريخ سريان، ويبقى القديم كما هو، فيُقرأ سعر
+/// أي مشروع بتاريخ إنشائه هو.
+model PriceListItem {
+  id          String @id @default(cuid())
+  serviceLine String
+  langFrom    String
+  langTo      String
 
-  @@unique([serviceType, sourceLang, targetLang, unit])
+  /// سعر الصفحة الواحدة
+  unitPrice Float
+  currency  String @default("EGP")
+  /// حد أدنى لقيمة الطلب في هذا البند — يعلو على الحد العام إن وُجد
+  minOrder  Float?
+
+  /// من متى يسري هذا السعر
+  effectiveFrom DateTime @default(now())
+  active        Boolean  @default(true)
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([serviceLine, langFrom, langTo, effectiveFrom])
+  @@index([active])
 }

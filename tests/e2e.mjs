@@ -195,8 +195,10 @@ await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
 check(await waitForText('ليد خاسر'), 'الليد الخاسر يُحفظ مع سببه ويظهر السبب');
 
 // ── 3هـ. ليد للتحويل ────────────────────────────────────────
+// نحفظ رقمه: مشروعه سيُسلَّم لاحقًا فيصير عميلًا متكررًا
+const REPEAT_PHONE = '011' + String(Date.now()).slice(-8);
 await go('/leads/new');
-await page.fill('#phone', '011' + String(Date.now()).slice(-8));
+await page.fill('#phone', REPEAT_PHONE);
 await page.fill('#firstName', 'تحويل ' + RUN);
 await page.selectOption('#channel', { index: 1 });
 await submit();
@@ -497,6 +499,142 @@ await go('/settings/staff-costs');
 check(
   page.url().includes('/settings/staff-costs'),
   'مدير النظام يصل إلى شاشة تكلفة الموظفين'
+);
+
+// ── 10هـ. التسعير والخصومات والاعتماد (المرحلة ٥) ───────────
+
+// التسعير التلقائي: نحوّل ليدًا بلا إدخال سعر، فيُقرأ من قائمة الأسعار
+await go('/leads/new');
+await page.fill('#phone', '012' + String(Date.now()).slice(-8));
+await page.fill('#firstName', 'تسعير ' + RUN);
+await page.selectOption('#channel', { index: 1 });
+await submit();
+await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
+
+await page.click('a[href$="/convert"]');
+await page.waitForURL(/\/convert$/, { timeout: 15000 });
+await page.selectOption('#serviceLine', 'general'); // ٩٠ للصفحة في البذرة
+await page.selectOption('#sourceLang', 'ar');
+await page.selectOption('#targetLang', 'en');
+await page.fill('#pages', '10');
+await submit();
+await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+await page.waitForLoadState('networkidle');
+const autoPricedUrl = page.url();
+const autoPricedId = autoPricedUrl.split('/').pop();
+check(
+  await waitForText('900'),
+  'التسعير التلقائي من قائمة الأسعار: ١٠ صفحات × ٩٠ = ٩٠٠'
+);
+
+// ── اختبار ١٩: تغيير السعر لا يمسّ مشروعًا قديمًا ─────────────
+await go('/settings/prices');
+await page.selectOption('select[name=serviceLine]', 'general');
+await page.selectOption('select[name=langFrom]', 'ar');
+await page.selectOption('select[name=langTo]', 'en');
+await page.fill('input[name=unitPrice]', '250');
+await submit();
+await page.waitForLoadState('networkidle');
+check(await waitForText('تم الحفظ'), 'إضافة سعر جديد بتاريخ سريان اليوم');
+
+await go(autoPricedUrl.replace('http://localhost:3000', ''));
+const stillOldPrice = await waitForText('900', 8000);
+const leakedNewPrice = await page.evaluate(() => document.body.innerText.includes('2,500'));
+check(
+  stillOldPrice && !leakedNewPrice,
+  'اختبار ١٩: تغيير السعر في القائمة لا يغيّر إجمالي مشروع قديم'
+);
+
+// ── اختبار ١٨: خصم فوق الحد يمنع الانتقال حتى الاعتماد ───────
+// نُنشئ مشروعًا بخصم ٥٠٪ — فوق حدّ مدير النظام؟ لا، حدّه ١٠٠٪.
+// نخفض حدّ دور مدير النظام مؤقتًا إلى ٥٪ ليُختبر الضابط فعليًا.
+await go('/settings/roles');
+await page.click('a[href^="/settings/roles/"]:has-text("مدير النظام")');
+await page.waitForSelector('#discountLimit', { timeout: 15000 });
+await page.fill('#discountLimit', '0.05');
+await submit();
+await page.waitForURL(/\/settings\/roles$/, { timeout: 20000 });
+
+await go('/leads/new');
+await page.fill('#phone', '015' + String(Date.now()).slice(-8));
+await page.fill('#firstName', 'خصم ' + RUN);
+await page.selectOption('#channel', { index: 1 });
+await submit();
+await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
+
+await page.click('a[href$="/convert"]');
+await page.waitForURL(/\/convert$/, { timeout: 15000 });
+await page.selectOption('#serviceLine', 'general');
+await page.selectOption('#sourceLang', 'ar');
+await page.selectOption('#targetLang', 'en');
+await page.fill('#pages', '10');
+await page.selectOption('#discountType', 'percent');
+await page.fill('#discountValue', '0.30'); // ٣٠٪ فوق حدّ ٥٪
+await submit();
+await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+await page.waitForLoadState('networkidle');
+
+const heldUrl = page.url();
+check(
+  (await page.locator('[data-testid=approval-pending]').count()) > 0,
+  'خصم ٣٠٪ فوق حدّ ٥٪ يوقف المشروع بانتظار الاعتماد (§١٠ بند ٤)'
+);
+
+// المحاولة الآن: أي انتقال يجب أن يُرفض
+await page.click('main button:has-text("إسناد المشروع")').catch(() => {});
+await go(heldUrl.replace('http://localhost:3000', ''));
+const moveButton = page.locator('main button:has-text("قيد التنفيذ")').first();
+if ((await moveButton.count()) > 0) {
+  await moveButton.click();
+  await page.waitForLoadState('networkidle');
+}
+const held =
+  page.url().includes('error=') || (await waitForText('موقوف بانتظار اعتماد', 6000));
+check(held, 'اختبار ١٨: المشروع الموقوف لا ينتقل خطوة واحدة قبل الاعتماد');
+
+// الاعتماد يرفع الإيقاف
+await go(heldUrl.replace('http://localhost:3000', ''));
+await page.click('main button:has-text("اعتماد الخصم")');
+await page.waitForLoadState('networkidle');
+check(await waitForText('معتمَد'), 'الاعتماد يرفع الإيقاف ويظهر اسم من اعتمده');
+
+// نعيد حدّ مدير النظام كما كان حتى لا تتأثر بقية الاختبارات
+await go('/settings/roles');
+await page.click('a[href^="/settings/roles/"]:has-text("مدير النظام")');
+await page.waitForSelector('#discountLimit', { timeout: 15000 });
+await page.fill('#discountLimit', '1');
+await submit();
+await page.waitForURL(/\/settings\/roles$/, { timeout: 20000 });
+
+// ── خصم العميل المتكرر يُطبَّق تلقائيًا (§١٠ بند ٣) ────────────
+// العميل الذي سُلّم له مشروع سابقًا هو REPEAT_PHONE — نُنشئ له ليدًا ثانيًا
+// ونحوّله بلا إدخال خصم، فيجب أن يُطبَّق الخصم بلا لمس.
+await go('/leads/new');
+await page.fill('#phone', REPEAT_PHONE);
+await page
+  .waitForSelector('[data-testid=client-found]', { timeout: 10000 })
+  .catch(() => {});
+await page.fill('#firstName', 'متكرر ' + RUN);
+await page.selectOption('#channel', { index: 1 });
+await submit();
+await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
+
+await page.click('a[href$="/convert"]');
+await page.waitForURL(/\/convert$/, { timeout: 15000 });
+await page.selectOption('#serviceLine', 'general');
+await page.selectOption('#sourceLang', 'ar');
+await page.selectOption('#targetLang', 'en');
+await page.fill('#pages', '5'); // أقل من أدنى شريحة كمية، فالخصم من التكرار وحده
+await submit();
+await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+await page.waitForLoadState('networkidle');
+check(
+  await waitForText('عميل متكرر'),
+  'خصم العميل المتكرر يُطبَّق تلقائيًا بلا إدخال (§١٠ بند ٣)'
+);
+check(
+  (await page.locator('[data-testid=approval-pending]').count()) === 0,
+  'الخصم التلقائي سياسة معتمدة سلفًا فلا يوقف المشروع للاعتماد'
 );
 
 // ── 10ج. أهداف الفروع تُعدَّل من الشاشة ─────────────────────

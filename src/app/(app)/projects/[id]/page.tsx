@@ -6,6 +6,7 @@ import { db } from '@/lib/db';
 import { requireUser, can } from '@/lib/auth';
 import { listLabel } from '@/lib/reference';
 import {
+  DISCOUNT_TYPES,
   PROJECT_STATUSES,
   PROJECT_STATUS_COLORS,
   allowedTransitions,
@@ -14,6 +15,7 @@ import {
   isOverdue,
   countsAsRevenue,
   type ProjectStatus,
+  type DiscountType,
 } from '@/lib/projects';
 import { QUOTE_STATUSES, QUOTE_STATUS_COLORS, type QuoteStatus } from '@/lib/constants';
 import { formatMoney, formatDate, formatDateTime, cn } from '@/lib/utils';
@@ -22,6 +24,7 @@ import { NotesPanel, TasksPanel, ActivityPanel } from '@/components/panels';
 import ProjectTransitions from '@/components/project-transitions';
 import ProjectSteps from '@/components/project-steps';
 import ProjectCostPanel from '@/components/project-cost-panel';
+import ApprovalPanel from '@/components/approval-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +58,7 @@ export default async function ProjectDetailPage({
       lead: { select: { id: true, code: true } },
       owner: { select: { name: true } },
       projectManager: { select: { name: true } },
+      approvedBy: { select: { name: true } },
       primaryProducer: { select: { name: true } },
       quotes: { orderBy: { createdAt: 'desc' } },
     },
@@ -124,6 +128,21 @@ export default async function ProjectDetailPage({
           {project.cancelReason ? ` — ${project.cancelReason}` : ''}. يبقى في اللوحة
           التشغيلية وخارج كل تقرير مالي.
         </div>
+      )}
+
+      {project.approvalState !== 'not_required' && showPrice && (
+        <ApprovalPanel
+          projectId={id}
+          state={project.approvalState}
+          canDecide={can(user, 'canApproveDiscount')}
+          discountLabel={
+            project.discountType === 'amount'
+              ? `خصم ${formatMoney(project.discountValue ?? 0, project.currency)}`
+              : `خصم ${((project.discountValue ?? 0) * 100).toFixed(1)}٪`
+          }
+          approverName={project.approvedBy?.name ?? null}
+          note={project.approvalNote}
+        />
       )}
 
       {canAssign && (
@@ -260,10 +279,29 @@ export default async function ProjectDetailPage({
                     {formatMoney(balance, project.currency)}
                   </span>
                 </Field>
-                <Field label="سعر الوحدة">
+                <Field label="سعر الصفحة">
                   <span className="nums">
                     {project.unitPrice ? formatMoney(project.unitPrice) : '—'}
                   </span>
+                </Field>
+                <Field label="قبل الخصم">
+                  <span className="nums">
+                    {project.gross ? formatMoney(project.gross, project.currency) : '—'}
+                  </span>
+                </Field>
+                <Field label="الخصم">
+                  {project.discountType ? (
+                    <span className="nums">
+                      {DISCOUNT_TYPES[project.discountType as DiscountType] ??
+                        project.discountType}
+                      {' · '}
+                      {project.discountType === 'amount'
+                        ? formatMoney(project.discountValue ?? 0, project.currency)
+                        : `${((project.discountValue ?? 0) * 100).toFixed(1)}٪`}
+                    </span>
+                  ) : (
+                    'بلا خصم'
+                  )}
                 </Field>
                 <Field label="شهر الإيراد">{project.revenueMonth ?? '—'}</Field>
               </dl>

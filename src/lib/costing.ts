@@ -155,6 +155,20 @@ export function priceProject(params: {
   return { gross, afterRush, discount, netTotal };
 }
 
+/**
+ * الخصم كنسبة من الإجمالي قبل الخصم — لمقارنته بحدّ الدور (§١٠ بند ٤).
+ *
+ * **الخصم بمبلغ ثابت يُحوَّل إلى نسبة**، وإلا أفلت من الحد بمجرد كتابته
+ * مبلغًا: من حدّه ١٠٪ على ألف جنيه يستطيع كتابة «خصم ٥٠٠» فيتجاوزه صامتًا.
+ */
+export function discountRatio(discount: DiscountInput, afterRush: number): number {
+  if (!discount.type || discount.type === 'none' || !discount.value) return 0;
+  if (discount.type === 'amount') {
+    return afterRush > 0 ? discount.value / afterRush : 0;
+  }
+  return discount.value;
+}
+
 /** `balance = net_total − deposit − collected_amount` */
 export function balanceOf(netTotal: number, deposit: number, collected: number): number {
   return netTotal - deposit - collected;

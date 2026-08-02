@@ -433,6 +433,30 @@ async function main() {
   }
   console.log('✓ تكلفة منتِجَين');
 
+  // ── قائمة أسعار ابتدائية ────────────────────────────────────
+  // بلا بنود لا يعمل التسعير التلقائي وتُدخَل الأسعار يدويًا في كل مشروع
+  const lastYear = new Date(now.getFullYear() - 1, 0, 1);
+  const prices: [string, string, string, number][] = [
+    ['certified', 'ar', 'en', 120],
+    ['certified', 'en', 'ar', 120],
+    ['legal', 'ar', 'en', 180],
+    ['legal', 'en', 'ar', 180],
+    ['medical', 'en', 'ar', 200],
+    ['technical', 'fr', 'ar', 190],
+    ['general', 'ar', 'en', 90],
+    ['general', 'en', 'ar', 90],
+  ];
+  for (const [serviceLine, langFrom, langTo, unitPrice] of prices) {
+    const exists = await db.priceListItem.findFirst({
+      where: { serviceLine, langFrom, langTo },
+    });
+    if (exists) continue;
+    await db.priceListItem.create({
+      data: { serviceLine, langFrom, langTo, unitPrice, effectiveFrom: lastYear },
+    });
+  }
+  console.log(`✓ ${prices.length} بند سعر`);
+
   // ── المهام ──────────────────────────────────────────────────
   await db.task.createMany({
     data: [

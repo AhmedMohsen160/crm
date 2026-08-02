@@ -58,7 +58,7 @@ export default async function RolesPage() {
                     {r.label}
                   </Link>
                   <span className="mt-1 block text-[11px] font-normal text-slate-400">
-                    {r._count.users} مستخدم
+                    {r._count.users} مستخدم · خصم {(r.discountLimit * 100).toFixed(0)}٪
                   </span>
                 </th>
               ))}

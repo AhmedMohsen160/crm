@@ -14,6 +14,8 @@ import {
   saveStep,
   deliverProject,
   saveStaffCost,
+  decideApproval,
+  savePriceItem,
   saveTask,
   saveQuote,
   saveUser,
@@ -84,6 +86,13 @@ export async function POST(request: NextRequest) {
         break;
       case 'staffCost':
         destination = await saveStaffCost(fd, user);
+        break;
+      case 'project.approval':
+        if (!id) throw new MutationError('معرّف المشروع مفقود');
+        destination = await decideApproval(fd, user, id);
+        break;
+      case 'priceItem':
+        destination = await savePriceItem(fd, user, id);
         break;
       case 'task':
         destination = await saveTask(fd, user, id);
