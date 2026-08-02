@@ -7,6 +7,7 @@ import {
   SlidersHorizontal,
   ScrollText,
   Target,
+  Lock,
 } from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -60,6 +61,13 @@ export default async function SettingsPage() {
       title: 'أهداف الفروع الشهرية',
       description: 'التارجت الذي تُقاس عليه نسب المبيعات — لكل فرع ولكل شهر',
       permission: 'canManageSettings',
+    },
+    {
+      href: '/settings/staff-costs',
+      icon: Lock,
+      title: 'تكلفة الموظفين',
+      description: 'الرواتب ومعطيات حساب تكلفة الصفحة — لمدير النظام والإدارة فقط',
+      permission: 'canViewStaffSalary',
     },
     {
       href: '/settings/system',

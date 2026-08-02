@@ -54,6 +54,9 @@ jobs:
       - name: اختبار قاعدة تطبيع الهاتف (§١٤)
         run: npm run test:phone
 
+      - name: اختبار معادلات التكلفة (§٨)
+        run: npm run test:costing
+
       - name: تجهيز قاعدة البيانات
         run: npm run db:deploy
 

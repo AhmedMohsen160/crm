@@ -20,6 +20,8 @@ import { formatMoney, formatDate, formatDateTime, cn } from '@/lib/utils';
 import { PageHeader, Badge, Avatar, Field, ErrorAlert } from '@/components/ui';
 import { NotesPanel, TasksPanel, ActivityPanel } from '@/components/panels';
 import ProjectTransitions from '@/components/project-transitions';
+import ProjectSteps from '@/components/project-steps';
+import ProjectCostPanel from '@/components/project-cost-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +67,9 @@ export default async function ProjectDetailPage({
   const alert = projectAlert(project);
   const balance = projectBalance(project);
   const overdue = isOverdue(project);
+
+  const showCost = can(user, 'canViewCostIndicator') || can(user, 'canViewStaffSalary');
+  const canAssign = can(user, 'canAssignProduction');
 
   const [serviceName, branchName, sourceName, targetName, workModeName] = await Promise.all([
     listLabel('service_line', project.serviceLine),
@@ -118,6 +123,24 @@ export default async function ProjectDetailPage({
           هذا المشروع <b>ملغى</b>
           {project.cancelReason ? ` — ${project.cancelReason}` : ''}. يبقى في اللوحة
           التشغيلية وخارج كل تقرير مالي.
+        </div>
+      )}
+
+      {canAssign && (
+        <div className="card card-pad">
+          <p className="mb-3 section-title">التشغيل</p>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/projects/${id}/assign`} className="btn-secondary">
+              {project.workMode ? 'تعديل الإسناد' : 'إسناد المشروع'}
+            </Link>
+            {/* التسليم من «جاهز للتسليم» وحدها — مسار §٦ متسلسل، ولا
+                نضيف قفزة لم تنصّ عليها المواصفة */}
+            {status === 'ready' && (
+              <Link href={`/projects/${id}/deliver`} className="btn-primary">
+                تسليم المشروع
+              </Link>
+            )}
+          </div>
         </div>
       )}
 
@@ -292,6 +315,16 @@ export default async function ProjectDetailPage({
                 ))}
               </ul>
             </section>
+          )}
+
+          <Suspense fallback={<div className="card h-32 animate-pulse bg-slate-100" />}>
+            <ProjectSteps projectId={id} canEdit={canAssign} showCost={showCost} />
+          </Suspense>
+
+          {showCost && (
+            <Suspense fallback={<div className="card h-32 animate-pulse bg-slate-100" />}>
+              <ProjectCostPanel projectId={id} showSellPrice={showPrice} />
+            </Suspense>
           )}
 
           <Suspense fallback={<div className="card h-40 animate-pulse bg-slate-100" />}>

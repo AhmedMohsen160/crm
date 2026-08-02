@@ -44,22 +44,24 @@ model User {
   isProducer Boolean @default(false)
 
   // العلاقات
-  ownedCompanies   Company[]  @relation("CompanyOwner")
-  ownedContacts    Contact[]  @relation("ContactOwner")
-  ownedLeads       Lead[]     @relation("LeadOwner")
-  ownedProjects    Project[]  @relation("ProjectOwner")
-  managedProjects  Project[]  @relation("ProjectManager")
-  producedProjects Project[]  @relation("ProjectProducer")
-  reviewedProjects Project[]  @relation("ProjectReviewer")
-  approvedProjects Project[]  @relation("ProjectApprover")
-  assignedTasks    Task[]     @relation("TaskAssignee")
-  createdTasks     Task[]     @relation("TaskCreator")
+  ownedCompanies   Company[]     @relation("CompanyOwner")
+  ownedContacts    Contact[]     @relation("ContactOwner")
+  ownedLeads       Lead[]        @relation("LeadOwner")
+  ownedProjects    Project[]     @relation("ProjectOwner")
+  managedProjects  Project[]     @relation("ProjectManager")
+  producedProjects Project[]     @relation("ProjectProducer")
+  reviewedProjects Project[]     @relation("ProjectReviewer")
+  approvedProjects Project[]     @relation("ProjectApprover")
+  staffCost        StaffCost?
+  projectSteps     ProjectStep[] @relation("StepPerformer")
+  assignedTasks    Task[]        @relation("TaskAssignee")
+  createdTasks     Task[]        @relation("TaskCreator")
   notes            Note[]
   activities       Activity[]
   quotes           Quote[]
   auditEntries     AuditLog[]
-  ownedClients     Client[]   @relation("ClientOwner")
-  createdClients   Client[]   @relation("ClientCreator")
+  ownedClients     Client[]      @relation("ClientOwner")
+  createdClients   Client[]      @relation("ClientCreator")
 
   @@index([email])
   @@index([reportsToId])
@@ -277,6 +279,69 @@ model Client {
 }
 
 // ───────────────────────────────────────────────
+//  تكلفة الموظف — تُقرأ بصلاحية canViewStaffSalary وحدها
+// ───────────────────────────────────────────────
+
+/// معطيات حساب تكلفة الصفحة الموزونة للمنتِج الداخلي (§٨).
+/// **لا يُرسل أي حقل منها لمن لا يملك صلاحية رؤية الرواتب.**
+model StaffCost {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// الراتب الشهري
+  monthlySalary   Float @default(0)
+  /// نسبة الوقت المنتج فعلًا من وقت الدوام
+  productiveRatio Float @default(0.7)
+  /// الصفحات الموزونة التي ينجزها في اليوم
+  dailyCapacity   Float @default(4)
+
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ───────────────────────────────────────────────
+//  خطوات تنفيذ المشروع
+// ───────────────────────────────────────────────
+
+/// خطوة واحدة في تنفيذ مشروع. **مخفية افتراضيًا في الشاشة** حتى لا تبطئ
+/// الحالة البسيطة (منتِج واحد بلا خطوات)، وتُفتح عند الحاجة.
+model ProjectStep {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// نوع الخطوة من قائمة step_type — منه يأتي معامل الجهد
+  stepType String
+
+  /// المنفِّذ الداخلي
+  performerId String?
+  performer   User?   @relation("StepPerformer", fields: [performerId], references: [id], onDelete: SetNull)
+
+  /// اسم المنفِّذ الخارجي مؤقتًا حتى تصل إدارة الفريلانسرز (المرحلة ٧)
+  externalName String?
+  /// أجر الفريلانسر للصفحة
+  externalRate Float?
+
+  /// internal | external
+  costSource String @default("internal")
+
+  pages         Float @default(0)
+  /// محسوبة ومخزَّنة وقت الحفظ — لا تتغيّر بتغيّر المعاملات لاحقًا
+  weightedPages Float @default(0)
+  cost          Float @default(0)
+
+  notes     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([performerId])
+}
+
+// ───────────────────────────────────────────────
 //  أهداف الفروع الشهرية — تُعدَّل من الشاشة
 // ───────────────────────────────────────────────
 
@@ -428,6 +493,22 @@ model Project {
   isRework          Boolean @default(false)
   folderUrl         String?
 
+  /// أجر الفريلانسر للصفحة حين يكون التشغيل خارجيًا بلا خطوات صريحة
+  externalRate Float?
+  /// اسم المنفِّذ الخارجي مؤقتًا حتى تصل إدارة الفريلانسرز (المرحلة ٧)
+  externalName String?
+
+  // ── التكلفة والهامش — تُجمَّد وقت التسليم (§٨) ──
+  // لا تُعاد بتغيّر راتب أو معامل لاحقًا، وإلا تغيّر تاريخ الهوامش
+  weightedPages Float?
+  costInternal  Float?
+  costExternal  Float?
+  costTotal     Float?
+  margin        Float?
+  marginPct     Float?
+  /// آخر لحظة أُعيد فيها الحساب — للتشخيص
+  costedAt      DateTime?
+
   // ── الطوابع الزمنية الخمسة (§4.3) ──────────────
   createdAt   DateTime  @default(now())
   convertedAt DateTime?
@@ -464,6 +545,7 @@ model Project {
   noteItems  Note[]
   quotes     Quote[]
   activities Activity[]
+  steps      ProjectStep[]
 
   @@index([status])
   @@index([ownerId])
@@ -472,6 +554,7 @@ model Project {
   @@index([branch])
   @@index([revenueMonth])
   @@index([deadline])
+  @@index([primaryProducerId])
   @@map("Deal")
 }
 

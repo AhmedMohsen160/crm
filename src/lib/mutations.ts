@@ -10,6 +10,10 @@ import { findOrCreateClient } from '@/lib/clients';
 import { normalizePhone } from '@/lib/phone';
 import { nextLeadCode, nextClientCode, nextProjectCode } from '@/lib/sequence';
 import {
+  freezeProjectCost,
+  stepWeightedPages,
+} from '@/lib/project-costing';
+import {
   PROJECT_STATUSES,
   allowedTransitions,
   revenueMonthKey,
@@ -1026,6 +1030,215 @@ export async function saveListItem(fd: FormData, admin: SessionUser, id?: string
   await db.listItem.update({ where: { id }, data: after });
   await auditDiff(admin.id, 'ListItem', id, existing, after);
   return `/settings/lists?list=${existing.listName}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  الإسناد وخطوات التنفيذ (§٧.٢)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * إسناد مشروع: نمط التشغيل والمصدر والمنتِج والمراجع.
+ *
+ * **معيار القبول ≤١٥ ثانية** — أربعة حقول أغلبها قوائم. عند الحفظ تُحسب
+ * التكلفة وتُجمَّد، وينتقل المشروع إلى «قيد التنفيذ» إن اكتملت شروطه.
+ */
+export async function assignProject(fd: FormData, user: SessionUser, id: string) {
+  if (!can(user, 'canAssignProduction')) {
+    throw new MutationError('ليس لديك صلاحية إسناد الإنتاج');
+  }
+
+  const project = await db.project.findUnique({ where: { id } });
+  if (!project) throw new MutationError('المشروع غير موجود');
+  if (project.status === 'cancelled') {
+    throw new MutationError('المشروع ملغى — لا يُسند');
+  }
+
+  const workMode = str(fd, 'workMode');
+  const sourcing = str(fd, 'sourcing') ?? 'internal';
+  const primaryProducerId = str(fd, 'primaryProducerId');
+  const reviewerId = str(fd, 'reviewerId');
+  const externalName = str(fd, 'externalName');
+  const externalRate = num(fd, 'externalRate');
+
+  if (!workMode) throw new MutationError('نمط التشغيل مطلوب');
+  if (sourcing === 'external') {
+    if (!externalName) throw new MutationError('اسم المنفِّذ الخارجي مطلوب');
+  } else if (!primaryProducerId) {
+    throw new MutationError('المنتِج الرئيسي مطلوب');
+  }
+
+  const after = {
+    workMode,
+    sourcing,
+    primaryProducerId: sourcing === 'external' ? null : primaryProducerId,
+    reviewerId,
+    externalName: sourcing === 'external' ? externalName : null,
+    externalRate: sourcing === 'external' ? externalRate : null,
+    projectManagerId: project.projectManagerId ?? user.id,
+    assignedAt: project.assignedAt ?? new Date(),
+  };
+
+  await db.project.update({ where: { id }, data: after });
+  await auditDiff(user.id, 'Project', id, project, after);
+
+  // التكلفة تُحسب فور الإسناد فيرى مدير المشاريع أثر قراره حالًا
+  await freezeProjectCost(id);
+
+  // الانتقال إلى «قيد التنفيذ» يمرّ بالبوابة نفسها فتُفحص قواعد §٦
+  if (project.status === 'pending_assignment' || project.status === 'rework') {
+    const move = new FormData();
+    move.set('status', 'in_progress');
+    await moveProject(move, user, id);
+  }
+
+  await logActivity({
+    type: 'STAGE_CHANGED',
+    title: 'أُسند المشروع',
+    detail: `${project.code} — ${sourcing === 'external' ? 'تشغيل خارجي' : 'تشغيل داخلي'}`,
+    userId: user.id,
+    link: { projectId: id },
+  });
+
+  return `/projects/${id}`;
+}
+
+/**
+ * خطوة تنفيذ. الصفحات الموزونة والتكلفة تُحسبان وتُخزَّنان وقت الحفظ، فلا
+ * يتغيّر تاريخ التكاليف بتغيّر معامل لاحقًا.
+ */
+export async function saveStep(fd: FormData, user: SessionUser, id?: string) {
+  if (!can(user, 'canAssignProduction')) {
+    throw new MutationError('ليس لديك صلاحية إضافة خطوات');
+  }
+
+  const projectId = str(fd, 'projectId');
+  if (!projectId) throw new MutationError('معرّف المشروع مفقود');
+
+  const project = await db.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, serviceLine: true },
+  });
+  if (!project) throw new MutationError('المشروع غير موجود');
+
+  const stepType = str(fd, 'stepType');
+  const pages = num(fd, 'pages') ?? 0;
+  if (!stepType) throw new MutationError('نوع الخطوة مطلوب');
+  if (pages <= 0) throw new MutationError('عدد صفحات الخطوة مطلوب');
+
+  const costSource = str(fd, 'costSource') === 'external' ? 'external' : 'internal';
+  const performerId = costSource === 'internal' ? str(fd, 'performerId') : null;
+  const externalName = costSource === 'external' ? str(fd, 'externalName') : null;
+  const externalRate = costSource === 'external' ? num(fd, 'externalRate') : null;
+
+  if (costSource === 'internal' && !performerId) {
+    throw new MutationError('منفِّذ الخطوة مطلوب');
+  }
+  if (costSource === 'external' && !externalName) {
+    throw new MutationError('اسم المنفِّذ الخارجي مطلوب');
+  }
+
+  const weighted = await stepWeightedPages({
+    stepType,
+    serviceLine: project.serviceLine,
+    pages,
+  });
+
+  const data = {
+    projectId,
+    stepType,
+    performerId,
+    externalName,
+    externalRate,
+    costSource,
+    pages,
+    weightedPages: weighted,
+    // التكلفة تُحسب في المحرّك بعد الحفظ لتشمل راتب المنفِّذ الحالي
+    cost: 0,
+    notes: str(fd, 'notes'),
+    sortOrder: num(fd, 'sortOrder') ?? 0,
+  };
+
+  if (!id) {
+    const step = await db.projectStep.create({ data });
+    await auditEvent(user.id, 'create', 'ProjectStep', step.id, `${stepType} — ${pages} صفحة`);
+  } else {
+    const existing = await db.projectStep.findUnique({ where: { id } });
+    if (!existing) throw new MutationError('الخطوة غير موجودة');
+    await db.projectStep.update({ where: { id }, data });
+    await auditDiff(user.id, 'ProjectStep', id, existing, data);
+  }
+
+  await freezeProjectCost(projectId);
+  return `/projects/${projectId}`;
+}
+
+/**
+ * تسليم المشروع مع ملاحظات الجودة (§٧.٢).
+ * التكلفة تُجمَّد هنا نهائيًا — بعدها لا يغيّرها تعديل راتب أو معامل.
+ */
+export async function deliverProject(fd: FormData, user: SessionUser, id: string) {
+  if (!can(user, 'canAssignProduction')) {
+    throw new MutationError('ليس لديك صلاحية التسليم');
+  }
+
+  const qaIssues = num(fd, 'qaIssues') ?? 0;
+  const folderUrl = str(fd, 'folderUrl');
+
+  await db.project.update({
+    where: { id },
+    data: { qaIssues: Math.max(0, Math.round(qaIssues)), folderUrl },
+  });
+
+  const move = new FormData();
+  move.set('status', 'delivered');
+  const destination = await moveProject(move, user, id);
+
+  // التجميد بعد الانتقال، فيلتقط الحالة النهائية
+  await freezeProjectCost(id);
+  return destination;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  تكلفة الموظفين — لمن يملك canViewStaffSalary وحده
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveStaffCost(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canViewStaffSalary')) {
+    throw new MutationError('رواتب الموظفين لمدير النظام والإدارة فقط');
+  }
+
+  const producers = await db.user.findMany({
+    where: { isProducer: true },
+    select: { id: true, name: true },
+  });
+
+  for (const producer of producers) {
+    const salary = num(fd, `salary_${producer.id}`);
+    const ratio = num(fd, `ratio_${producer.id}`);
+    const capacity = num(fd, `capacity_${producer.id}`);
+    if (salary === null && ratio === null && capacity === null) continue;
+
+    if ((ratio ?? 0) < 0 || (ratio ?? 0) > 1) {
+      throw new MutationError(`نسبة الإنتاج لـ«${producer.name}» يجب أن تكون بين ٠ و١`);
+    }
+
+    const existing = await db.staffCost.findUnique({ where: { userId: producer.id } });
+    const after = {
+      monthlySalary: salary ?? existing?.monthlySalary ?? 0,
+      productiveRatio: ratio ?? existing?.productiveRatio ?? 0.7,
+      dailyCapacity: capacity ?? existing?.dailyCapacity ?? 4,
+    };
+
+    await db.staffCost.upsert({
+      where: { userId: producer.id },
+      update: after,
+      create: { userId: producer.id, ...after },
+    });
+    // القيم نفسها لا تُقيَّد في السجل إلا إن تغيّرت فعلًا
+    await auditDiff(user.id, 'StaffCost', producer.id, existing ?? {}, after);
+  }
+
+  return '/settings/staff-costs?saved=1';
 }
 
 // ═══════════════════════════════════════════════════════════════

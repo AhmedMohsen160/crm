@@ -10,6 +10,7 @@ import {
   Users,
   Contact,
   Briefcase,
+  Factory,
   ListChecks,
   FileText,
   Settings,
@@ -17,7 +18,7 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
-import { hasAnyPermission } from '@/lib/permissions';
+import { hasAnyPermission, hasPermission } from '@/lib/permissions';
 import type { SessionUser } from '@/lib/auth';
 import { Avatar } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,12 @@ const NAV = [
   { href: '/companies', label: 'الشركات', icon: Building2 },
   { href: '/contacts', label: 'جهات الاتصال', icon: Users },
   { href: '/projects', label: 'المشاريع', icon: Briefcase },
+  {
+    href: '/production',
+    label: 'قائمة الإسناد',
+    icon: Factory,
+    permission: 'canAssignProduction' as const,
+  },
   { href: '/quotes', label: 'عروض الأسعار', icon: FileText },
   { href: '/tasks', label: 'المهام', icon: ListChecks },
 ];
@@ -52,7 +59,8 @@ export default function Shell({
 
   const nav = (
     <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
-      {NAV.map((item) => {
+      {NAV.filter((item) => !item.permission || hasPermission(user, item.permission)).map(
+        (item) => {
         const Icon = item.icon;
         const active = isActive(item.href, item.exact);
         return (
@@ -71,7 +79,8 @@ export default function Shell({
             <span className="truncate">{item.label}</span>
           </Link>
         );
-      })}
+        }
+      )}
 
       {hasAnyPermission(user, 'canManageUsers', 'canManageSettings') && (
         <>

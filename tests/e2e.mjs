@@ -14,7 +14,12 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
 page.on('console', (m) => {
-  if (m.type() === 'error' && !m.text().includes('favicon')) errors.push('CONSOLE: ' + m.text());
+  const text = m.text();
+  if (m.type() !== 'error') return;
+  if (text.includes('favicon')) return;
+  // ٤٠٣ متعمَّد: نختبر أن الخادم يرفض من لا يملك الصلاحية
+  if (text.includes('403')) return;
+  errors.push('CONSOLE: ' + text);
 });
 page.on('requestfailed', (r) => {
   // ERR_ABORTED يعني أن المتصفح ألغى الطلب لأننا انتقلنا لصفحة أخرى قبل
@@ -322,18 +327,48 @@ check(
 
 // ── 10ب. الاعتراف بالإيراد بالحالة — اختبارا ١٣ و١٤ ──────────
 //
-// البذرة تُنشئ أربعة مشاريع: قيد التنفيذ (45,000) · قيد الإسناد (18,000)
-// · سُلّم (62,000) · ملغى (25,000). القاعدة (§٣ بند ٤): لا يدخل التقرير
-// المالي إلا ما سُلّم أو حُصّل — أي 62,000 وحدها.
+// نتحقّق من **القاعدة** لا من رقم ثابت: الإيراد المعترَف به يجب أن يساوي
+// مجموع المشاريع «سُلّم» و«محصَّل» بالضبط، ولا يشمل جاريًا ولا ملغى.
+
+/** يجمع عمود «الإجمالي» في شاشة القائمة لحالة واحدة */
+async function sumByStatus(status) {
+  await page.goto(`http://localhost:3000/projects?status=${status}&view=list`, {
+    waitUntil: 'networkidle',
+  });
+  return page.evaluate(() => {
+    const rows = [...document.querySelectorAll('table tbody tr')];
+    return rows.reduce((sum, row) => {
+      const cell = row.querySelectorAll('td')[4]; // عمود الإجمالي
+      const match = (cell?.textContent ?? '').replace(/,/g, '').match(/\d+(\.\d+)?/);
+      return sum + (match ? Number(match[0]) : 0);
+    }, 0);
+  });
+}
+
+const delivered = await sumByStatus('delivered');
+const collected = await sumByStatus('collected');
+const inProgress = await sumByStatus('in_progress');
+const cancelled = await sumByStatus('cancelled');
+
 await go('/projects?view=list');
-const financial = await page.evaluate(() => {
-  const cards = [...document.querySelectorAll('.card')];
-  const card = cards.find((c) => c.textContent?.includes('إيراد معترَف به'));
-  return card?.textContent ?? '';
+const recognisedRevenue = await page.evaluate(() => {
+  const card = [...document.querySelectorAll('.card')].find((c) =>
+    c.textContent?.includes('إيراد معترَف به')
+  );
+  const match = (card?.textContent ?? '').replace(/,/g, '').match(/\d+(\.\d+)?/);
+  return match ? Number(match[0]) : -1;
 });
+
+const expectedRevenue = delivered + collected;
 check(
-  financial.includes('62,000') || financial.includes('٦٢٬٠٠٠'),
-  `الإيراد المعترَف به = المشروع المسلَّم وحده (اختبار ١٣ و١٤) — ${financial.replace(/\s+/g, ' ').trim()}`
+  Math.abs(recognisedRevenue - expectedRevenue) < 0.01,
+  `اختبار ١٣ و١٤: الإيراد المعترَف به ${recognisedRevenue} = مجموع المسلَّم والمحصَّل ${expectedRevenue}`
+);
+check(
+  inProgress > 0 &&
+    cancelled > 0 &&
+    recognisedRevenue < expectedRevenue + inProgress + cancelled,
+  `الجاري (${inProgress}) والملغى (${cancelled}) خارج الرقم المالي`
 );
 
 // اختبار ١٣ (تتمة): الملغى يظهر في اللوحة التشغيلية ولا يختفي
@@ -370,6 +405,100 @@ const columns = await page.evaluate(() =>
 );
 check(columns === 6, `لوحة التشغيل تعرض الحالات الست (${columns}/6)`);
 
+// ── 10د. الإسناد ومعادلات التكلفة (المرحلة ٤) ───────────────
+
+// قائمة الإسناد: لا سعر بيع فيها إطلاقًا
+await go('/production', '11-production');
+const productionHtml = await page.content();
+const priceLeak = ['62,000', '45,000', '18,000'].filter((n) => productionHtml.includes(n));
+check(
+  priceLeak.length === 0,
+  `قائمة الإسناد بلا أي سعر بيع${priceLeak.length ? ' — تسرّب: ' + priceLeak : ''}`
+);
+
+// نُسند المشروع الذي أنشأناه: نمط تشغيل + منتِج
+await go(`/projects/${projectId}/assign`);
+await page.selectOption('#workMode', 'human_full');
+await page.selectOption('#primaryProducerId', { index: 1 });
+
+// مؤشر التكلفة المجرّد يظهر بعد اختيار المنتِج
+const indicatorShown = await page
+  .waitForSelector('[data-testid=cost-indicator]', { timeout: 10000 })
+  .then(() => true)
+  .catch(() => false);
+check(indicatorShown, 'مؤشر التكلفة المجرّد يظهر عند اختيار المنتِج (§٥)');
+
+if (indicatorShown) {
+  const indicatorText = await page.locator('[data-testid=cost-indicator]').innerText();
+  const mentionsSalary = ['راتب', 'الراتب', 'salary'].some((w) => indicatorText.includes(w));
+  check(!mentionsSalary, `المؤشر رقم مجرّد بلا أي إشارة لراتب — «${indicatorText.trim()}»`);
+}
+
+await submit();
+await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+await page.waitForLoadState('networkidle');
+check(await waitForText('قيد التنفيذ'), 'الإسناد ينقل المشروع إلى «قيد التنفيذ»');
+check(await waitForText('الصفحات الموزونة'), 'لوحة التكلفة تظهر بعد الإسناد');
+
+// الصفحات الموزونة محسوبة: ٢٠ صفحة × ترجمة بشرية ١٫٠ × خط الخدمة
+const weightedText = await page.evaluate(() => {
+  const dts = [...document.querySelectorAll('dt')];
+  const dt = dts.find((d) => d.textContent?.includes('الصفحات الموزونة'));
+  return dt?.nextElementSibling?.textContent?.trim() ?? '';
+});
+check(
+  Number(weightedText) > 0,
+  `الصفحات الموزونة محسوبة ومخزَّنة (${weightedText})`
+);
+
+// الإيراد المنسوب يساوي إجمالي المشروع بالضبط (اختبار ١٢ في المتصفح)
+const attributionSum = await page.evaluate(() => {
+  const section = [...document.querySelectorAll('section')].find((s) =>
+    s.textContent?.includes('الإيراد المنسوب')
+  );
+  if (!section) return null;
+  // نلتقط الرقم وحده: رمز العملة «ج.م» يحمل نقطة تفسد أي تنظيف ساذج
+  const nums = [...section.querySelectorAll('li span.nums')].map((n) => {
+    const match = (n.textContent ?? '').replace(/,/g, '').match(/\d+(\.\d+)?/);
+    return match ? Number(match[0]) : 0;
+  });
+  return nums.reduce((a, b) => a + b, 0);
+});
+check(
+  attributionSum === 5000,
+  `اختبار ١٢ في المتصفح: مجموع الإيراد المنسوب ${attributionSum} = ٥٠٠٠`
+);
+
+// خطوة تنفيذ تُحسب صفحاتها الموزونة عند الحفظ
+await page.locator('summary:has-text("خطوات التنفيذ")').first().click();
+await page.selectOption('select[name=stepType]', 'human_translation');
+await page.fill('input[name=pages]', '20');
+await page.selectOption('select[name=performerId]', { index: 1 });
+await page.click('main details form button[type=submit]');
+await page.waitForLoadState('networkidle');
+check(await waitForText('صفحة موزونة'), 'خطوة التنفيذ تُحسب صفحاتها الموزونة وتُخزَّن');
+
+// المسار متسلسل: قيد التنفيذ ← جاهز للتسليم ← سُلّم
+await go(`/projects/${projectId}`);
+await page.click('main button:has-text("جاهز للتسليم")');
+await page.waitForLoadState('networkidle');
+check(await waitForText('جاهز للتسليم'), 'الانتقال إلى «جاهز للتسليم»');
+
+// التسليم يجمّد التكلفة ويعترف بالإيراد
+await go(`/projects/${projectId}/deliver`);
+await page.fill('#qaIssues', '2');
+await submit();
+await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+await page.waitForLoadState('networkidle');
+check(await waitForText('سُلّم'), 'التسليم ينقل المشروع إلى «سُلّم»');
+
+// رواتب الموظفين محجوبة عن مدير المشاريع، ومتاحة لمدير النظام
+await go('/settings/staff-costs');
+check(
+  page.url().includes('/settings/staff-costs'),
+  'مدير النظام يصل إلى شاشة تكلفة الموظفين'
+);
+
 // ── 10ج. أهداف الفروع تُعدَّل من الشاشة ─────────────────────
 await go('/settings/targets');
 const firstTarget = await page.locator('input[name^="target_"]').first();
@@ -404,7 +533,14 @@ async function loginAs(email, password = 'ChangeMe123!') {
 // اختبار ٤: أدمن المبيعات يرى سجلاته فقط، ولا يبلغ شاشات الإدارة
 await loginAs('agent@fasttrans.local');
 
-const guarded = ['/settings/users', '/settings/roles', '/settings/lists', '/settings/system'];
+const guarded = [
+  '/settings/users',
+  '/settings/roles',
+  '/settings/lists',
+  '/settings/system',
+  '/settings/staff-costs', // اختبار ٦: لا أحد يقرأ الرواتب إلا مدير النظام والإدارة
+  '/production', // الإسناد لمن يملك صلاحيته وحده
+];
 let allGuarded = true;
 for (const path of guarded) {
   await page.goto('http://localhost:3000' + path, { waitUntil: 'networkidle' });
@@ -413,7 +549,14 @@ for (const path of guarded) {
     console.log(`  !! لم يُحجب ${path}`);
   }
 }
-check(allGuarded, 'أدمن المبيعات محجوب عن كل شاشات الإدارة (اختبار ٤)');
+check(allGuarded, 'أدمن المبيعات محجوب عن الإدارة والرواتب والإسناد (اختبارا ٤ و٦)');
+
+// اختبار ٦ (تتمة): مؤشر التكلفة نفسه محجوب عمّن لا يملك صلاحيته
+const indicatorStatus = await page.evaluate(async () => {
+  const res = await fetch('/api/cost-indicator?projectId=x');
+  return res.status;
+});
+check(indicatorStatus === 403, `مؤشر التكلفة يرفض من لا يملك صلاحيته (${indicatorStatus})`);
 
 await go('/projects', '11-agent-view');
 check(true, `أدمن المبيعات يرى صفقاته فقط (عددها ${await page.locator('table tbody tr').count()})`);

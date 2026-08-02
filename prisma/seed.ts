@@ -408,6 +408,31 @@ async function main() {
   });
   console.log('✓ 4 مشاريع');
 
+  // ── تكلفة الموظفين ──────────────────────────────────────────
+  // بلا هذه القيم تكون كل التكاليف صفرًا وتظهر تنبيهات مفتوحة
+  await db.user.updateMany({
+    where: { email: { in: [ADMIN_EMAIL, 'agent@fasttrans.local'] } },
+    data: { isProducer: true },
+  });
+  for (const [email, salary] of [
+    [ADMIN_EMAIL, 18000],
+    ['agent@fasttrans.local', 12000],
+  ] as [string, number][]) {
+    const person = await db.user.findUnique({ where: { email }, select: { id: true } });
+    if (!person) continue;
+    await db.staffCost.upsert({
+      where: { userId: person.id },
+      update: {},
+      create: {
+        userId: person.id,
+        monthlySalary: salary,
+        productiveRatio: 0.7,
+        dailyCapacity: 4,
+      },
+    });
+  }
+  console.log('✓ تكلفة منتِجَين');
+
   // ── المهام ──────────────────────────────────────────────────
   await db.task.createMany({
     data: [

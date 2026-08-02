@@ -10,6 +10,10 @@ import {
   saveContact,
   saveProject,
   moveProject,
+  assignProject,
+  saveStep,
+  deliverProject,
+  saveStaffCost,
   saveTask,
   saveQuote,
   saveUser,
@@ -66,6 +70,20 @@ export async function POST(request: NextRequest) {
       case 'project.move':
         if (!id) throw new MutationError('معرّف المشروع مفقود');
         destination = await moveProject(fd, user, id);
+        break;
+      case 'project.assign':
+        if (!id) throw new MutationError('معرّف المشروع مفقود');
+        destination = await assignProject(fd, user, id);
+        break;
+      case 'project.deliver':
+        if (!id) throw new MutationError('معرّف المشروع مفقود');
+        destination = await deliverProject(fd, user, id);
+        break;
+      case 'step':
+        destination = await saveStep(fd, user, id);
+        break;
+      case 'staffCost':
+        destination = await saveStaffCost(fd, user);
         break;
       case 'task':
         destination = await saveTask(fd, user, id);
