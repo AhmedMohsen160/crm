@@ -38,7 +38,7 @@ export default async function CompaniesPage({
       where,
       include: {
         owner: { select: { name: true } },
-        _count: { select: { contacts: true, deals: true } },
+        _count: { select: { contacts: true, projects: true } },
       },
       orderBy: { updatedAt: 'desc' },
       take: 300,
@@ -135,7 +135,7 @@ export default async function CompaniesPage({
                       </div>
                     </td>
                     <td className="nums">{c._count.contacts}</td>
-                    <td className="nums">{c._count.deals}</td>
+                    <td className="nums">{c._count.projects}</td>
                     {seeAll && (
                       <td>
                         {c.owner ? (

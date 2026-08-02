@@ -1,5 +1,13 @@
 import Link from '@/components/link';
-import { Users, KeyRound, ShieldCheck, ListOrdered, SlidersHorizontal, ScrollText } from 'lucide-react';
+import {
+  Users,
+  KeyRound,
+  ShieldCheck,
+  ListOrdered,
+  SlidersHorizontal,
+  ScrollText,
+  Target,
+} from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { PageHeader } from '@/components/ui';
@@ -44,6 +52,13 @@ export default async function SettingsPage() {
       icon: ListOrdered,
       title: 'القوائم المرجعية',
       description: `الفروع والقنوات وأنماط التشغيل ومعاملاتها — ${listCount} عنصر`,
+      permission: 'canManageSettings',
+    },
+    {
+      href: '/settings/targets',
+      icon: Target,
+      title: 'أهداف الفروع الشهرية',
+      description: 'التارجت الذي تُقاس عليه نسب المبيعات — لكل فرع ولكل شهر',
       permission: 'canManageSettings',
     },
     {

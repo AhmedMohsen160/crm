@@ -8,15 +8,15 @@ import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
 import { normalizePhone } from '@/lib/phone';
-import { nextLeadCode, nextClientCode } from '@/lib/sequence';
+import { nextLeadCode, nextClientCode, nextProjectCode } from '@/lib/sequence';
 import {
-  STAGE_DEFAULT_PROBABILITY,
-  DEAL_STAGES,
-  LEAD_STATUSES,
-  LEAD_CLOSED_STATUSES,
-  type DealStage,
-  type LeadStatus,
-} from '@/lib/constants';
+  PROJECT_STATUSES,
+  allowedTransitions,
+  revenueMonthKey,
+  endOfToday,
+  type ProjectStatus,
+} from '@/lib/projects';
+import { LEAD_STATUSES, LEAD_CLOSED_STATUSES, type LeadStatus } from '@/lib/constants';
 
 /**
  * كل عمليات الحفظ في النظام.
@@ -163,68 +163,94 @@ export async function saveLead(fd: FormData, user: SessionUser, id?: string) {
   return `/leads/${id}`;
 }
 
-/** تحويل العميل المحتمل إلى شركة + جهة اتصال + صفقة */
+/**
+ * تحويل الليد إلى **مشروع** (§7.1).
+ *
+ * ستة حقول، أغلبها قوائم، ومعيار القبول ≤٢٠ ثانية. عند الحفظ:
+ * يتولّد `project_id`، ويصير الليد `فائز`، ويدخل المشروع `قيد الإسناد`
+ * فيصل إشعاره لمدير المشاريع.
+ */
 export async function convertLead(fd: FormData, user: SessionUser, id: string) {
+  if (!can(user, 'canConvertProject')) {
+    throw new MutationError('ليس لديك صلاحية تحويل الليد إلى مشروع');
+  }
+
   const lead = await db.lead.findUnique({ where: { id } });
-  if (!lead) throw new MutationError('العميل المحتمل غير موجود');
+  if (!lead) throw new MutationError('الليد غير موجود');
   requireOwn(lead.ownerId, user, 'ليس لديك صلاحية تحويل هذا السجل');
   if (lead.status === 'WON') return `/leads/${id}`;
 
   const ownerId = lead.ownerId ?? user.id;
+  const pages = num(fd, 'pages');
+  const serviceLine = str(fd, 'serviceLine') ?? lead.serviceInterest;
+  const sourceLang = str(fd, 'sourceLang') ?? lead.sourceLang;
+  const targetLang = str(fd, 'targetLang') ?? lead.targetLang;
 
-  // 1) الشركة — قائمة أو جديدة
-  let companyId = str(fd, 'existingCompanyId');
-  if (!companyId) {
-    const companyName = str(fd, 'companyName') ?? lead.companyName;
-    if (companyName) {
-      const company = await db.company.create({
-        data: { name: companyName, email: lead.email, phone: lead.phone, ownerId },
-      });
-      companyId = company.id;
-    }
+  if (!serviceLine) throw new MutationError('خط الخدمة مطلوب');
+  if (!sourceLang || !targetLang) throw new MutationError('زوج اللغات مطلوب');
+  if (!pages) throw new MutationError('عدد الصفحات مطلوب');
+
+  // العميل: الليد يحمله منذ إنشائه، ونستخرجه من هاتفه إن كان سجلًا قديمًا
+  let clientId = lead.clientId;
+  if (!clientId && lead.phone) {
+    const client = await findOrCreateClient(
+      {
+        name: fullName(lead.firstName, lead.lastName),
+        phone: lead.phone,
+        email: lead.email,
+        type: lead.companyName ? 'company' : 'individual',
+        companyName: lead.companyName,
+      },
+      user
+    );
+    clientId = client.id;
   }
 
-  // 2) جهة الاتصال
-  const contact = await db.contact.create({
-    data: {
-      firstName: lead.firstName,
-      lastName: lead.lastName,
-      email: lead.email,
-      phone: lead.phone,
-      companyId,
-      ownerId,
-    },
-  });
+  // الشركة وجهة الاتصال تبقيان للعميل المؤسسي — اختياريتان لا حاجزتان
+  let companyId = str(fd, 'existingCompanyId');
+  if (!companyId && lead.companyName) {
+    const company = await db.company.create({
+      data: { name: lead.companyName, email: lead.email, phone: lead.phone, ownerId },
+    });
+    companyId = company.id;
+  }
 
-  // 3) الصفقة
   const title =
-    str(fd, 'dealTitle') ??
-    `${lead.serviceInterest ?? 'مشروع ترجمة'} — ${fullName(lead.firstName, lead.lastName)}`;
+    str(fd, 'title') ?? `${fullName(lead.firstName, lead.lastName)} — ${pages} صفحة`;
 
-  const deal = await db.deal.create({
-    data: {
-      title,
-      amount: num(fd, 'dealAmount') ?? lead.estimatedValue ?? 0,
-      currency: str(fd, 'dealCurrency') ?? 'EGP',
-      stage: 'NEW',
-      probability: 20,
-      serviceType: lead.serviceInterest,
-      sourceLang: lead.sourceLang,
-      targetLang: lead.targetLang,
-      description: lead.notes,
-      companyId,
-      contactId: contact.id,
-      // الصفقة تُنسب للعميل — عليه تقوم بطاقته وتاريخ مشترياته
-      clientId: lead.clientId,
-      ownerId,
-    },
-  });
-
-  // 4) نقل المهام والملاحظات إلى الصفقة
-  await db.task.updateMany({ where: { leadId: id }, data: { dealId: deal.id } });
-  await db.note.updateMany({ where: { leadId: id }, data: { dealId: deal.id } });
+  const netTotal = num(fd, 'netTotal') ?? lead.estimatedValue ?? 0;
+  const deposit = num(fd, 'deposit') ?? 0;
+  if (deposit > netTotal) throw new MutationError('المقدم أكبر من إجمالي المشروع');
 
   const now = new Date();
+  const project = await db.project.create({
+    data: {
+      code: await nextProjectCode(),
+      title,
+      status: 'pending_assignment',
+      serviceLine,
+      sourceLang,
+      targetLang,
+      pages,
+      netTotal,
+      currency: str(fd, 'currency') ?? 'EGP',
+      deposit,
+      isRush: fd.get('isRush') === 'on',
+      ...readDeadline(fd),
+      description: lead.notes,
+      branch: lead.branch ?? user.branch,
+      leadId: id,
+      clientId,
+      companyId,
+      convertedAt: now,
+      ownerId,
+    },
+  });
+
+  // المهام والملاحظات تتبع المشروع، فلا يضيع سياق ما قيل قبل التحويل
+  await db.task.updateMany({ where: { leadId: id }, data: { projectId: project.id } });
+  await db.note.updateMany({ where: { leadId: id }, data: { projectId: project.id } });
+
   await db.lead.update({
     where: { id },
     data: {
@@ -237,13 +263,14 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
 
   await logActivity({
     type: 'CONVERTED',
-    title: 'تم تحويل العميل المحتمل إلى صفقة',
-    detail: title,
+    title: 'تحوّل الليد إلى مشروع',
+    detail: `${project.code} — ${title}`,
     userId: user.id,
-    link: { leadId: id, dealId: deal.id, contactId: contact.id, companyId },
+    link: { leadId: id, projectId: project.id, companyId },
   });
+  await auditEvent(user.id, 'create', 'Project', project.id, project.code ?? undefined);
 
-  return `/deals/${deal.id}`;
+  return `/projects/${project.id}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -412,76 +439,173 @@ export async function saveContact(fd: FormData, user: SessionUser, id?: string) 
 //  الصفقات
 // ═══════════════════════════════════════════════════════════════
 
-export async function saveDeal(fd: FormData, user: SessionUser, id?: string) {
-  const stage = (str(fd, 'stage') ?? 'NEW') as DealStage;
+export async function saveProject(fd: FormData, user: SessionUser, id?: string) {
+  const pages = num(fd, 'pages');
   const wordCount = num(fd, 'wordCount');
-  const pageCount = num(fd, 'pageCount');
 
   const data = {
     title: str(fd, 'title') ?? '',
     description: str(fd, 'description'),
-    stage,
-    amount: num(fd, 'amount') ?? 0,
+    netTotal: num(fd, 'netTotal') ?? 0,
     currency: str(fd, 'currency') ?? 'EGP',
-    probability: num(fd, 'probability') ?? STAGE_DEFAULT_PROBABILITY[stage] ?? 20,
-    serviceType: str(fd, 'serviceType'),
+    unitPrice: num(fd, 'unitPrice'),
+    serviceLine: str(fd, 'serviceLine'),
     sourceLang: str(fd, 'sourceLang'),
     targetLang: str(fd, 'targetLang'),
     wordCount: wordCount ? Math.round(wordCount) : null,
-    pageCount: pageCount ? Math.round(pageCount) : null,
-    deliveryDate: date(fd, 'deliveryDate'),
+    pages,
+    deposit: num(fd, 'deposit') ?? 0,
+    isRush: fd.get('isRush') === 'on',
+    ...readDeadline(fd),
     expectedCloseDate: date(fd, 'expectedCloseDate'),
-    lostReason: str(fd, 'lostReason'),
     companyId: str(fd, 'companyId'),
     contactId: str(fd, 'contactId'),
+    clientId: str(fd, 'clientId'),
   };
-  if (!data.title) throw new MutationError('عنوان الصفقة مطلوب');
+  if (!data.title) throw new MutationError('عنوان المشروع مطلوب');
 
-  const closing = stage === 'WON' || stage === 'LOST';
+  // سعر البيع لا يُعدَّل إلا بصلاحيته — والقيمة القادمة من نموذج لا يملكها
+  // تُتجاهل بدل أن تُصفّر السعر
+  if (!can(user, 'canViewSellPrice')) {
+    delete (data as Partial<typeof data>).netTotal;
+    delete (data as Partial<typeof data>).unitPrice;
+    delete (data as Partial<typeof data>).deposit;
+  }
 
   if (!id) {
-    const deal = await db.deal.create({
+    const project = await db.project.create({
       data: {
         ...data,
-        closedAt: closing ? new Date() : null,
+        code: await nextProjectCode(),
+        status: 'pending_assignment',
+        branch: user.branch,
+        convertedAt: new Date(),
         ownerId: str(fd, 'ownerId') ?? user.id,
       },
     });
     await logActivity({
       type: 'CREATED',
-      title: 'تم إنشاء صفقة',
-      detail: deal.title,
+      title: 'مشروع جديد بانتظار الإسناد',
+      detail: `${project.code} — ${project.title}`,
       userId: user.id,
-      link: { dealId: deal.id, companyId: deal.companyId, contactId: deal.contactId },
+      link: { projectId: project.id, companyId: project.companyId },
     });
-    return `/deals/${deal.id}`;
+    await auditEvent(user.id, 'create', 'Project', project.id, project.code ?? undefined);
+    return `/projects/${project.id}`;
   }
 
-  const existing = await db.deal.findUnique({ where: { id } });
-  if (!existing) throw new MutationError('الصفقة غير موجودة');
-  requireOwn(existing.ownerId, user, 'ليس لديك صلاحية تعديل هذه الصفقة');
+  const existing = await db.project.findUnique({ where: { id } });
+  if (!existing) throw new MutationError('المشروع غير موجود');
+  requireOwn(existing.ownerId, user, 'ليس لديك صلاحية تعديل هذا المشروع');
 
-  await db.deal.update({
-    where: { id },
-    data: {
-      ...data,
-      closedAt: closing ? (existing.closedAt ?? new Date()) : null,
-      ownerId: str(fd, 'ownerId') ?? existing.ownerId,
-    },
+  const after = { ...data, ownerId: str(fd, 'ownerId') ?? existing.ownerId };
+  await db.project.update({ where: { id }, data: after });
+  await auditDiff(user.id, 'Project', id, existing, after);
+  return `/projects/${id}`;
+}
+
+/** زر «فوري» يضبط الموعد نهاية اليوم بضغطة — بديلًا عن اختيار تاريخ */
+function readDeadline(fd: FormData) {
+  const express = fd.get('isExpress') === 'on';
+  return {
+    isExpress: express,
+    deadline: express ? endOfToday() : date(fd, 'deadline'),
+  };
+}
+
+/**
+ * تحويل حالة المشروع — البوابة الوحيدة لتغيير الحالة.
+ *
+ * تفرض قواعد §٦ كاملة: الانتقال المسموح، والصلاحية التي تملكه، والحقول
+ * التي لا يصحّ الانتقال بدونها. لا مسار آخر يكتب في `status`.
+ */
+export async function moveProject(fd: FormData, user: SessionUser, id: string) {
+  const to = str(fd, 'status');
+  if (!to) throw new MutationError('الحالة المطلوبة مفقودة');
+
+  const project = await db.project.findUnique({ where: { id } });
+  if (!project) throw new MutationError('المشروع غير موجود');
+  if (project.status === to) return `/projects/${id}`;
+
+  const rule = allowedTransitions(project.status).find((t) => t.to === to);
+  if (!rule) {
+    throw new MutationError(
+      `لا يجوز الانتقال من «${
+        PROJECT_STATUSES[project.status as ProjectStatus] ?? project.status
+      }» إلى «${PROJECT_STATUSES[to as ProjectStatus] ?? to}»`
+    );
+  }
+  if (rule.permission && !can(user, rule.permission)) {
+    throw new MutationError('ليس لديك صلاحية هذا الانتقال');
+  }
+
+  // الخصم فوق الحد يجمّد المشروع حتى الاعتماد (§٦)
+  if (project.approvalState === 'pending') {
+    throw new MutationError('المشروع بانتظار اعتماد الخصم — لا ينتقل قبل الاعتماد');
+  }
+
+  const now = new Date();
+  const patch: Record<string, unknown> = { status: to };
+
+  // الحقول القادمة مع الانتقال (المبلغ المحصَّل مثلًا) تُكتب قبل فحص شرطه
+  const collectedAmount = num(fd, 'collectedAmount');
+  if (collectedAmount !== null && collectedAmount !== undefined) {
+    if (!can(user, 'canRecordCollection')) {
+      throw new MutationError('ليس لديك صلاحية تسجيل التحصيل');
+    }
+    patch.collectedAmount = collectedAmount;
+    patch.collectedAt = date(fd, 'collectedAt') ?? now;
+  }
+  const qaIssues = num(fd, 'qaIssues');
+  if (qaIssues !== null && qaIssues !== undefined) patch.qaIssues = Math.round(qaIssues);
+
+  for (const requirement of rule.requires ?? []) {
+    const incoming = patch[requirement.field];
+    const current = (project as Record<string, unknown>)[requirement.field];
+    const value = incoming ?? current;
+    if (value === null || value === undefined || value === '' || value === 0) {
+      throw new MutationError(`${requirement.label} مطلوب قبل هذا الانتقال`);
+    }
+  }
+
+  // الطوابع الزمنية تُبصم مرة واحدة ولا تُعاد
+  if (to === 'in_progress' && !project.assignedAt) {
+    patch.assignedAt = now;
+    patch.projectManagerId = project.projectManagerId ?? user.id;
+  }
+  if (to === 'delivered') {
+    patch.deliveredAt = project.deliveredAt ?? now;
+    // الاعتراف بالإيراد يقع هنا (§٣ بند ٤)
+    patch.revenueMonth = project.revenueMonth ?? revenueMonthKey(now);
+  }
+  if (to === 'collected') {
+    patch.collectedAt = patch.collectedAt ?? project.collectedAt ?? now;
+    patch.closedAt = project.closedAt ?? now;
+  }
+  if (to === 'rework') {
+    patch.isRework = true;
+  }
+  if (to === 'cancelled') {
+    patch.closedAt = now;
+    patch.cancelReason = str(fd, 'cancelReason') ?? project.cancelReason;
+    // الملغى يخرج من كل تقرير مالي — نمسح مفتاح الشهر ولا نمسح السجل
+    patch.revenueMonth = null;
+    if (!patch.cancelReason) throw new MutationError('سبب الإلغاء مطلوب');
+  }
+
+  await db.project.update({ where: { id }, data: patch });
+  await auditDiff(user.id, 'Project', id, project, patch as Record<string, string | number | boolean | Date | null>);
+  await logActivity({
+    type: 'STAGE_CHANGED',
+    title: 'تغيّرت حالة المشروع',
+    detail: `${PROJECT_STATUSES[project.status as ProjectStatus] ?? project.status} ← ${
+      PROJECT_STATUSES[to as ProjectStatus] ?? to
+    }`,
+    userId: user.id,
+    link: { projectId: id },
   });
 
-  if (existing.stage !== stage) {
-    await logActivity({
-      type: 'STAGE_CHANGED',
-      title: 'تغيّرت مرحلة الصفقة',
-      detail: `${DEAL_STAGES[existing.stage as DealStage] ?? existing.stage} ← ${
-        DEAL_STAGES[stage] ?? stage
-      }`,
-      userId: user.id,
-      link: { dealId: id },
-    });
-  }
-  return `/deals/${id}`;
+  return `/projects/${id}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -624,7 +748,7 @@ export async function saveQuote(fd: FormData, user: SessionUser, id?: string) {
     validUntil: date(fd, 'validUntil'),
     notes: str(fd, 'notes'),
     terms: str(fd, 'terms'),
-    dealId: str(fd, 'dealId'),
+    projectId: str(fd, 'projectId'),
     companyId: str(fd, 'companyId'),
     contactId: str(fd, 'contactId'),
   };
@@ -643,7 +767,7 @@ export async function saveQuote(fd: FormData, user: SessionUser, id?: string) {
       title: `تم إنشاء عرض سعر ${quote.number}`,
       detail: title,
       userId: user.id,
-      link: { dealId: quote.dealId, companyId: quote.companyId, contactId: quote.contactId },
+      link: { projectId: quote.projectId, companyId: quote.companyId, contactId: quote.contactId },
     });
     return `/quotes/${quote.id}`;
   }
@@ -902,6 +1026,55 @@ export async function saveListItem(fd: FormData, admin: SessionUser, id?: string
   await db.listItem.update({ where: { id }, data: after });
   await auditDiff(admin.id, 'ListItem', id, existing, after);
   return `/settings/lists?list=${existing.listName}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  أهداف الفروع الشهرية — «التارجت يمكن تعديله» (قرار الإدارة)
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveTargets(fd: FormData, admin: SessionUser) {
+  if (!can(admin, 'canManageSettings')) {
+    throw new MutationError('ليس لديك صلاحية تعديل الأهداف');
+  }
+
+  const period = str(fd, 'period');
+  if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+    throw new MutationError('الشهر غير صالح');
+  }
+
+  const branches = await db.listItem.findMany({
+    where: { listName: 'branch' },
+    select: { value: true, label: true },
+  });
+
+  for (const branch of branches) {
+    const raw = fd.get(`target_${branch.value}`);
+    if (raw === null) continue; // الفرع غير معروض في هذه الشاشة
+    const amount = Number(String(raw).trim() || 0);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new MutationError(`هدف «${branch.label}» يجب أن يكون رقمًا موجبًا`);
+    }
+
+    const existing = await db.branchTarget.findUnique({
+      where: { branch_period: { branch: branch.value, period } },
+    });
+    if (existing?.amount === amount) continue;
+
+    await db.branchTarget.upsert({
+      where: { branch_period: { branch: branch.value, period } },
+      update: { amount },
+      create: { branch: branch.value, period, amount },
+    });
+    await auditDiff(
+      admin.id,
+      'BranchTarget',
+      `${branch.value}:${period}`,
+      { amount: existing?.amount },
+      { amount }
+    );
+  }
+
+  return `/settings/targets?period=${period}&saved=1`;
 }
 
 // ═══════════════════════════════════════════════════════════════

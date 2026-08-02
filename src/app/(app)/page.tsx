@@ -11,14 +11,19 @@ import {
 import { db } from '@/lib/db';
 import { requireUser, can, ownerFilter } from '@/lib/auth';
 import {
-  DEAL_STAGES,
-  DEAL_STAGE_ORDER,
-  DEAL_STAGE_COLORS,
   TASK_PRIORITY_COLORS,
   TASK_PRIORITIES,
-  type DealStage,
   type TaskPriority,
 } from '@/lib/constants';
+import {
+  PROJECT_STATUSES,
+  PROJECT_FLOW,
+  PROJECT_STATUS_COLORS,
+  ACTIVE_STATUSES,
+  REVENUE_STATUSES,
+  projectBalance,
+  type ProjectStatus,
+} from '@/lib/projects';
 import { formatMoney, formatDate, isOverdue, cn, fullName } from '@/lib/utils';
 import { StatCard, Badge, Avatar, EmptyState } from '@/components/ui';
 
@@ -49,15 +54,19 @@ export default async function DashboardPage() {
     stageBreakdown,
     leaderboard,
   ] = await Promise.all([
-    // الصفقات المفتوحة (لم تُغلق بعد)
-    db.deal.findMany({
-      where: { ...mine, stage: { notIn: ['WON', 'LOST'] } },
-      select: { amount: true, currency: true, probability: true },
+    // المشاريع الجارية — قيد الإسناد حتى جاهز للتسليم
+    db.project.findMany({
+      where: { ...mine, status: { in: ACTIVE_STATUSES } },
+      select: { netTotal: true, currency: true, deposit: true, collectedAmount: true },
     }),
-    // الصفقات المكسوبة هذا الشهر
-    db.deal.findMany({
-      where: { ...mine, stage: 'WON', closedAt: { gte: startOfMonth } },
-      select: { amount: true, currency: true },
+    // الإيراد المعترَف به هذا الشهر — سُلّم أو حُصّل وحدهما (§٣ بند ٤)
+    db.project.findMany({
+      where: {
+        ...mine,
+        status: { in: REVENUE_STATUSES },
+        deliveredAt: { gte: startOfMonth },
+      },
+      select: { netTotal: true, currency: true },
     }),
     db.lead.count({
       where: { ...mine, status: { notIn: ['WON', 'LOST'] } },
@@ -85,7 +94,7 @@ export default async function DashboardPage() {
       orderBy: { dueDate: 'asc' },
       take: 6,
     }),
-    db.deal.findMany({
+    db.project.findMany({
       where: mine,
       include: {
         company: { select: { name: true } },
@@ -95,29 +104,30 @@ export default async function DashboardPage() {
       orderBy: { updatedAt: 'desc' },
       take: 6,
     }),
-    db.deal.groupBy({
-      by: ['stage'],
+    db.project.groupBy({
+      by: ['status'],
       where: mine,
       _count: { _all: true },
-      _sum: { amount: true },
+      _sum: { netTotal: true },
     }),
     // ترتيب الفريق حسب المبيعات المكسوبة هذا الشهر (للمديرين فقط)
     seeAll
-      ? db.deal.groupBy({
+      ? db.project.groupBy({
           by: ['ownerId'],
-          where: { stage: 'WON', closedAt: { gte: startOfMonth } },
-          _sum: { amount: true },
+          where: { status: { in: REVENUE_STATUSES }, deliveredAt: { gte: startOfMonth } },
+          _sum: { netTotal: true },
           _count: { _all: true },
         })
       : Promise.resolve([]),
   ]);
 
-  const pipelineValue = openDeals.reduce((sum, d) => sum + d.amount, 0);
-  const weightedValue = openDeals.reduce((s, d) => s + (d.amount * d.probability) / 100, 0);
-  const wonValue = wonThisMonth.reduce((sum, d) => sum + d.amount, 0);
+  const pipelineValue = openDeals.reduce((sum, d) => sum + d.netTotal, 0);
+  // ما سُلّم ولم يُحصَّل — أهم رقم يومي لأدمن المبيعات
+  const outstanding = openDeals.reduce((s, d) => s + projectBalance(d), 0);
+  const wonValue = wonThisMonth.reduce((sum, d) => sum + d.netTotal, 0);
 
   const stageMap = new Map(
-    stageBreakdown.map((s) => [s.stage, { count: s._count._all, sum: s._sum.amount ?? 0 }])
+    stageBreakdown.map((s) => [s.status, { count: s._count._all, sum: s._sum.netTotal ?? 0 }])
   );
   const maxStageCount = Math.max(1, ...stageBreakdown.map((s) => s._count._all));
 
@@ -133,7 +143,7 @@ export default async function DashboardPage() {
   const rankedTeam = leaderboard
     .map((l) => ({
       name: l.ownerId ? (ownerNames.get(l.ownerId) ?? 'غير محدد') : 'غير محدد',
-      total: l._sum.amount ?? 0,
+      total: l._sum.netTotal ?? 0,
       count: l._count._all,
     }))
     .sort((a, b) => b.total - a.total)
@@ -156,27 +166,27 @@ export default async function DashboardPage() {
       {/* البطاقات الإحصائية */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="قيمة الصفقات المفتوحة"
+          label="قيمة المشاريع الجارية"
           value={formatMoney(pipelineValue)}
-          hint={`${openDeals.length} صفقة نشطة`}
+          hint={`${openDeals.length} مشروع نشط`}
           icon={<Handshake className="h-5 w-5" />}
           accent="brand"
-          href="/deals"
+          href="/projects"
         />
         <StatCard
-          label="المتوقع تحصيله (مرجّح)"
-          value={formatMoney(weightedValue)}
-          hint="حسب نسبة احتمال الإغلاق"
+          label="مستحق على العملاء"
+          value={formatMoney(outstanding)}
+          hint="إجمالي ما لم يُحصَّل بعد"
           icon={<TrendingUp className="h-5 w-5" />}
-          accent="violet"
+          accent={outstanding > 0 ? 'amber' : 'slate'}
         />
         <StatCard
-          label="مبيعات هذا الشهر"
+          label="إيراد هذا الشهر"
           value={formatMoney(wonValue)}
-          hint={`${wonThisMonth.length} صفقة مكسوبة`}
+          hint={`${wonThisMonth.length} مشروع سُلّم أو حُصّل`}
           icon={<Trophy className="h-5 w-5" />}
           accent="emerald"
-          href="/deals?stage=WON"
+          href="/projects?status=delivered"
         />
         <StatCard
           label="عملاء محتملون نشطون"
@@ -193,7 +203,7 @@ export default async function DashboardPage() {
         <section className="card card-pad lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold text-slate-800">مسار المبيعات (Pipeline)</h2>
-            <Link href="/deals" className="link text-sm">
+            <Link href="/projects" className="link text-sm">
               عرض اللوحة ←
             </Link>
           </div>
@@ -207,7 +217,7 @@ export default async function DashboardPage() {
             />
           ) : (
             <div className="space-y-3">
-              {DEAL_STAGE_ORDER.map((stage) => {
+              {PROJECT_FLOW.map((stage) => {
                 const data = stageMap.get(stage) ?? { count: 0, sum: 0 };
                 const pct = (data.count / maxStageCount) * 100;
                 return (
@@ -218,7 +228,7 @@ export default async function DashboardPage() {
                   >
                     <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
                       <span className="flex items-center gap-2">
-                        <Badge className={DEAL_STAGE_COLORS[stage]}>{DEAL_STAGES[stage]}</Badge>
+                        <Badge className={PROJECT_STATUS_COLORS[stage]}>{PROJECT_STATUSES[stage]}</Badge>
                         <span className="text-slate-500 nums">{data.count}</span>
                       </span>
                       <span className="font-medium text-slate-700 nums">
@@ -229,10 +239,10 @@ export default async function DashboardPage() {
                       <div
                         className={cn(
                           'h-full rounded-full transition-all',
-                          stage === 'WON'
-                            ? 'bg-emerald-500'
-                            : stage === 'LOST'
-                              ? 'bg-rose-400'
+                          stage === 'collected'
+                            ? 'bg-teal-600'
+                            : stage === 'delivered'
+                              ? 'bg-emerald-500'
                               : 'bg-brand-500'
                         )}
                         style={{ width: `${Math.max(pct, data.count > 0 ? 4 : 0)}%` }}
@@ -286,7 +296,7 @@ export default async function DashboardPage() {
         <section className="card lg:col-span-2">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
             <h2 className="font-semibold text-slate-800">آخر تحديثات الصفقات</h2>
-            <Link href="/deals" className="link text-sm">
+            <Link href="/projects" className="link text-sm">
               الكل ←
             </Link>
           </div>
@@ -298,7 +308,7 @@ export default async function DashboardPage() {
               {recentDeals.map((d) => (
                 <li key={d.id}>
                   <Link
-                    href={`/deals/${d.id}`}
+                    href={`/projects/${d.id}`}
                     className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50"
                   >
                     <div className="min-w-0 flex-1">
@@ -308,11 +318,11 @@ export default async function DashboardPage() {
                           (d.contact ? fullName(d.contact.firstName, d.contact.lastName) : '—')}
                       </p>
                     </div>
-                    <Badge className={DEAL_STAGE_COLORS[d.stage as DealStage]}>
-                      {DEAL_STAGES[d.stage as DealStage] ?? d.stage}
+                    <Badge className={PROJECT_STATUS_COLORS[d.status as ProjectStatus]}>
+                      {PROJECT_STATUSES[d.status as ProjectStatus] ?? d.status}
                     </Badge>
                     <span className="hidden shrink-0 text-sm font-semibold text-slate-700 nums sm:block">
-                      {formatMoney(d.amount, d.currency)}
+                      {formatMoney(d.netTotal, d.currency)}
                     </span>
                   </Link>
                 </li>

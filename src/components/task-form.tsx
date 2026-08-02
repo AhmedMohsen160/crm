@@ -15,7 +15,7 @@ type TaskData = {
   companyId: string | null;
   contactId: string | null;
   leadId: string | null;
-  dealId: string | null;
+  projectId: string | null;
 };
 
 export default function TaskForm({
@@ -42,7 +42,7 @@ export default function TaskForm({
   canAssign: boolean;
   cancelHref: string;
   redirectTo?: string;
-  link?: { companyId?: string; contactId?: string; leadId?: string; dealId?: string };
+  link?: { companyId?: string; contactId?: string; leadId?: string; projectId?: string };
   relatedLabel?: string | null;
   companies?: { id: string; name: string }[];
   contacts?: { id: string; firstName: string; lastName: string | null }[];
@@ -52,7 +52,7 @@ export default function TaskForm({
   // إذا جاءت المهمة من صفحة كيان (عميل/صفقة) نثبّت الربط عبر حقول مخفية،
   // وإلا نعرض قوائم اختيار ليختار المستخدم ما تتعلق به المهمة.
   const pinned = Boolean(
-    link?.companyId || link?.contactId || link?.leadId || link?.dealId
+    link?.companyId || link?.contactId || link?.leadId || link?.projectId
   );
 
   return (
@@ -67,7 +67,7 @@ export default function TaskForm({
           {link?.companyId && <input type="hidden" name="companyId" value={link.companyId} />}
           {link?.contactId && <input type="hidden" name="contactId" value={link.contactId} />}
           {link?.leadId && <input type="hidden" name="leadId" value={link.leadId} />}
-          {link?.dealId && <input type="hidden" name="dealId" value={link.dealId} />}
+          {link?.projectId && <input type="hidden" name="projectId" value={link.projectId} />}
         </>
       )}
 
@@ -130,8 +130,8 @@ export default function TaskForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <SelectField
               label="صفقة"
-              name="dealId"
-              defaultValue={task?.dealId}
+              name="projectId"
+              defaultValue={task?.projectId}
               options={(deals ?? []).map((d) => ({ value: d.id, label: d.title }))}
             />
             <SelectField

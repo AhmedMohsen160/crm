@@ -6,7 +6,7 @@ export type EntityLink = {
   companyId?: string | null;
   contactId?: string | null;
   leadId?: string | null;
-  dealId?: string | null;
+  projectId?: string | null;
 };
 
 /** يسجّل حدثًا في سجل الأنشطة (من فعل ماذا ومتى) */
@@ -26,7 +26,7 @@ export async function logActivity(params: {
       companyId: params.link?.companyId ?? null,
       contactId: params.link?.contactId ?? null,
       leadId: params.link?.leadId ?? null,
-      dealId: params.link?.dealId ?? null,
+      projectId: params.link?.projectId ?? null,
     },
   });
 }
@@ -41,7 +41,7 @@ export function readEntityLink(fd: FormData): EntityLink {
     companyId: pick('companyId'),
     contactId: pick('contactId'),
     leadId: pick('leadId'),
-    dealId: pick('dealId'),
+    projectId: pick('projectId'),
   };
 }
 
@@ -52,9 +52,9 @@ export function readEntityLink(fd: FormData): EntityLink {
 //  ثلاث قواعد تعلّمناها بالاختبار العملي، ومخالفتها تُسبب أن يحفظ
 //  المستخدم بيانات ثم لا يراها على الشاشة إلا بعد إعادة تحميل يدوية:
 //
-//  1) المسار الحرفي لصفحة ديناميكية — revalidatePath('/deals/abc123') —
+//  1) المسار الحرفي لصفحة ديناميكية — revalidatePath('/projects/abc123') —
 //     لا يُبطل ذاكرة الراوتر في المتصفح. الصيغة الصحيحة هي نمط المسار:
-//     revalidatePath('/deals/[id]', 'page').
+//     revalidatePath('/projects/[id]', 'page').
 //
 //  2) revalidatePath('/', 'layout') يُبطل الشجرة من الجذر فيتجاهل
 //     المتصفح التحديث غالبًا. ممنوع استخدامه.
@@ -67,13 +67,13 @@ export function readEntityLink(fd: FormData): EntityLink {
 //  بقية الصفحات لا تحتاج إبطالًا لأنها كلها force-dynamic، فتُجلب من
 //  جديد عند الانتقال إليها.
 
-export type Scope = 'lead' | 'company' | 'contact' | 'deal' | 'quote' | 'task';
+export type Scope = 'lead' | 'company' | 'contact' | 'project' | 'quote' | 'task';
 
 const DETAIL_ROUTE: Partial<Record<Scope, string>> = {
   lead: '/leads/[id]',
   company: '/companies/[id]',
   contact: '/contacts/[id]',
-  deal: '/deals/[id]',
+  project: '/projects/[id]',
   quote: '/quotes/[id]',
 };
 
@@ -81,7 +81,7 @@ const LIST_ROUTE: Record<Scope, string> = {
   lead: '/leads',
   company: '/companies',
   contact: '/contacts',
-  deal: '/deals',
+  project: '/projects',
   quote: '/quotes',
   task: '/tasks',
 };
@@ -101,7 +101,7 @@ export function revalidateList(...scopes: Scope[]) {
 
 /** يستنتج نوع السجل من الكيان المرتبط بالمهمة أو الملاحظة */
 export function scopeOfLink(link: EntityLink): Scope | null {
-  if (link.dealId) return 'deal';
+  if (link.projectId) return 'project';
   if (link.leadId) return 'lead';
   if (link.contactId) return 'contact';
   if (link.companyId) return 'company';
@@ -110,7 +110,7 @@ export function scopeOfLink(link: EntityLink): Scope | null {
 
 /** المسار الذي نعود إليه بعد حفظ مهمة/ملاحظة مرتبطة بكيان */
 export function linkPath(link: EntityLink, fallback = '/tasks'): string {
-  if (link.dealId) return `/deals/${link.dealId}`;
+  if (link.projectId) return `/projects/${link.projectId}`;
   if (link.leadId) return `/leads/${link.leadId}`;
   if (link.contactId) return `/contacts/${link.contactId}`;
   if (link.companyId) return `/companies/${link.companyId}`;

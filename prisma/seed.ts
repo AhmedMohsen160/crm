@@ -14,6 +14,8 @@ import { yearMonth } from '../src/lib/sequence-keys';
 
 const db = new PrismaClient();
 const period = yearMonth();
+const now = new Date();
+const revenueMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@fasttrans.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
@@ -296,84 +298,115 @@ async function main() {
   });
   console.log('✓ 4 عملاء و4 ليدز');
 
-  // ── الصفقات ─────────────────────────────────────────────────
-  const deal1 = await db.deal.create({
+  // ── المشاريع ────────────────────────────────────────────────
+  // واحد في كل حالة رئيسية، ليختبر لوحة التشغيل والاعتراف بالإيراد
+  const deal1 = await db.project.create({
     data: {
+      code: `PR-${period}-0001`,
       title: 'ترجمة معتمدة لعقود شراكة دولية',
       description: 'ترجمة 12 عقد شراكة من العربية إلى الإنجليزية مع اعتماد رسمي.',
-      stage: 'NEGOTIATION',
-      amount: 45000,
+      status: 'in_progress',
+      netTotal: 45000,
       currency: 'EGP',
-      probability: 75,
-      serviceType: 'ترجمة قانونية',
-      sourceLang: 'العربية',
-      targetLang: 'الإنجليزية',
+      serviceLine: 'legal',
+      sourceLang: 'ar',
+      targetLang: 'en',
       wordCount: 30000,
-      pageCount: 120,
-      deliveryDate: daysFromNow(21),
-      expectedCloseDate: daysFromNow(7),
+      pages: 120,
+      deposit: 22500,
+      workMode: 'human_full',
+      deadline: daysFromNow(21),
+      branch: 'mokattam',
+      convertedAt: new Date(),
+      assignedAt: new Date(),
       companyId: lawFirm.id,
       contactId: contact1.id,
+      projectManagerId: admin.id,
+      primaryProducerId: admin.id,
       ownerId: manager.id,
     },
   });
 
-  const deal2 = await db.deal.create({
+  const deal2 = await db.project.create({
     data: {
+      code: `PR-${period}-0002`,
       title: 'ترجمة تقارير طبية وتحاليل',
       description: 'ترجمة تقارير طبية للمرضى الدوليين — عمل شهري متكرر.',
-      stage: 'QUOTED',
-      amount: 18000,
+      status: 'pending_assignment',
+      netTotal: 18000,
       currency: 'EGP',
-      probability: 50,
-      serviceType: 'ترجمة طبية',
-      sourceLang: 'العربية',
-      targetLang: 'الإنجليزية',
+      serviceLine: 'medical',
+      sourceLang: 'ar',
+      targetLang: 'en',
       wordCount: 12000,
-      expectedCloseDate: daysFromNow(14),
+      pages: 48,
+      deposit: 9000,
+      deadline: daysFromNow(14),
+      branch: 'mokattam',
+      convertedAt: new Date(),
       companyId: hospital.id,
       contactId: contact2.id,
       ownerId: agent.id,
     },
   });
 
-  const deal3 = await db.deal.create({
+  // سُلّم ولم يُحصَّل بالكامل — يظهر في «مستحق على العملاء»
+  const deal3 = await db.project.create({
     data: {
+      code: `PR-${period}-0003`,
       title: 'ترجمة معتمدة لوثائق التأشيرات',
       description: 'ترجمة شهادات ميلاد وعقود زواج ومؤهلات — ألماني/عربي.',
-      stage: 'WON',
-      amount: 62000,
+      status: 'delivered',
+      netTotal: 62000,
       currency: 'EGP',
-      probability: 100,
-      serviceType: 'ترجمة معتمدة',
-      sourceLang: 'الألمانية',
-      targetLang: 'العربية',
-      pageCount: 240,
-      closedAt: new Date(),
-      deliveryDate: daysFromNow(10),
+      serviceLine: 'certified',
+      sourceLang: 'de',
+      targetLang: 'ar',
+      pages: 240,
+      deposit: 31000,
+      workMode: 'human_full',
+      deadline: daysFromNow(10),
+      branch: 'mohandessin',
+      convertedAt: new Date(),
+      assignedAt: new Date(),
+      deliveredAt: new Date(),
+      revenueMonth: revenueMonth,
       companyId: embassy.id,
       contactId: contact3.id,
+      projectManagerId: admin.id,
+      primaryProducerId: admin.id,
       ownerId: admin.id,
     },
   });
 
-  await db.deal.create({
+  // ملغى — يبقى في اللوحة التشغيلية وخارج كل تقرير مالي (اختبار ١٣)
+  await db.project.create({
     data: {
+      code: `PR-${period}-0004`,
       title: 'ترجمة فورية لمؤتمر طبي',
-      stage: 'NEW',
-      amount: 25000,
+      status: 'cancelled',
+      netTotal: 25000,
       currency: 'EGP',
-      probability: 20,
-      serviceType: 'ترجمة فورية',
-      sourceLang: 'الإنجليزية',
-      targetLang: 'العربية',
-      expectedCloseDate: daysFromNow(30),
+      serviceLine: 'general',
+      sourceLang: 'en',
+      targetLang: 'ar',
+      pages: 1,
+      cancelReason: 'العميل أجّل المؤتمر',
+      closedAt: new Date(),
+      branch: 'mokattam',
+      convertedAt: new Date(),
       companyId: hospital.id,
       contactId: contact2.id,
       ownerId: agent.id,
     },
   });
-  console.log('✓ 4 صفقات');
+
+  await db.counter.upsert({
+    where: { key: `project-${period}` },
+    update: { value: 4 },
+    create: { key: `project-${period}`, value: 4 },
+  });
+  console.log('✓ 4 مشاريع');
 
   // ── المهام ──────────────────────────────────────────────────
   await db.task.createMany({
@@ -384,7 +417,7 @@ async function main() {
         priority: 'HIGH',
         status: 'OPEN',
         dueDate: daysFromNow(1),
-        dealId: deal1.id,
+        projectId: deal1.id,
         assigneeId: manager.id,
         creatorId: admin.id,
       },
@@ -394,7 +427,7 @@ async function main() {
         priority: 'NORMAL',
         status: 'IN_PROGRESS',
         dueDate: daysFromNow(2),
-        dealId: deal2.id,
+        projectId: deal2.id,
         assigneeId: agent.id,
         creatorId: manager.id,
       },
@@ -404,7 +437,7 @@ async function main() {
         priority: 'URGENT',
         status: 'OPEN',
         dueDate: daysFromNow(-1), // مهمة متأخرة كمثال
-        dealId: deal3.id,
+        projectId: deal3.id,
         assigneeId: admin.id,
         creatorId: admin.id,
       },
@@ -424,7 +457,7 @@ async function main() {
         priority: 'HIGH',
         status: 'OPEN',
         dueDate: daysFromNow(3),
-        dealId: deal2.id,
+        projectId: deal2.id,
         assigneeId: agent.id,
         creatorId: manager.id,
       },
@@ -437,12 +470,12 @@ async function main() {
     data: [
       {
         body: 'العميل يطلب خصم 10% مقابل التعاقد السنوي. أرى أن نوافق مع تثبيت الكمية الشهرية.',
-        dealId: deal1.id,
+        projectId: deal1.id,
         authorId: manager.id,
       },
       {
         body: 'تم إرسال عرض السعر بتاريخ اليوم. المتابعة بعد 3 أيام عمل.',
-        dealId: deal2.id,
+        projectId: deal2.id,
         authorId: agent.id,
       },
     ],
@@ -456,21 +489,21 @@ async function main() {
         title: 'تم إنشاء صفقة',
         detail: deal1.title,
         userId: manager.id,
-        dealId: deal1.id,
+        projectId: deal1.id,
       },
       {
         type: 'STAGE_CHANGED',
         title: 'تغيّرت مرحلة الصفقة',
         detail: 'أُرسل عرض السعر ← تفاوض',
         userId: manager.id,
-        dealId: deal1.id,
+        projectId: deal1.id,
       },
       {
         type: 'STAGE_CHANGED',
         title: 'تغيّرت مرحلة الصفقة',
         detail: 'تفاوض ← تم الفوز',
         userId: admin.id,
-        dealId: deal3.id,
+        projectId: deal3.id,
       },
     ],
   });

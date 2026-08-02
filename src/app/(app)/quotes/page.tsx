@@ -37,7 +37,7 @@ export default async function QuotesPage({
       include: {
         company: { select: { id: true, name: true } },
         owner: { select: { name: true } },
-        deal: { select: { id: true, title: true } },
+        project: { select: { id: true, title: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 300,

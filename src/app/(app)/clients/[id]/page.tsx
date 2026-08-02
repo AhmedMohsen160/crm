@@ -8,14 +8,17 @@ import { formatPhone, normalizePhone, whatsappLink } from '@/lib/phone';
 import { listLabel } from '@/lib/reference';
 import {
   CLIENT_TYPES,
-  DEAL_STAGES,
-  DEAL_STAGE_COLORS,
   LEAD_STATUSES,
   LEAD_STATUS_COLORS,
   type ClientType,
-  type DealStage,
   type LeadStatus,
 } from '@/lib/constants';
+import {
+  PROJECT_STATUSES,
+  PROJECT_STATUS_COLORS,
+  countsAsRevenue,
+  type ProjectStatus,
+} from '@/lib/projects';
 import { formatMoney, formatDate } from '@/lib/utils';
 import { PageHeader, Badge } from '@/components/ui';
 
@@ -31,17 +34,18 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     include: {
       owner: { select: { name: true } },
       leads: { orderBy: { createdAt: 'desc' }, take: 20 },
-      deals: {
+      projects: {
         orderBy: { createdAt: 'desc' },
         take: 20,
         select: {
           id: true,
+          code: true,
           title: true,
-          stage: true,
-          amount: true,
+          status: true,
+          netTotal: true,
           currency: true,
           createdAt: true,
-          deliveryDate: true,
+          deadline: true,
         },
       },
     },
@@ -49,7 +53,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   if (!client) notFound();
 
   const totals = await clientTotals(id);
-  const wonCount = client.deals.filter((d) => d.stage === 'WON').length;
+  const wonCount = client.projects.filter((d) => countsAsRevenue(d.status)).length;
   const average = wonCount > 0 ? totals.totalValue / wonCount : 0;
   const branchName = await listLabel('branch', client.firstBranch);
 
@@ -74,7 +78,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           client.companyName ? ` · ${client.companyName}` : ''
         }`}
       >
-        <Link href={`/deals/new?clientId=${client.id}`} className="btn-primary">
+        <Link href={`/projects/new?clientId=${client.id}`} className="btn-primary">
           <Plus className="h-4 w-4" />
           مشروع جديد
         </Link>
@@ -140,8 +144,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       </div>
 
       <section className="mb-6">
-        <h2 className="mb-3 section-title">مشاريعه ({client.deals.length})</h2>
-        {client.deals.length === 0 ? (
+        <h2 className="mb-3 section-title">مشاريعه ({client.projects.length})</h2>
+        {client.projects.length === 0 ? (
           <p className="card card-pad text-sm text-slate-400">لا مشاريع بعد</p>
         ) : (
           <div className="card table-wrap">
@@ -155,19 +159,19 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                 </tr>
               </thead>
               <tbody>
-                {client.deals.map((d) => (
+                {client.projects.map((d) => (
                   <tr key={d.id}>
                     <td>
-                      <Link href={`/deals/${d.id}`} className="link">
+                      <Link href={`/projects/${d.id}`} className="link">
                         {d.title}
                       </Link>
                     </td>
                     <td>
-                      <Badge className={DEAL_STAGE_COLORS[d.stage as DealStage]}>
-                        {DEAL_STAGES[d.stage as DealStage] ?? d.stage}
+                      <Badge className={PROJECT_STATUS_COLORS[d.status as ProjectStatus]}>
+                        {PROJECT_STATUSES[d.status as ProjectStatus] ?? d.status}
                       </Badge>
                     </td>
-                    <td className="nums">{formatMoney(d.amount, d.currency)}</td>
+                    <td className="nums">{formatMoney(d.netTotal, d.currency)}</td>
                     <td className="whitespace-nowrap text-xs text-slate-500">
                       {formatDate(d.createdAt)}
                     </td>

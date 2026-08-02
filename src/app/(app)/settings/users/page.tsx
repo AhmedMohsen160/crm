@@ -20,7 +20,7 @@ export default async function UsersPage() {
         roleRef: { select: { label: true, sortOrder: true } },
         reportsTo: { select: { name: true } },
         _count: {
-          select: { ownedDeals: true, ownedLeads: true, assignedTasks: true },
+          select: { ownedProjects: true, ownedLeads: true, assignedTasks: true },
         },
       },
       orderBy: [{ active: 'desc' }, { name: 'asc' }],

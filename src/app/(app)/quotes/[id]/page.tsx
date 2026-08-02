@@ -41,7 +41,7 @@ export default async function QuoteDetailPage({
       items: { orderBy: { sortOrder: 'asc' } },
       company: { select: { id: true, name: true, address: true, taxNumber: true, city: true, country: true } },
       contact: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
-      deal: { select: { id: true, title: true } },
+      project: { select: { id: true, title: true } },
       owner: { select: { name: true, email: true, phone: true } },
     },
   });
@@ -285,11 +285,11 @@ export default async function QuoteDetailPage({
         </footer>
       </article>
 
-      {quote.deal && (
+      {quote.project && (
         <p className="text-center text-sm text-slate-500 no-print">
           مرتبط بالصفقة:{' '}
-          <Link href={`/deals/${quote.deal.id}`} className="link">
-            {quote.deal.title}
+          <Link href={`/projects/${quote.project.id}`} className="link">
+            {quote.project.title}
           </Link>
         </p>
       )}

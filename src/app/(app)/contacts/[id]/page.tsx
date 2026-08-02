@@ -34,7 +34,7 @@ export default async function ContactDetailPage({
     include: {
       company: { select: { id: true, name: true } },
       owner: { select: { name: true } },
-      deals: { orderBy: { updatedAt: 'desc' } },
+      projects: { orderBy: { updatedAt: 'desc' } },
     },
   });
   if (!contact) notFound();
@@ -46,7 +46,7 @@ export default async function ContactDetailPage({
   return (
     <div className="space-y-6">
       <PageHeader title={name} subtitle={contact.jobTitle ?? contact.company?.name ?? undefined}>
-        <Link href={`/deals/new?contactId=${id}&companyId=${contact.companyId ?? ''}`} className="btn-primary">
+        <Link href={`/projects/new?contactId=${id}&companyId=${contact.companyId ?? ''}`} className="btn-primary">
           <Plus className="h-4 w-4" />
           صفقة
         </Link>
@@ -146,24 +146,24 @@ export default async function ContactDetailPage({
                 الصفقات
               </h2>
             </div>
-            {contact.deals.length === 0 ? (
+            {contact.projects.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-slate-400">لا توجد صفقات</p>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {contact.deals.map((d) => (
+                {contact.projects.map((d) => (
                   <li key={d.id}>
                     <Link
-                      href={`/deals/${d.id}`}
+                      href={`/projects/${d.id}`}
                       className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50"
                     >
                       <span className="min-w-0 flex-1 truncate text-sm text-slate-800">
                         {d.title}
                       </span>
-                      <Badge className={DEAL_STAGE_COLORS[d.stage as DealStage]}>
-                        {DEAL_STAGES[d.stage as DealStage] ?? d.stage}
+                      <Badge className={DEAL_STAGE_COLORS[d.status as DealStage]}>
+                        {DEAL_STAGES[d.status as DealStage] ?? d.status}
                       </Badge>
                       <span className="shrink-0 text-sm font-semibold nums">
-                        {formatMoney(d.amount, d.currency)}
+                        {formatMoney(d.netTotal, d.currency)}
                       </span>
                     </Link>
                   </li>

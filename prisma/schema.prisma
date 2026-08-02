@@ -44,18 +44,22 @@ model User {
   isProducer Boolean @default(false)
 
   // العلاقات
-  ownedCompanies Company[]  @relation("CompanyOwner")
-  ownedContacts  Contact[]  @relation("ContactOwner")
-  ownedLeads     Lead[]     @relation("LeadOwner")
-  ownedDeals     Deal[]     @relation("DealOwner")
-  assignedTasks  Task[]     @relation("TaskAssignee")
-  createdTasks   Task[]     @relation("TaskCreator")
-  notes          Note[]
-  activities     Activity[]
-  quotes         Quote[]
-  auditEntries   AuditLog[]
-  ownedClients   Client[]   @relation("ClientOwner")
-  createdClients Client[]   @relation("ClientCreator")
+  ownedCompanies   Company[]  @relation("CompanyOwner")
+  ownedContacts    Contact[]  @relation("ContactOwner")
+  ownedLeads       Lead[]     @relation("LeadOwner")
+  ownedProjects    Project[]  @relation("ProjectOwner")
+  managedProjects  Project[]  @relation("ProjectManager")
+  producedProjects Project[]  @relation("ProjectProducer")
+  reviewedProjects Project[]  @relation("ProjectReviewer")
+  approvedProjects Project[]  @relation("ProjectApprover")
+  assignedTasks    Task[]     @relation("TaskAssignee")
+  createdTasks     Task[]     @relation("TaskCreator")
+  notes            Note[]
+  activities       Activity[]
+  quotes           Quote[]
+  auditEntries     AuditLog[]
+  ownedClients     Client[]   @relation("ClientOwner")
+  createdClients   Client[]   @relation("ClientCreator")
 
   @@index([email])
   @@index([reportsToId])
@@ -167,7 +171,7 @@ model Company {
 
   contacts   Contact[]
   clients    Client[]
-  deals      Deal[]
+  projects   Project[]
   tasks      Task[]
   noteItems  Note[]
   quotes     Quote[]
@@ -200,7 +204,7 @@ model Contact {
   ownerId String?
   owner   User?   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
-  deals      Deal[]
+  projects   Project[]
   tasks      Task[]
   noteItems  Note[]
   quotes     Quote[]
@@ -262,14 +266,35 @@ model Client {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  leads Lead[]
-  deals Deal[]
+  leads    Lead[]
+  projects Project[]
 
   @@index([phoneNormalized])
   @@index([phoneAltNormalized])
   @@index([name])
   @@index([ownerId])
   @@index([firstBranch])
+}
+
+// ───────────────────────────────────────────────
+//  أهداف الفروع الشهرية — تُعدَّل من الشاشة
+// ───────────────────────────────────────────────
+
+/// التارجت الشهري لكل فرع. سطر لكل (فرع، شهر) حتى يبقى هدف الشهر الماضي
+/// كما كان مهما عُدِّل هدف هذا الشهر — التقارير التاريخية لا تتغيّر بأثر رجعي.
+model BranchTarget {
+  id     String @id @default(cuid())
+  branch String /// مفتاح من قائمة branch
+  /// الشهر بصيغة YYYY-MM
+  period String
+  /// الهدف بالجنيه
+  amount Float  @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branch, period])
+  @@index([period])
 }
 
 // ───────────────────────────────────────────────
@@ -329,6 +354,7 @@ model Lead {
   tasks      Task[]
   noteItems  Note[]
   activities Activity[]
+  projects   Project[]
 
   @@index([status])
   @@index([ownerId])
@@ -338,31 +364,88 @@ model Lead {
 }
 
 // ───────────────────────────────────────────────
-//  الصفقات / الفرص البيعية
+//  المشاريع — الكائن المحوري (§4.3)
+//
+//  @@map("Deal") مقصود: الجدول الفيزيائي يحتفظ باسمه القديم فلا تتحرك
+//  صفوف ولا تضيع بيانات عند النشر. الاسم في الكود هو الاسم الصحيح.
 // ───────────────────────────────────────────────
 
-model Deal {
+model Project {
   id          String  @id @default(cuid())
+  /// معرّف تسلسلي بصيغة PR-2608-0042 — العدّاد يتجدّد شهريًا
+  code        String? @unique
   title       String
   description String?
-  stage       String  @default("NEW") // NEW | QUOTED | NEGOTIATION | WON | LOST
-  amount      Float   @default(0)
-  currency    String  @default("EGP")
-  probability Int     @default(20) // نسبة احتمال الإغلاق %
 
-  // حقول خاصة بمكتب الترجمة
-  serviceType  String? // ترجمة معتمدة، فورية، توطين، تدقيق...
-  sourceLang   String?
-  targetLang   String?
-  wordCount    Int?
-  pageCount    Int?
-  deliveryDate DateTime?
+  /// الحالة التشغيلية الثمانية (§٦) — لا مرحلة بيعية
+  status      String @default("pending_assignment") @map("stage")
+  probability Int    @default(20)
+
+  // ── التسعير ──────────────────────────────────
+  /// السعر المُباع به إجمالًا — محجوب عمّن لا يملك canViewSellPrice
+  netTotal      Float   @default(0) @map("amount")
+  currency      String  @default("EGP")
+  unitPrice     Float?
+  gross         Float?
+  isRush        Boolean @default(false)
+  /// none | percent | amount | volume | repeat_client
+  discountType  String?
+  discountValue Float?
+
+  // ── التحصيل ──────────────────────────────────
+  deposit         Float     @default(0)
+  collectedAmount Float     @default(0)
+  collectedAt     DateTime?
+
+  // ── الخدمة ───────────────────────────────────
+  serviceLine String?   @map("serviceType")
+  sourceLang  String?
+  targetLang  String?
+  wordCount   Int?
+  pages       Float?    @map("pageCount")
+  deadline    DateTime? @map("deliveryDate")
+  /// زر «فوري» — يضبط الموعد نهاية اليوم بضغطة
+  isExpress   Boolean   @default(false)
+
+  // ── الاعتماد (يُفعَّل في مرحلة التسعير) ────────
+  /// not_required | pending | approved | rejected
+  approvalState String  @default("not_required")
+  approvedById  String?
+  approvedBy    User?   @relation("ProjectApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  // ── التشغيل (تُملأ في مرحلة الإسناد) ───────────
+  projectManagerId  String?
+  projectManager    User?   @relation("ProjectManager", fields: [projectManagerId], references: [id], onDelete: SetNull)
+  /// نمط التشغيل من قائمة work_mode — يحدد معامل الجهد
+  workMode          String?
+  /// internal | external | mixed
+  sourcing          String?
+  primaryProducerId String?
+  primaryProducer   User?   @relation("ProjectProducer", fields: [primaryProducerId], references: [id], onDelete: SetNull)
+  reviewerId        String?
+  reviewer          User?   @relation("ProjectReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  qaIssues          Int     @default(0)
+  isRework          Boolean @default(false)
+  folderUrl         String?
+
+  // ── الطوابع الزمنية الخمسة (§4.3) ──────────────
+  createdAt   DateTime  @default(now())
+  convertedAt DateTime?
+  assignedAt  DateTime?
+  deliveredAt DateTime?
+  closedAt    DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  /// مفتاح تجميع التقارير — يُبصم عند الاعتراف بالإيراد
+  revenueMonth String?
+  /// سبب الإلغاء — الملغى لا يُمحى ولا يدخل تقريرًا ماليًا
+  cancelReason String? @map("lostReason")
+  branch       String?
 
   expectedCloseDate DateTime?
-  closedAt          DateTime?
-  lostReason        String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+
+  leadId String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
@@ -370,22 +453,26 @@ model Deal {
   contactId String?
   contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
-  /// العميل صاحب الصفقة — أساس بطاقة العميل وتاريخ مشترياته
+  /// العميل صاحب المشروع — عليه تقوم بطاقته وتاريخ مشترياته
   clientId String?
   client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   ownerId String?
-  owner   User?   @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner   User?   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   tasks      Task[]
   noteItems  Note[]
   quotes     Quote[]
   activities Activity[]
 
-  @@index([stage])
+  @@index([status])
   @@index([ownerId])
   @@index([companyId])
   @@index([clientId])
+  @@index([branch])
+  @@index([revenueMonth])
+  @@index([deadline])
+  @@map("Deal")
 }
 
 // ───────────────────────────────────────────────
@@ -417,8 +504,8 @@ model Task {
   contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
   leadId    String?
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  dealId    String?
-  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  projectId String?  @map("dealId")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([assigneeId, status])
   @@index([dueDate])
@@ -442,8 +529,8 @@ model Note {
   contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
   leadId    String?
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  dealId    String?
-  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  projectId String?  @map("dealId")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
 }
@@ -472,8 +559,8 @@ model Quote {
 
   items QuoteItem[]
 
-  dealId    String?
-  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  projectId String?  @map("dealId")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   contactId String?
@@ -522,8 +609,8 @@ model Activity {
   contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
   leadId    String?
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  dealId    String?
-  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  projectId String?  @map("dealId")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
 }

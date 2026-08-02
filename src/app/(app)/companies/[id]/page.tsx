@@ -31,24 +31,24 @@ export default async function CompanyDetailPage({
     include: {
       owner: { select: { name: true } },
       contacts: { orderBy: { firstName: 'asc' } },
-      deals: { orderBy: { updatedAt: 'desc' } },
+      projects: { orderBy: { updatedAt: 'desc' } },
     },
   });
   if (!company) notFound();
   if (!seeAll && company.ownerId !== user.id) notFound();
 
   const link = { companyId: id };
-  const openValue = company.deals
-    .filter((d) => d.stage !== 'WON' && d.stage !== 'LOST')
-    .reduce((s, d) => s + d.amount, 0);
-  const wonValue = company.deals
-    .filter((d) => d.stage === 'WON')
-    .reduce((s, d) => s + d.amount, 0);
+  const openValue = company.projects
+    .filter((d) => d.status !== 'WON' && d.status !== 'LOST')
+    .reduce((s, d) => s + d.netTotal, 0);
+  const wonValue = company.projects
+    .filter((d) => d.status === 'WON')
+    .reduce((s, d) => s + d.netTotal, 0);
 
   return (
     <div className="space-y-6">
       <PageHeader title={company.name} subtitle={company.nameAr ?? company.industry ?? undefined}>
-        <Link href={`/deals/new?companyId=${id}`} className="btn-primary">
+        <Link href={`/projects/new?companyId=${id}`} className="btn-primary">
           <Plus className="h-4 w-4" />
           صفقة
         </Link>
@@ -77,7 +77,7 @@ export default async function CompanyDetailPage({
         </div>
         <div className="card card-pad">
           <p className="text-xs text-slate-500">الصفقات</p>
-          <p className="mt-1 text-2xl font-bold nums">{company.deals.length}</p>
+          <p className="mt-1 text-2xl font-bold nums">{company.projects.length}</p>
         </div>
         <div className="card card-pad">
           <p className="text-xs text-slate-500">قيمة مفتوحة</p>
@@ -174,29 +174,29 @@ export default async function CompanyDetailPage({
                 <Handshake className="h-4 w-4 text-brand-600" />
                 الصفقات
               </h2>
-              <Link href={`/deals/new?companyId=${id}`} className="btn-secondary btn-sm">
+              <Link href={`/projects/new?companyId=${id}`} className="btn-secondary btn-sm">
                 <Plus className="h-3.5 w-3.5" />
                 صفقة
               </Link>
             </div>
-            {company.deals.length === 0 ? (
+            {company.projects.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-slate-400">لا توجد صفقات</p>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {company.deals.map((d) => (
+                {company.projects.map((d) => (
                   <li key={d.id}>
                     <Link
-                      href={`/deals/${d.id}`}
+                      href={`/projects/${d.id}`}
                       className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50"
                     >
                       <span className="min-w-0 flex-1 truncate text-sm text-slate-800">
                         {d.title}
                       </span>
-                      <Badge className={DEAL_STAGE_COLORS[d.stage as DealStage]}>
-                        {DEAL_STAGES[d.stage as DealStage] ?? d.stage}
+                      <Badge className={DEAL_STAGE_COLORS[d.status as DealStage]}>
+                        {DEAL_STAGES[d.status as DealStage] ?? d.status}
                       </Badge>
                       <span className="shrink-0 text-sm font-semibold nums">
-                        {formatMoney(d.amount, d.currency)}
+                        {formatMoney(d.netTotal, d.currency)}
                       </span>
                     </Link>
                   </li>

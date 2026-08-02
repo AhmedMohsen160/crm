@@ -13,7 +13,7 @@ export default async function NewTaskPage({
     companyId?: string;
     contactId?: string;
     leadId?: string;
-    dealId?: string;
+    projectId?: string;
     redirectTo?: string;
   }>;
 }) {
@@ -22,7 +22,7 @@ export default async function NewTaskPage({
   const params = await searchParams;
 
   const pinned = Boolean(
-    params.companyId || params.contactId || params.leadId || params.dealId
+    params.companyId || params.contactId || params.leadId || params.projectId
   );
 
   const [users, companies, contacts, deals, leads] = await Promise.all([
@@ -48,8 +48,8 @@ export default async function NewTaskPage({
         }),
     pinned
       ? Promise.resolve([])
-      : db.deal.findMany({
-          where: { stage: { notIn: ['WON', 'LOST'] } },
+      : db.project.findMany({
+          where: { status: { notIn: ['collected', 'cancelled'] } },
           select: { id: true, title: true },
           orderBy: { updatedAt: 'desc' },
           take: 300,
@@ -66,8 +66,8 @@ export default async function NewTaskPage({
 
   // اسم السجل المرتبط لعرضه في النموذج
   let relatedLabel: string | null = null;
-  if (params.dealId) {
-    const d = await db.deal.findUnique({ where: { id: params.dealId }, select: { title: true } });
+  if (params.projectId) {
+    const d = await db.project.findUnique({ where: { id: params.projectId }, select: { title: true } });
     relatedLabel = d ? `الصفقة: ${d.title}` : null;
   } else if (params.leadId) {
     const l = await db.lead.findUnique({
@@ -103,7 +103,7 @@ export default async function NewTaskPage({
           companyId: params.companyId,
           contactId: params.contactId,
           leadId: params.leadId,
-          dealId: params.dealId,
+          projectId: params.projectId,
         }}
         relatedLabel={relatedLabel}
         companies={companies}

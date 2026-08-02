@@ -25,7 +25,7 @@ export default async function EditUserPage({
       where: { id },
       include: {
         _count: {
-          select: { ownedDeals: true, ownedLeads: true, assignedTasks: true, team: true },
+          select: { ownedProjects: true, ownedLeads: true, assignedTasks: true, team: true },
         },
       },
     }),
@@ -42,7 +42,7 @@ export default async function EditUserPage({
   const isSelf = admin.id === id;
 
   const stats = [
-    { value: target._count.ownedDeals, label: 'صفقة' },
+    { value: target._count.ownedProjects, label: 'مشروع' },
     { value: target._count.ownedLeads, label: 'عميل محتمل' },
     { value: target._count.assignedTasks, label: 'مهمة' },
     { value: target._count.team, label: 'يتبعه' },

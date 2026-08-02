@@ -11,20 +11,20 @@
 
 | المواصفة | الكود | الحالة |
 |---|---|---|
-| `clients` | `Client` | يُنشأ — يدمج `Contact` الحالي ويُبقي `Company` مرتبطًا |
+| `clients` | `Client` | ✅ منجَز — `Company` و`Contact` باقيان كسجلات مساندة |
 | `leads` | `Lead` | موجود، يُوسَّع |
-| `projects` | `Project` | يُحوَّل من `Deal` القائم |
+| `projects` | `Project` | ✅ منجَز — نفس الجدول الفيزيائي عبر `@@map("Deal")` فلا تتحرّك صفوف |
 | `project_steps` | `ProjectStep` | يُنشأ |
 | `users` | `User` | موجود، يُوسَّع |
-| `roles` | `Role` | يُنشأ (أدوار كبيانات) |
+| `roles` | `Role` | ✅ منجَز |
 | `staff_cost` | `StaffCost` | يُنشأ |
 | `freelancers` | `Freelancer` | يُنشأ |
 | `freelancer_rates` | `FreelancerRate` | يُنشأ |
 | `freelancer_payments` | `FreelancerPayment` | يُنشأ |
 | `price_list` | `PriceListItem` | يُحوَّل من `PriceRate` القائم |
 | `settings` | `Setting` | موجود |
-| `lists` | `ListItem` | يُنشأ (`List` محجوزة لغويًا وملتبسة) |
-| `audit_log` | `AuditLog` | يُنشأ — `Activity` الحالي يبقى للخط الزمني الوصفي |
+| `lists` | `ListItem` | ✅ منجَز |
+| `audit_log` | `AuditLog` | ✅ منجَز — `Activity` باقٍ للخط الزمني الوصفي |
 
 ## الحقول التي يختلف اسمها
 
@@ -85,3 +85,27 @@
 > `Deal` كمراحل بيعية (`constants.ts:19-25`). عند التحويل تنتقل هذه المفاتيح إلى
 > `Lead`، ويأخذ `Project` مفاتيح الحالات التشغيلية أعلاه. أي بيانات قائمة تُرحَّل
 > وفق هذا التعيين.
+
+## أسماء تغيّرت في المرحلة ٣ (المشروع)
+
+الجدول الفيزيائي احتفظ بأسماء أعمدته، والكود وحده تغيّر — فلا هجرة بيانات.
+
+| المواصفة | الكود | العمود في قاعدة البيانات |
+|---|---|---|
+| `status` (حالة المشروع) | `status` | `stage` |
+| `net_total` | `netTotal` | `amount` |
+| `service_line` | `serviceLine` | `serviceType` |
+| `pages` | `pages` | `pageCount` |
+| `deadline` | `deadline` | `deliveryDate` |
+| سبب الإلغاء | `cancelReason` | `lostReason` |
+| `project_id` | `code` | `code` (جديد) |
+
+> السبب: `@@map` و`@map` في Prisma تفصل اسم الكود عن اسم العمود. الاسم في
+> الكود صار مطابقًا للمواصفة، والعمود بقي كما هو فلم يضع صف واحد.
+
+## جدول أضافته قرارات الإدارة
+
+| الغرض | الكود |
+|---|---|
+| التارجت الشهري لكل فرع | `BranchTarget` — مفتاح فريد (فرع، شهر) |
+| عدّادات المعرّفات التسلسلية | `Counter` |

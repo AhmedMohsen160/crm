@@ -23,7 +23,7 @@ export default async function EditQuotePage({
   if (!seeAll && quote.ownerId !== user.id) notFound();
 
   const [deals, companies, contacts] = await Promise.all([
-    db.deal.findMany({
+    db.project.findMany({
       select: { id: true, title: true },
       orderBy: { updatedAt: 'desc' },
       take: 300,

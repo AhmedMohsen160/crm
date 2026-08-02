@@ -4,14 +4,7 @@ import { db } from '@/lib/db';
 import { getCurrentUser, can, type SessionUser } from '@/lib/auth';
 import { logActivity } from '@/lib/actions/helpers';
 import { auditEvent, auditDiff } from '@/lib/audit';
-import {
-  DEAL_STAGES,
-  STAGE_DEFAULT_PROBABILITY,
-  LEAD_STATUSES,
-  LEAD_CLOSED_STATUSES,
-  type DealStage,
-  type LeadStatus,
-} from '@/lib/constants';
+import { LEAD_STATUSES, LEAD_CLOSED_STATUSES, type LeadStatus } from '@/lib/constants';
 
 /**
  * نقطة واحدة لكل التعديلات السريعة التي تتم من داخل الصفحة
@@ -78,33 +71,14 @@ async function handle(
       return null;
     }
 
-    // ── مرحلة الصفقة ──────────────────────────────────────────
-    case 'deal.stage': {
-      const deal = await db.deal.findUnique({ where: { id } });
-      if (!deal) return null;
-      if (!seeAll && deal.ownerId !== user.id) throw new Error('لا صلاحية');
-      if (deal.stage === value) return null;
-
-      const closing = value === 'WON' || value === 'LOST';
-      await db.deal.update({
-        where: { id },
-        data: {
-          stage: value,
-          probability: STAGE_DEFAULT_PROBABILITY[value as DealStage] ?? deal.probability,
-          closedAt: closing ? new Date() : null,
-        },
-      });
-
-      await logActivity({
-        type: 'STAGE_CHANGED',
-        title: 'تغيّرت مرحلة الصفقة',
-        detail: `${DEAL_STAGES[deal.stage as DealStage] ?? deal.stage} ← ${
-          DEAL_STAGES[value as DealStage] ?? value
-        }`,
-        userId: user.id,
-        link: { dealId: id },
-      });
-      return null;
+    // ── حالة المشروع ──────────────────────────────────────────
+    // تمرّ كلها عبر moveProject في /api/save، فهي البوابة الوحيدة التي
+    // تفرض قواعد §٦. اللوحة ترسل هنا للسحب والإفلات، فنمرّرها إليها.
+    case 'project.status': {
+      const { moveProject } = await import('@/lib/mutations');
+      const fd = new FormData();
+      fd.set('status', value);
+      return moveProject(fd, user, id);
     }
 
     // ── حالة العميل المحتمل ───────────────────────────────────
@@ -157,29 +131,15 @@ async function handle(
         },
       });
 
-      // إرسال العرض أو قبوله ينقل الصفقة تلقائيًا إلى المرحلة المناسبة
-      if (quote.dealId) {
-        const deal = await db.deal.findUnique({ where: { id: quote.dealId } });
-        const open = deal && deal.stage !== 'WON' && deal.stage !== 'LOST';
-        if (open && value === 'ACCEPTED') {
-          await db.deal.update({
-            where: { id: quote.dealId },
-            data: { stage: 'NEGOTIATION', probability: 75 },
-          });
-        } else if (open && value === 'SENT' && deal.stage === 'NEW') {
-          await db.deal.update({
-            where: { id: quote.dealId },
-            data: { stage: 'QUOTED', probability: 50 },
-          });
-        }
-      }
+      // عرض السعر أداة بيعية على الليد؛ حالة المشروع تشغيلية ولا تتحرك
+      // بقبول عرض. ما ينقل المشروع هو انتقالات §٦ وحدها.
 
       await logActivity({
         type: 'QUOTE_SENT',
         title: `تغيّرت حالة عرض السعر ${quote.number}`,
         detail: `${quote.status} ← ${value}`,
         userId: user.id,
-        link: { dealId: quote.dealId, companyId: quote.companyId },
+        link: { projectId: quote.projectId, companyId: quote.companyId },
       });
       return null;
     }
@@ -202,12 +162,26 @@ async function handle(
       return '/leads';
     }
 
+    // المشروع لا يُحذف — يُلغى بسبب صريح ويبقى في اللوحة التشغيلية
+    // خارج كل تقرير مالي (§٣ بند ٥ و§٦)
+    case 'project.delete':
     case 'deal.delete': {
-      const rec = await db.deal.findUnique({ where: { id } });
-      if (!rec) return '/deals';
+      const rec = await db.project.findUnique({ where: { id } });
+      if (!rec) return '/projects';
       if (!seeAll && rec.ownerId !== user.id) throw new Error('لا صلاحية');
-      await db.deal.delete({ where: { id } });
-      return '/deals';
+      if (rec.status === 'cancelled') return `/projects/${id}`;
+
+      await db.project.update({
+        where: { id },
+        data: {
+          status: 'cancelled',
+          closedAt: new Date(),
+          revenueMonth: null,
+          cancelReason: value || 'أُلغي من الشاشة',
+        },
+      });
+      await auditEvent(user.id, 'update', 'Project', id, 'إلغاء المشروع');
+      return `/projects/${id}`;
     }
 
     case 'company.delete': {

@@ -58,7 +58,7 @@ export default async function TasksPage({
       where,
       include: {
         assignee: { select: { name: true } },
-        deal: { select: { id: true, title: true } },
+        project: { select: { id: true, title: true } },
         lead: { select: { id: true, firstName: true, lastName: true } },
         contact: { select: { id: true, firstName: true, lastName: true } },
         company: { select: { id: true, name: true } },
@@ -96,7 +96,7 @@ export default async function TasksPage({
   ]);
 
   function relatedLink(t: (typeof tasks)[number]) {
-    if (t.deal) return { href: `/deals/${t.deal.id}`, label: t.deal.title };
+    if (t.project) return { href: `/projects/${t.project.id}`, label: t.project.title };
     if (t.lead)
       return {
         href: `/leads/${t.lead.id}`,

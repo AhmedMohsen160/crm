@@ -24,7 +24,7 @@ export default async function EditTaskPage({
   const task = await db.task.findUnique({
     where: { id },
     include: {
-      deal: { select: { title: true } },
+      project: { select: { title: true } },
       lead: { select: { firstName: true, lastName: true } },
       contact: { select: { firstName: true, lastName: true } },
       company: { select: { name: true } },
@@ -35,7 +35,7 @@ export default async function EditTaskPage({
   const allowed = seeAll || task.assigneeId === user.id || task.creatorId === user.id;
   if (!allowed) notFound();
 
-  const pinned = Boolean(task.companyId || task.contactId || task.leadId || task.dealId);
+  const pinned = Boolean(task.companyId || task.contactId || task.leadId || task.projectId);
 
   const [users, companies, contacts, deals, leads] = await Promise.all([
     seeAll
@@ -57,7 +57,7 @@ export default async function EditTaskPage({
         }),
     pinned
       ? Promise.resolve([])
-      : db.deal.findMany({
+      : db.project.findMany({
           select: { id: true, title: true },
           orderBy: { updatedAt: 'desc' },
           take: 300,
@@ -73,8 +73,8 @@ export default async function EditTaskPage({
 
   const back = redirectTo ?? '/tasks';
 
-  const relatedLabel = task.deal
-    ? `الصفقة: ${task.deal.title}`
+  const relatedLabel = task.project
+    ? `الصفقة: ${task.project.title}`
     : task.lead
       ? `العميل المحتمل: ${fullName(task.lead.firstName, task.lead.lastName)}`
       : task.contact
@@ -108,7 +108,7 @@ export default async function EditTaskPage({
           companyId: task.companyId ?? undefined,
           contactId: task.contactId ?? undefined,
           leadId: task.leadId ?? undefined,
-          dealId: task.dealId ?? undefined,
+          projectId: task.projectId ?? undefined,
         }}
         relatedLabel={relatedLabel}
         companies={companies}

@@ -8,13 +8,15 @@ import {
   saveClient,
   saveCompany,
   saveContact,
-  saveDeal,
+  saveProject,
+  moveProject,
   saveTask,
   saveQuote,
   saveUser,
   saveRole,
   saveListItem,
   saveSettings,
+  saveTargets,
   changeOwnPassword,
 } from '@/lib/mutations';
 
@@ -22,7 +24,7 @@ import {
  * نقطة حفظ موحّدة لكل نماذج النظام.
  *
  * النموذج يرسل الحقول عاديًا مع:
- *   entity : نوع السجل (lead | company | contact | deal | task | quote |
+ *   entity : نوع السجل (lead | company | contact | project | task | quote |
  *            client | user | role | listItem | settings | password)
  *   id     : فارغ عند الإنشاء، ويحمل المعرّف عند التعديل
  *   back   : الصفحة التي نعود إليها عند وجود خطأ
@@ -58,8 +60,12 @@ export async function POST(request: NextRequest) {
       case 'contact':
         destination = await saveContact(fd, user, id);
         break;
-      case 'deal':
-        destination = await saveDeal(fd, user, id);
+      case 'project':
+        destination = await saveProject(fd, user, id);
+        break;
+      case 'project.move':
+        if (!id) throw new MutationError('معرّف المشروع مفقود');
+        destination = await moveProject(fd, user, id);
         break;
       case 'task':
         destination = await saveTask(fd, user, id);
@@ -78,6 +84,9 @@ export async function POST(request: NextRequest) {
         break;
       case 'settings':
         destination = await saveSettings(fd, user);
+        break;
+      case 'targets':
+        destination = await saveTargets(fd, user);
         break;
       case 'password':
         destination = await changeOwnPassword(fd, user);

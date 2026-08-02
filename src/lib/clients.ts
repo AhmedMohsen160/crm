@@ -3,6 +3,7 @@ import { db } from './db';
 import { normalizePhone } from './phone';
 import { nextClientCode } from './sequence';
 import { search } from './utils';
+import { REVENUE_FILTER } from './projects';
 import type { SessionUser } from './auth';
 
 /**
@@ -49,24 +50,31 @@ export async function findClientByPhone(raw: string): Promise<ClientMatch | null
   return { ...client, ...(await clientTotals(client.id)) };
 }
 
-/** إجماليات بطاقة العميل — الصفقات الفائزة وحدها تُحتسب مشتريات */
+/**
+ * إجماليات بطاقة العميل.
+ * **المشتريات = ما سُلّم أو حُصّل وحده** (§٣ بند ٤) — المشروع الجاري أو
+ * الملغى لا يُحتسب مشترياتٍ للعميل.
+ */
 export async function clientTotals(clientId: string): Promise<{
   dealCount: number;
   totalValue: number;
   lastDealAt: Date | null;
 }> {
   const [all, won] = await Promise.all([
-    db.deal.aggregate({
+    db.project.aggregate({
       where: { clientId },
       _count: { _all: true },
       _max: { createdAt: true },
     }),
-    db.deal.aggregate({ where: { clientId, stage: 'WON' }, _sum: { amount: true } }),
+    db.project.aggregate({
+      where: { clientId, ...REVENUE_FILTER },
+      _sum: { netTotal: true },
+    }),
   ]);
 
   return {
     dealCount: all._count._all,
-    totalValue: won._sum.amount ?? 0,
+    totalValue: won._sum.netTotal ?? 0,
     lastDealAt: all._max.createdAt,
   };
 }

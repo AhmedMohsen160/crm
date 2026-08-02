@@ -84,8 +84,8 @@ await page.screenshot({ path: `${shots}/01-dashboard.png`, fullPage: true });
 let allOk = true;
 for (const [p, n] of [
   ['/leads', '02-leads'],
-  ['/deals', '03-deals-board'],
-  ['/deals?view=list', null],
+  ['/projects', '03-deals-board'],
+  ['/projects?view=list', null],
   ['/companies', '04-companies'],
   ['/companies?q=النور', null],
   ['/contacts', null],
@@ -198,17 +198,38 @@ await submit();
 await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
 await page.waitForLoadState('networkidle');
 
-// ── 4. تحويله إلى صفقة ──────────────────────────────────────
+// ── 4. تحويل الليد إلى مشروع — المعيار ≤٢٠ ثانية ────────────
 await page.click('a[href$="/convert"]');
 await page.waitForURL(/\/convert$/, { timeout: 15000 });
-await page.fill('#dealAmount', '5000');
+const convertStart = Date.now();
+await page.selectOption('#serviceLine', { index: 1 });
+await page.selectOption('#sourceLang', { index: 1 });
+await page.selectOption('#targetLang', { index: 2 });
+await page.fill('#pages', '20');
+await page.fill('#netTotal', '5000');
+await page.click('main button:has-text("فوري")'); // زر «فوري» بضغطة واحدة
 await submit();
-await page.waitForURL(/\/deals\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+const convertSeconds = (Date.now() - convertStart) / 1000;
 await page.waitForLoadState('networkidle');
-check(true, 'تحويل العميل المحتمل إلى صفقة + شركة + جهة اتصال');
+check(
+  convertSeconds <= 20,
+  `تحويل الليد إلى مشروع في ${convertSeconds.toFixed(1)} ثانية (المعيار ≤٢٠)`
+);
 const dealUrl = page.url();
-const dealId = dealUrl.split('/').pop();
-await page.screenshot({ path: `${shots}/08-deal-detail.png`, fullPage: true });
+const projectId = dealUrl.split('/').pop();
+await page.screenshot({ path: `${shots}/08-project-detail.png`, fullPage: true });
+
+check(await waitForText('PR-'), 'المشروع حصل على معرّف تسلسلي');
+check(await waitForText('قيد الإسناد'), 'المشروع يبدأ في «قيد الإسناد»');
+// الليد صار فائزًا — نتحقق من صفحته ثم نعود للمشروع
+const leadAfterConvert = dealUrl; // نحفظ مسار المشروع قبل التنقّل
+await go('/leads?status=WON');
+check(
+  (await page.locator('table tbody tr').count()) > 0,
+  'الليد صار «فائزًا» بعد التحويل'
+);
+await go(leadAfterConvert.replace('http://localhost:3000', ''));
 
 // ── 5. إضافة ملاحظة ─────────────────────────────────────────
 await page.fill('textarea[name=body]', `ملاحظة ${RUN}: العميل طلب تسليمًا عاجلاً.`);
@@ -216,20 +237,29 @@ await page.click('main form[action="/api/notes"] button[type=submit]');
 await page.waitForLoadState('networkidle');
 check(await waitForText(`ملاحظة ${RUN}`), 'إضافة ملاحظة على الصفقة تظهر فورًا');
 
-// ── 6. تغيير مرحلة الصفقة ───────────────────────────────────
-await page.click('main button:has-text("تفاوض")');
-const stageUpdated = await page
-  .waitForFunction(
-    () => document.querySelector('dl dd')?.textContent?.trim() === 'تفاوض',
-    undefined,
-    { timeout: 15000, polling: 250 }
-  )
-  .then(() => true)
-  .catch(() => false);
-check(stageUpdated, 'تغيير مرحلة الصفقة إلى «تفاوض» ينعكس فورًا');
+// ── 6. قواعد انتقال الحالة (§٦) ─────────────────────────────
+
+// «قيد التنفيذ» يتطلّب نمط التشغيل والمنتِج — يجب أن يُرفض بدونهما
+await go(dealUrl.replace('http://localhost:3000', ''));
+await page.click('main button:has-text("قيد التنفيذ")');
+await page.waitForLoadState('networkidle');
+const assignBlocked =
+  page.url().includes('error=') || (await waitForText('مطلوب قبل هذا الانتقال', 5000));
+check(assignBlocked, 'لا انتقال إلى «قيد التنفيذ» بلا نمط تشغيل ومنتِج (§٦)');
+
+// نستكمل الناقص من قاعدة البيانات مباشرة عبر شاشة التعديل غير متاحة بعد،
+// فنتحقق بدلًا من ذلك أن القفزة غير المسموحة مرفوضة أيضًا
+await go(dealUrl.replace('http://localhost:3000', ''));
+const hasIllegalJump = await page
+  .locator('main button:has-text("محصَّل")')
+  .count();
+check(
+  hasIllegalJump === 0,
+  'زر «محصَّل» لا يظهر من «قيد الإسناد» — القفز فوق الحالات ممنوع'
+);
 
 // ── 7. عرض سعر مع حساب تلقائي ───────────────────────────────
-await go(`/quotes/new?dealId=${dealId}`);
+await go(`/quotes/new?projectId=${projectId}`);
 await page.fill('input[name="items[0][quantity]"]', '2000');
 await page.fill('input[name="items[0][unitPrice]"]', '2.5');
 await page.fill('input[name="taxRate"]', '14');
@@ -241,18 +271,18 @@ const totalTxt = (await page.locator('article dd.nums.font-bold').first().innerT
 check(totalTxt.includes('5,700.00'), `حساب عرض السعر تلقائيًا — الناتج: ${totalTxt} (المتوقع 5,700.00)`);
 await page.screenshot({ path: `${shots}/09-quote.png`, fullPage: true });
 
-// ── 8. تغيير حالة العرض ينقل الصفقة تلقائيًا ────────────────
+// ── 8. قبول عرض السعر لا يحرّك حالة المشروع التشغيلية ───────
 await page.click('main button:has-text("مقبول")');
-await page.waitForTimeout(2500);
+await page.waitForTimeout(2000);
 await go(dealUrl.replace('http://localhost:3000', ''));
 check(
-  (await page.locator('dd >> text=تفاوض').count()) > 0,
-  'قبول عرض السعر يحدّث الصفقة تلقائيًا'
+  (await page.locator('dd >> text=قيد الإسناد').count()) > 0,
+  'قبول عرض السعر لا يقفز بحالة المشروع التشغيلية'
 );
 
 // ── 9. مهمة مرتبطة + إنجازها ────────────────────────────────
 const dealPath = dealUrl.replace('http://localhost:3000', '');
-await go(`/tasks/new?dealId=${dealId}&redirectTo=${dealPath}`);
+await go(`/tasks/new?projectId=${projectId}&redirectTo=${dealPath}`);
 await page.fill('#title', `مهمة ${RUN}`);
 await page.fill('#dueDate', '2026-08-15');
 await submit();
@@ -284,8 +314,76 @@ const filtered = await page
   .catch(() => false);
 check(filtered, 'الفلترة بقائمة منسدلة تُطبَّق فورًا');
 
-await go('/deals?stage=NEGOTIATION');
-check((await page.locator('table tbody tr, .card').count()) > 0, 'الفلترة حسب المرحلة');
+await go('/projects?status=in_progress&view=list');
+check(
+  (await page.locator('table tbody tr').count()) > 0,
+  'الفلترة حسب حالة المشروع'
+);
+
+// ── 10ب. الاعتراف بالإيراد بالحالة — اختبارا ١٣ و١٤ ──────────
+//
+// البذرة تُنشئ أربعة مشاريع: قيد التنفيذ (45,000) · قيد الإسناد (18,000)
+// · سُلّم (62,000) · ملغى (25,000). القاعدة (§٣ بند ٤): لا يدخل التقرير
+// المالي إلا ما سُلّم أو حُصّل — أي 62,000 وحدها.
+await go('/projects?view=list');
+const financial = await page.evaluate(() => {
+  const cards = [...document.querySelectorAll('.card')];
+  const card = cards.find((c) => c.textContent?.includes('إيراد معترَف به'));
+  return card?.textContent ?? '';
+});
+check(
+  financial.includes('62,000') || financial.includes('٦٢٬٠٠٠'),
+  `الإيراد المعترَف به = المشروع المسلَّم وحده (اختبار ١٣ و١٤) — ${financial.replace(/\s+/g, ' ').trim()}`
+);
+
+// اختبار ١٣ (تتمة): الملغى يظهر في اللوحة التشغيلية ولا يختفي
+await go('/projects?status=cancelled&view=list');
+check(
+  (await page.locator('table tbody tr').count()) > 0,
+  'المشروع الملغى يظهر في اللوحة التشغيلية ولا يُمحى (اختبار ١٣)'
+);
+
+// حقل التنبيه — حارس البيانات (§4.3): مشروع بسعر صفر يجب أن يُعلَّم
+await go('/projects/new');
+await page.fill('#title', `مشروع بلا سعر ${RUN}`);
+await page.selectOption('#serviceLine', { index: 1 });
+await page.fill('#pages', '5');
+await page.fill('#netTotal', '0');
+await submit();
+await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+await page.waitForLoadState('networkidle');
+check(
+  await waitForText('السعر صفر'),
+  'حقل التنبيه يمسك المشروع الناقص ويعرض أول سبب (§4.3)'
+);
+
+await go('/projects?view=list');
+const alertBanner = await page.locator('text=تنبيه مفتوح').count();
+check(alertBanner > 0, `عدّاد التنبيهات المفتوحة يعدّ الناقص (${alertBanner} إشارة)`);
+
+// لوحة السحب والإفلات تفتح بحالات المشروع الست
+await go('/projects', '10-projects-board');
+const columns = await page.evaluate(() =>
+  ['قيد الإسناد', 'قيد التنفيذ', 'قيد المراجعة', 'جاهز للتسليم', 'سُلّم', 'محصَّل'].filter(
+    (t) => document.body.innerText.includes(t)
+  ).length
+);
+check(columns === 6, `لوحة التشغيل تعرض الحالات الست (${columns}/6)`);
+
+// ── 10ج. أهداف الفروع تُعدَّل من الشاشة ─────────────────────
+await go('/settings/targets');
+const firstTarget = await page.locator('input[name^="target_"]').first();
+await firstTarget.fill('350000');
+await submit();
+await page.waitForLoadState('networkidle');
+check(
+  await waitForText('تم حفظ أهداف'),
+  'التارجت الشهري لكل فرع يُعدَّل من الشاشة ويُحفظ'
+);
+check(
+  (await page.locator('input[name^="target_"]').first().inputValue()) === '350000',
+  'الهدف المحفوظ يظهر عند إعادة فتح الشاشة'
+);
 
 // ── 11. الصلاحيات — اختبارات §١٧ من المواصفة ────────────────
 
@@ -317,7 +415,7 @@ for (const path of guarded) {
 }
 check(allGuarded, 'أدمن المبيعات محجوب عن كل شاشات الإدارة (اختبار ٤)');
 
-await go('/deals', '11-agent-view');
+await go('/projects', '11-agent-view');
 check(true, `أدمن المبيعات يرى صفقاته فقط (عددها ${await page.locator('table tbody tr').count()})`);
 
 // اختبار ٣: مدير المبيعات يرى فريقه ولا يرى الفريق الآخر.
@@ -368,7 +466,7 @@ await loginAs('admin@fasttrans.local');
 
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
-await go('/deals', '12-mobile');
+await go('/projects', '12-mobile');
 check(true, 'العرض على الجوال');
 
 // ── النتيجة ─────────────────────────────────────────────────

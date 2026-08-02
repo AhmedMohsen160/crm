@@ -1,122 +1,152 @@
 import Link from '@/components/link';
 import { notFound, redirect } from 'next/navigation';
-import { ArrowRightLeft, Building2, User, Handshake } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, can, ownerFilter } from '@/lib/auth';
-import { CURRENCIES, CURRENCY_LABELS } from '@/lib/constants';
+import { requireUser, can } from '@/lib/auth';
+import { listOptionsMany, settingNumber } from '@/lib/reference';
 import { fullName } from '@/lib/utils';
-import { PageHeader, FormField, SelectField } from '@/components/ui';
+import { PageHeader, FormField, SelectField, ErrorAlert } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
+import ExpressDeadline from '@/components/express-deadline';
 
-export const metadata = { title: 'تحويل عميل محتمل' };
+export const metadata = { title: 'تحويل إلى مشروع' };
+export const dynamic = 'force-dynamic';
 
+/**
+ * تحويل ليد → مشروع (§7.1).
+ *
+ * **ستة حقول، أغلبها قوائم، والمعيار ≤٢٠ ثانية.** كل ما يمكن اشتقاقه
+ * مشتقّ: العميل من الليد، الفرع وأدمن المبيعات من الحساب، اللغات وخط
+ * الخدمة مبدئيًا من الليد. ما يبقى للمستخدم: الصفحات والسعر والمقدم والموعد.
+ */
 export default async function ConvertLeadPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { id } = await params;
+  const { error } = await searchParams;
   const user = await requireUser();
   const seeAll = can(user, 'canViewAllLeads');
+  if (!can(user, 'canConvertProject')) redirect(`/leads/${id}`);
 
-  const lead = await db.lead.findUnique({ where: { id } });
+  const lead = await db.lead.findUnique({
+    where: { id },
+    include: { client: { select: { name: true, code: true } } },
+  });
   if (!lead) notFound();
   if (!seeAll && lead.ownerId !== user.id) notFound();
   if (lead.status === 'WON') redirect(`/leads/${id}`);
 
-  const companies = await db.company.findMany({
-    select: { id: true, name: true },
-    orderBy: { name: 'asc' },
-    take: 500,
-  });
+  const [lists, depositPct] = await Promise.all([
+    listOptionsMany('service_line', 'language', 'currency'),
+    settingNumber('default_deposit_pct'),
+  ]);
 
-  const name = fullName(lead.firstName, lead.lastName);
+  const name = lead.client?.name ?? fullName(lead.firstName, lead.lastName);
+  const estimated = lead.estimatedValue ?? 0;
+
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
-        title="تحويل إلى صفقة"
-        subtitle={`تحويل "${name}" من عميل محتمل إلى عميل فعلي`}
+        title="تحويل إلى مشروع"
+        subtitle={`${lead.code ?? ''} · ${name}`}
       />
+      <ErrorAlert message={error} />
 
-      <div className="mb-6 card card-pad bg-brand-50/50">
-        <p className="mb-3 flex items-center gap-2 text-sm font-medium text-brand-900">
-          <ArrowRightLeft className="h-4 w-4" />
-          ماذا سيحدث عند الضغط على &laquo;تحويل&raquo;؟
-        </p>
-        <ul className="space-y-2 text-sm text-slate-700">
-          <li className="flex items-start gap-2">
-            <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-            <span>يُنشأ سجل <strong>شركة</strong> (أو يُربط بشركة موجودة).</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <User className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-            <span>يُنشأ سجل <strong>جهة اتصال</strong> باسم العميل.</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <Handshake className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-            <span>
-              تُنشأ <strong>صفقة</strong> في مرحلة &laquo;جديدة&raquo;، وتُنقل إليها كل المهام
-              والملاحظات.
-            </span>
-          </li>
-        </ul>
-      </div>
+      <p className="mb-6 rounded-lg bg-brand-50/60 px-4 py-3 text-sm text-slate-700">
+        عند الحفظ: يتولّد رقم المشروع، ويصير الليد <b>فائزًا</b>، ويدخل المشروع{' '}
+        <b>قيد الإسناد</b> فيراه مدير المشاريع فورًا. المهام والملاحظات تنتقل معه.
+      </p>
 
-      <form method="post" action="/api/save" className="space-y-6">
+      <form method="post" action="/api/save" className="space-y-5">
         <input type="hidden" name="entity" value="lead.convert" />
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="back" value={`/leads/${id}/convert`} />
-        <section className="card card-pad">
-          <h2 className="mb-4 section-title">الشركة</h2>
-          <div className="space-y-4">
-            <SelectField
-              label="ربط بشركة موجودة"
-              name="existingCompanyId"
-              placeholder="— إنشاء شركة جديدة —"
-              options={companies.map((c) => ({ value: c.id, label: c.name }))}
-              hint="اتركه فارغًا لإنشاء شركة جديدة بالاسم أدناه"
-            />
-            <FormField
-              label="اسم الشركة الجديدة"
-              name="companyName"
-              defaultValue={lead.companyName}
-              placeholder="اتركه فارغًا إن كان العميل فردًا"
-            />
-          </div>
-        </section>
 
         <section className="card card-pad">
-          <h2 className="mb-4 section-title">الصفقة</h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
-              label="عنوان الصفقة"
-              name="dealTitle"
+            <SelectField
+              label="خط الخدمة"
+              name="serviceLine"
+              required
+              defaultValue={lead.serviceInterest}
+              options={lists.service_line.map((s) => ({ value: s.value, label: s.label }))}
               className="sm:col-span-2"
-              defaultValue={`${lead.serviceInterest ?? 'مشروع ترجمة'} — ${name}`}
-            />
-            <FormField
-              label="قيمة الصفقة"
-              name="dealAmount"
-              type="number"
-              step="0.01"
-              min="0"
-              defaultValue={lead.estimatedValue}
             />
             <SelectField
-              label="العملة"
-              name="dealCurrency"
-              defaultValue="EGP"
-              placeholder="جنيه مصري"
-              options={CURRENCIES.map((c) => ({
-                value: c,
-                label: `${c} — ${CURRENCY_LABELS[c]}`,
-              }))}
+              label="من لغة"
+              name="sourceLang"
+              required
+              defaultValue={lead.sourceLang}
+              options={lists.language.map((l) => ({ value: l.value, label: l.label }))}
             />
+            <SelectField
+              label="إلى لغة"
+              name="targetLang"
+              required
+              defaultValue={lead.targetLang}
+              options={lists.language.map((l) => ({ value: l.value, label: l.label }))}
+            />
+            <FormField
+              label="عدد الصفحات"
+              name="pages"
+              type="number"
+              step="0.5"
+              min="0"
+              required
+              defaultValue={lead.estPages}
+            />
+            {can(user, 'canViewSellPrice') && (
+              <>
+                <FormField
+                  label="إجمالي المشروع"
+                  name="netTotal"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={estimated || undefined}
+                />
+                <FormField
+                  label="المقدم المقبوض"
+                  name="deposit"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={estimated ? Math.round(estimated * depositPct) : undefined}
+                  hint={`الافتراضي ${Math.round(depositPct * 100)}٪ من الإجمالي`}
+                />
+                <SelectField
+                  label="العملة"
+                  name="currency"
+                  defaultValue="EGP"
+                  placeholder="جنيه مصري"
+                  options={lists.currency.map((c) => ({ value: c.value, label: c.label }))}
+                />
+              </>
+            )}
           </div>
+
+          <ExpressDeadline />
+
+          <label className="mt-3 flex items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              name="isRush"
+              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            />
+            <span className="text-slate-700">
+              طلب مستعجل
+              <span className="mr-2 text-xs text-slate-400">
+                (يضيف رسم الاستعجال عند التسعير)
+              </span>
+            </span>
+          </label>
         </section>
 
         <div className="flex items-center gap-3">
-          <SaveButton>تحويل الآن</SaveButton>
+          <SaveButton>تحويل إلى مشروع</SaveButton>
           <Link href={`/leads/${id}`} className="btn-secondary">
             إلغاء
           </Link>

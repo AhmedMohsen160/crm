@@ -9,13 +9,13 @@ export const metadata = { title: 'عرض سعر جديد' };
 export default async function NewQuotePage({
   searchParams,
 }: {
-  searchParams: Promise<{ dealId?: string; companyId?: string; contactId?: string }>;
+  searchParams: Promise<{ projectId?: string; companyId?: string; contactId?: string }>;
 }) {
   await requireUser();
   const params = await searchParams;
 
   const [deals, companies, contacts] = await Promise.all([
-    db.deal.findMany({
+    db.project.findMany({
       select: { id: true, title: true },
       orderBy: { updatedAt: 'desc' },
       take: 300,
@@ -34,8 +34,8 @@ export default async function NewQuotePage({
   let defaultCompanyId = params.companyId;
   let defaultContactId = params.contactId;
 
-  if (params.dealId) {
-    const deal = await db.deal.findUnique({ where: { id: params.dealId } });
+  if (params.projectId) {
+    const deal = await db.project.findUnique({ where: { id: params.projectId } });
     if (deal) {
       defaultTitle = `عرض سعر — ${deal.title}`;
       defaultCompanyId ??= deal.companyId ?? undefined;
@@ -43,11 +43,11 @@ export default async function NewQuotePage({
       prefillItems = [
         {
           description: deal.title,
-          serviceType: deal.serviceType,
+          serviceType: deal.serviceLine,
           sourceLang: deal.sourceLang,
           targetLang: deal.targetLang,
-          unit: deal.wordCount ? 'WORD' : deal.pageCount ? 'PAGE' : 'PROJECT',
-          quantity: deal.wordCount ?? deal.pageCount ?? 1,
+          unit: deal.wordCount ? 'WORD' : deal.pages ? 'PAGE' : 'PROJECT',
+          quantity: deal.wordCount ?? deal.pages ?? 1,
           unitPrice: 0,
         },
       ];
@@ -66,8 +66,8 @@ export default async function NewQuotePage({
         deals={deals}
         companies={companies}
         contacts={contacts}
-        cancelHref={params.dealId ? `/deals/${params.dealId}` : '/quotes'}
-        defaultDealId={params.dealId}
+        cancelHref={params.projectId ? `/projects/${params.projectId}` : '/quotes'}
+        defaultDealId={params.projectId}
         defaultCompanyId={defaultCompanyId}
         defaultContactId={defaultContactId}
         defaultTitle={defaultTitle}

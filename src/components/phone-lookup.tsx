@@ -120,7 +120,7 @@ export function PhoneLookup({ defaultValue }: { defaultValue?: string }) {
           <input type="hidden" name="clientId" value={client.id} />
 
           <div className="flex flex-wrap gap-2">
-            <a href={`/deals/new?clientId=${client.id}`} className="btn-primary">
+            <a href={`/projects/new?clientId=${client.id}`} className="btn-primary">
               مشروع جديد مباشرة
             </a>
             <a href={`/clients/${client.id}`} className="btn-secondary">

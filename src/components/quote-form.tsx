@@ -14,7 +14,7 @@ type QuoteData = {
   validUntil: Date | null;
   notes: string | null;
   terms: string | null;
-  dealId: string | null;
+  projectId: string | null;
   companyId: string | null;
   contactId: string | null;
 };
@@ -69,8 +69,8 @@ export default function QuoteForm({
           />
           <SelectField
             label="الصفقة المرتبطة"
-            name="dealId"
-            defaultValue={quote?.dealId ?? defaultDealId}
+            name="projectId"
+            defaultValue={quote?.projectId ?? defaultDealId}
             options={deals.map((d) => ({ value: d.id, label: d.title }))}
           />
           <SelectField

@@ -39,7 +39,7 @@ export default async function ContactsPage({
       include: {
         company: { select: { id: true, name: true } },
         owner: { select: { name: true } },
-        _count: { select: { deals: true } },
+        _count: { select: { projects: true } },
       },
       orderBy: { updatedAt: 'desc' },
       take: 300,
@@ -153,7 +153,7 @@ export default async function ContactsPage({
                         {!c.email && !c.mobile && !c.phone && '—'}
                       </div>
                     </td>
-                    <td className="nums">{c._count.deals}</td>
+                    <td className="nums">{c._count.projects}</td>
                     {seeAll && (
                       <td>
                         {c.owner ? (

@@ -22,7 +22,7 @@ function linkFields(link: EntityLink): Record<string, string> {
   if (link.companyId) fields.companyId = link.companyId;
   if (link.contactId) fields.contactId = link.contactId;
   if (link.leadId) fields.leadId = link.leadId;
-  if (link.dealId) fields.dealId = link.dealId;
+  if (link.projectId) fields.projectId = link.projectId;
   return fields;
 }
 
@@ -46,7 +46,7 @@ export async function NotesPanel({
       companyId: link.companyId ?? undefined,
       contactId: link.contactId ?? undefined,
       leadId: link.leadId ?? undefined,
-      dealId: link.dealId ?? undefined,
+      projectId: link.projectId ?? undefined,
     },
     include: { author: { select: { name: true } } },
     orderBy: { createdAt: 'desc' },
@@ -141,7 +141,7 @@ export async function TasksPanel({
       companyId: link.companyId ?? undefined,
       contactId: link.contactId ?? undefined,
       leadId: link.leadId ?? undefined,
-      dealId: link.dealId ?? undefined,
+      projectId: link.projectId ?? undefined,
     },
     include: { assignee: { select: { name: true } } },
     orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
@@ -251,7 +251,7 @@ export async function ActivityPanel({ link }: { link: EntityLink }) {
       companyId: link.companyId ?? undefined,
       contactId: link.contactId ?? undefined,
       leadId: link.leadId ?? undefined,
-      dealId: link.dealId ?? undefined,
+      projectId: link.projectId ?? undefined,
     },
     include: { user: { select: { name: true } } },
     orderBy: { createdAt: 'desc' },

@@ -390,6 +390,90 @@ async function backfillCodes() {
   }
 }
 
+/**
+ * ترحيل الصفقات القديمة إلى **مشاريع** بحالات §٦.
+ *
+ * الجدول الفيزيائي لم يتحرّك (الاسم في الكود تغيّر لا في قاعدة البيانات)،
+ * فالمطلوب هنا ترجمة قيم الحالة فقط. كل تحويل يُقيَّد في سجل التدقيق بقيمته
+ * القديمة، فلا يضيع شيء ويمكن مراجعة أي صف.
+ */
+async function migrateProjectStatuses() {
+  const mapping: Record<string, { to: string; note: string }> = {
+    // الصفقة المكسوبة = مشروع مبيع ينتظر الإسناد، لا مشروع مسلَّم
+    WON: { to: 'pending_assignment', note: 'صفقة مكسوبة في النظام القديم' },
+    LOST: { to: 'cancelled', note: 'خسارة في النظام القديم' },
+    // مراحل ما قبل البيع انتقلت إلى الليد؛ ما بقي منها هنا يحتاج قرارًا
+    NEW: { to: 'pending_assignment', note: 'مرحلة بيعية قديمة — تحتاج مراجعة' },
+    QUOTED: { to: 'pending_assignment', note: 'مرحلة بيعية قديمة — تحتاج مراجعة' },
+    NEGOTIATION: { to: 'pending_assignment', note: 'مرحلة بيعية قديمة — تحتاج مراجعة' },
+  };
+
+  let moved = 0;
+  for (const [from, { to, note }] of Object.entries(mapping)) {
+    const rows = await db.project.findMany({
+      where: { status: from },
+      select: { id: true },
+    });
+    if (rows.length === 0) continue;
+
+    for (const row of rows) {
+      await db.project.update({
+        where: { id: row.id },
+        data: {
+          status: to,
+          ...(to === 'cancelled' ? { cancelReason: note, revenueMonth: null } : {}),
+        },
+      });
+      await db.auditLog.create({
+        data: {
+          action: 'update',
+          tableName: 'Project',
+          recordId: row.id,
+          field: 'status',
+          oldValue: from,
+          newValue: `${to} (${note})`,
+        },
+      });
+    }
+    moved += rows.length;
+  }
+
+  if (moved) console.log(`  ✓ ترحيل حالات المشاريع: ${moved} مشروع`);
+}
+
+/** يملأ معرّفات المشاريع التي سبقت وجود العدّاد، بشهر إنشاء كل مشروع */
+async function backfillProjectCodes() {
+  const codeless = await db.project.findMany({
+    where: { code: null },
+    select: { id: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (codeless.length === 0) return;
+
+  const perMonth = new Map<string, number>();
+  for (const project of codeless) {
+    const period = yearMonth(project.createdAt);
+    if (!perMonth.has(period)) {
+      const counter = await db.counter.findUnique({ where: { key: `project-${period}` } });
+      perMonth.set(period, counter?.value ?? 0);
+    }
+    const next = (perMonth.get(period) ?? 0) + 1;
+    perMonth.set(period, next);
+    await db.project.update({
+      where: { id: project.id },
+      data: { code: `PR-${period}-${String(next).padStart(4, '0')}` },
+    });
+  }
+  for (const [period, value] of perMonth) {
+    await db.counter.upsert({
+      where: { key: `project-${period}` },
+      update: { value },
+      create: { key: `project-${period}`, value },
+    });
+  }
+  console.log(`  ✓ استكمال معرّفات المشاريع: ${codeless.length}`);
+}
+
 async function main() {
   console.log('🌱 تجهيز الأساس...');
   await seedRoles();
@@ -399,6 +483,8 @@ async function main() {
   await seedFoundingTeam();
   await migrateLeadStages();
   await backfillCodes();
+  await migrateProjectStatuses();
+  await backfillProjectCodes();
   console.log('✅ اكتمل التجهيز');
 }
 

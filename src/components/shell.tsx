@@ -9,7 +9,7 @@ import {
   Building2,
   Users,
   Contact,
-  Handshake,
+  Briefcase,
   ListChecks,
   FileText,
   Settings,
@@ -30,7 +30,7 @@ const NAV = [
   { href: '/clients', label: 'العملاء', icon: Contact },
   { href: '/companies', label: 'الشركات', icon: Building2 },
   { href: '/contacts', label: 'جهات الاتصال', icon: Users },
-  { href: '/deals', label: 'الصفقات', icon: Handshake },
+  { href: '/projects', label: 'المشاريع', icon: Briefcase },
   { href: '/quotes', label: 'عروض الأسعار', icon: FileText },
   { href: '/tasks', label: 'المهام', icon: ListChecks },
 ];
