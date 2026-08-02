@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { requirePermission, can } from '@/lib/auth';
 import { listOptionsMany, listLabel } from '@/lib/reference';
 import { SOURCING_TYPES } from '@/lib/projects';
+import { freelancerIndex, filterForProject } from '@/lib/freelancer-engine';
 import { PageHeader, ErrorAlert } from '@/components/ui';
 import AssignForm from '@/components/assign-form';
 
@@ -13,8 +14,11 @@ export const dynamic = 'force-dynamic';
 /**
  * شاشة الإسناد (§٧.٢) — **معيار القبول ≤١٥ ثانية**.
  *
- * أربعة حقول أغلبها قوائم. لا سعر بيع فيها إطلاقًا؛ ما يظهر بدله هو
- * **مؤشر التكلفة المجرّد** لمن يملك صلاحيته.
+ * ثلاثة قرارات: من يدير · من ينفّذ · من يراجع. لا سعر بيع فيها إطلاقًا؛
+ * ما يظهر بدله هو **مؤشر التكلفة المجرّد** لمن يملك صلاحيته.
+ *
+ * فهرس الفريلانسرز يُحمَّل هنا **مرة واحدة** ويُرشَّح مسبقًا بزوج اللغة وخط
+ * الخدمة، فيبحث المتصفح محليًا بلا نداء لكل حرف (§١١ بند ٤).
  */
 export default async function AssignPage({
   params,
@@ -42,25 +46,46 @@ export default async function AssignPage({
       deadline: true,
       workMode: true,
       sourcing: true,
+      projectManagerId: true,
       primaryProducerId: true,
+      primaryFreelancerId: true,
       reviewerId: true,
+      reviewerFreelancerId: true,
+      reviewerRate: true,
       externalName: true,
       externalRate: true,
     },
   });
   if (!project) notFound();
 
-  const [lists, producers, serviceName, sourceName, targetName] = await Promise.all([
-    listOptionsMany('work_mode'),
-    db.user.findMany({
-      where: { active: true, isProducer: true },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    listLabel('service_line', project.serviceLine),
-    listLabel('language', project.sourceLang),
-    listLabel('language', project.targetLang),
-  ]);
+  const showRates = can(user, 'canViewFreelancerCost');
+
+  const [lists, producers, managers, index, serviceName, sourceName, targetName] =
+    await Promise.all([
+      listOptionsMany('work_mode'),
+      db.user.findMany({
+        where: { active: true, isProducer: true },
+        select: { id: true, name: true, jobTitle: true },
+        orderBy: { name: 'asc' },
+      }),
+      // من يصلح مديرًا للمشروع: من يملك صلاحية الإسناد
+      db.user.findMany({
+        where: { active: true, roleRef: { canAssignProduction: true } },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      // **الترشيح في الخادم**: من لا يملك صلاحية رؤية الأجر لا يصله رقم
+      freelancerIndex({ includeRates: showRates }),
+      listLabel('service_line', project.serviceLine),
+      listLabel('language', project.sourceLang),
+      listLabel('language', project.targetLang),
+    ]);
+
+  const candidates = filterForProject(index, {
+    langFrom: project.sourceLang,
+    langTo: project.targetLang,
+    serviceLine: project.serviceLine,
+  });
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -81,6 +106,8 @@ export default async function AssignPage({
         projectId={id}
         workModes={lists.work_mode.map((m) => ({ value: m.value, label: m.label }))}
         producers={producers}
+        managers={managers}
+        freelancers={candidates}
         sourcingTypes={Object.entries(SOURCING_TYPES).map(([value, label]) => ({
           value,
           label,
@@ -88,12 +115,18 @@ export default async function AssignPage({
         current={{
           workMode: project.workMode,
           sourcing: project.sourcing,
+          projectManagerId: project.projectManagerId,
           primaryProducerId: project.primaryProducerId,
+          primaryFreelancerId: project.primaryFreelancerId,
           reviewerId: project.reviewerId,
+          reviewerFreelancerId: project.reviewerFreelancerId,
           externalName: project.externalName,
           externalRate: project.externalRate,
+          reviewerRate: project.reviewerRate,
         }}
         showCostIndicator={can(user, 'canViewCostIndicator')}
+        showRates={showRates}
+        canPickFreelancer={candidates.length > 0}
       />
 
       <div className="mt-4">

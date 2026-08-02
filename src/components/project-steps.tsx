@@ -1,7 +1,10 @@
 import { db } from '@/lib/db';
 import { listOptions } from '@/lib/reference';
+import { freelancerIndex, filterForProject } from '@/lib/freelancer-engine';
+import { RATE_UNITS } from '@/lib/freelancers';
 import { FormField, SelectField } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
+import FreelancerPicker from '@/components/freelancer-picker';
 
 /**
  * خطوات التنفيذ.
@@ -16,16 +19,22 @@ export default async function ProjectSteps({
   projectId,
   canEdit,
   showCost,
+  showRates,
 }: {
   projectId: string;
   canEdit: boolean;
   /** تكلفة الخطوة تظهر لمن يملك رؤية التكلفة وحده */
   showCost: boolean;
+  /** أجر الفريلانسر يظهر لمن يملك `canViewFreelancerCost` وحده */
+  showRates: boolean;
 }) {
-  const [steps, stepTypes, producers] = await Promise.all([
+  const [steps, stepTypes, producers, project, index] = await Promise.all([
     db.projectStep.findMany({
       where: { projectId },
-      include: { performer: { select: { name: true } } },
+      include: {
+        performer: { select: { name: true } },
+        freelancer: { select: { id: true, name: true } },
+      },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     }),
     listOptions('step_type'),
@@ -34,7 +43,18 @@ export default async function ProjectSteps({
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),
+    db.project.findUnique({
+      where: { id: projectId },
+      select: { sourceLang: true, targetLang: true, serviceLine: true },
+    }),
+    freelancerIndex({ includeRates: showRates }),
   ]);
+
+  const candidates = filterForProject(index, {
+    langFrom: project?.sourceLang,
+    langTo: project?.targetLang,
+    serviceLine: project?.serviceLine,
+  });
 
   const typeLabel = new Map(stepTypes.map((t) => [t.value, t.label]));
   const totalWeighted = steps.reduce((s, x) => s + x.weightedPages, 0);
@@ -67,7 +87,7 @@ export default async function ProjectSteps({
                 <tr key={step.id}>
                   <td className="text-sm">{typeLabel.get(step.stepType) ?? step.stepType}</td>
                   <td className="text-sm text-slate-600">
-                    {step.performer?.name ?? step.externalName ?? '—'}
+                    {step.performer?.name ?? step.freelancer?.name ?? step.externalName ?? '—'}
                     {step.costSource === 'external' && (
                       <span className="mr-1 text-xs text-slate-400">(خارجي)</span>
                     )}
@@ -123,20 +143,47 @@ export default async function ProjectSteps({
             options={producers.map((p) => ({ value: p.id, label: p.name }))}
           />
           <FormField label="الصفحات" name="pages" type="number" step="0.5" min="0" required />
-          <FormField label="المنفِّذ الخارجي" name="externalName" />
+          <div className="sm:col-span-2">
+            <FreelancerPicker
+              rows={candidates}
+              name="freelancerId"
+              label="المنفِّذ الخارجي من السجل"
+              showRates={showRates}
+              hint="اختياره يجلب سعره لهذا الزوج، ويُنشئ سطر استحقاق تلقائيًا"
+            />
+          </div>
+          <FormField label="أو اسم خارجي غير مسجَّل" name="externalName" />
           <FormField
-            label="أجر الصفحة"
+            label="الأجر"
             name="externalRate"
             type="number"
             step="0.01"
             min="0"
             dir="ltr"
+            hint="فارغ ← يُجلب من ملفه"
+          />
+          <SelectField
+            label="وحدة الأجر"
+            name="rateUnit"
+            defaultValue="page"
+            placeholder="الصفحة"
+            options={Object.entries(RATE_UNITS).map(([value, label]) => ({ value, label }))}
+          />
+          <FormField
+            label="عدد الساعات/الوحدات"
+            name="rateUnits"
+            type="number"
+            step="0.5"
+            min="0"
+            dir="ltr"
+            hint="للأجر بالساعة أو بالدقيقة فقط"
           />
           <div className="sm:col-span-4">
             <SaveButton>إضافة خطوة</SaveButton>
             <p className="mt-2 text-xs text-slate-400">
               الصفحات الموزونة والتكلفة تُحسبان وقت الحفظ وتُخزَّنان، فلا يتغيّر تاريخ
-              التكاليف بتغيّر معامل لاحقًا.
+              التكاليف بتغيّر معامل لاحقًا. وإسناد خطوة لفريلانسر يُنشئ له
+              <b> سطر استحقاق </b>في حساب الدائنين فورًا.
             </p>
           </div>
         </form>

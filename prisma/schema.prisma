@@ -68,6 +68,8 @@ model User {
   commissionPlans   CommissionAssignment[]
   closedPeriods     CommissionPeriod[]
 
+  confirmedPayments FreelancerPayment[] @relation("PaymentConfirmer")
+
   @@index([email])
   @@index([reportsToId])
   @@index([branch])
@@ -330,10 +332,18 @@ model ProjectStep {
   performerId String?
   performer   User?   @relation("StepPerformer", fields: [performerId], references: [id], onDelete: SetNull)
 
-  /// اسم المنفِّذ الخارجي مؤقتًا حتى تصل إدارة الفريلانسرز (المرحلة ٧)
+  /// اسم المنفِّذ الخارجي نصًّا — يبقى للخطوات السابقة لملف الفريلانسرز
   externalName String?
-  /// أجر الفريلانسر للصفحة
+  /// أجر المنفِّذ الخارجي بوحدته
   externalRate Float?
+  /// وحدة الأجر: page | word | word_250 | hour | minute | project
+  rateUnit     String  @default("page")
+  /// عدد الساعات/الوحدات حين لا يكون الأجر بالصفحة
+  rateUnits    Float?
+
+  /// الفريلانسر المسجَّل المنفِّذ لهذه الخطوة (§١١)
+  freelancerId String?
+  freelancer   Freelancer? @relation("StepFreelancer", fields: [freelancerId], references: [id], onDelete: SetNull)
 
   /// internal | external
   costSource String @default("internal")
@@ -348,8 +358,131 @@ model ProjectStep {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  payments FreelancerPayment[]
+
   @@index([projectId])
   @@index([performerId])
+  @@index([freelancerId])
+}
+
+// ───────────────────────────────────────────────
+//  الفريلانسرز (§١١) — حتى ألف مترجم
+// ───────────────────────────────────────────────
+
+model Freelancer {
+  id   String  @id @default(cuid())
+  /// معرّف تسلسلي FL-0001
+  code String? @unique
+
+  name     String
+  phone    String?
+  phoneAlt String?
+  email    String?
+  country  String?
+  city     String?
+
+  /// لغاته مفصولة بفواصل — قائمة واحدة تخدم «من» و«إلى» (المصدر: اسم التبويب)
+  langs           String?
+  /// تخصصاته مفصولة بفواصل — من قائمة خطوط الخدمة
+  specialisations String?
+
+  /// السعر الافتراضي. **فارغ يعني «لم يُتفق» لا «مجاني»** (§١٤)
+  defaultRate Float?
+  /// page | word | word_250 | hour | minute | project
+  rateUnit    String @default("page")
+  currency    String @default("EGP")
+
+  /// approved = الفريق الحقيقي · bench = مخزون مواهب · trial · suspended
+  tier   String  @default("bench")
+  active Boolean @default(true)
+
+  /// من ١٠ — في المصدر مخزَّن كتاريخ، ويُستخرج عند الاستيراد (§١٤)
+  rating Float?
+
+  /// عدّادات تُحدَّث عند الإسناد — للترتيب لا للحساب المالي
+  projectsCount Int       @default(0)
+  lastUsedAt    DateTime?
+
+  paymentMethod String?
+  paymentRef    String?
+  cvUrl         String?
+  notes         String?
+
+  /// صفٌّ لم يُحسم عند الاستيراد ويحتاج مراجعة بشرية (§١٤)
+  needsReview Boolean @default(false)
+  /// ما جاء في الملف حرفيًا حين تعذّر تفسيره — لا نحذف ولا نخمّن
+  importNote  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rates            FreelancerRate[]
+  payments         FreelancerPayment[]
+  steps            ProjectStep[]       @relation("StepFreelancer")
+  projects         Project[]           @relation("ProjectFreelancer")
+  reviewedProjects Project[]           @relation("ProjectReviewerFreelancer")
+
+  @@index([tier])
+  @@index([name])
+  @@index([phone])
+}
+
+/// استثناءات السعر — الحقل الفارغ يعني «أي قيمة»، وأدقّ تطابق يفوز
+model FreelancerRate {
+  id           String     @id @default(cuid())
+  freelancerId String
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+
+  langFrom    String?
+  langTo      String?
+  serviceLine String?
+  stepType    String?
+
+  rate     Float
+  rateUnit String @default("page")
+  currency String @default("EGP")
+
+  notes       String?
+  needsReview Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([freelancerId])
+}
+
+/// حساب دائنين مستقل عن حساب العملاء — سطر يُنشأ **تلقائيًا** عند الإسناد
+model FreelancerPayment {
+  id           String     @id @default(cuid())
+  freelancerId String
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+
+  projectId String?
+  project   Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  stepId    String?
+  step      ProjectStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+
+  amount   Float
+  currency String @default("EGP")
+
+  dueDate DateTime?
+  /// due | paid | held
+  status  String    @default("due")
+
+  paidAt    DateTime?
+  paidById  String?
+  paidBy    User?     @relation("PaymentConfirmer", fields: [paidById], references: [id], onDelete: SetNull)
+  method    String?
+  reference String?
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([freelancerId, status])
+  @@index([projectId])
+  @@index([stepId])
+  @@index([status, dueDate])
 }
 
 // ───────────────────────────────────────────────
@@ -621,9 +754,17 @@ model Project {
   folderUrl         String?
 
   /// أجر الفريلانسر للصفحة حين يكون التشغيل خارجيًا بلا خطوات صريحة
-  externalRate Float?
-  /// اسم المنفِّذ الخارجي مؤقتًا حتى تصل إدارة الفريلانسرز (المرحلة ٧)
-  externalName String?
+  externalRate         Float?
+  /// اسم المنفِّذ الخارجي نصًّا — يبقى للسجلات القديمة السابقة لملف الفريلانسرز
+  externalName         String?
+  /// المنتِج الخارجي حين يكون فريلانسرًا مسجَّلًا (§١١)
+  primaryFreelancerId  String?
+  primaryFreelancer    Freelancer? @relation("ProjectFreelancer", fields: [primaryFreelancerId], references: [id], onDelete: SetNull)
+  /// المراجع حين يكون فريلانسرًا لا موظفًا
+  reviewerFreelancerId String?
+  reviewerFreelancer   Freelancer? @relation("ProjectReviewerFreelancer", fields: [reviewerFreelancerId], references: [id], onDelete: SetNull)
+  /// أجر المراجع الخارجي للصفحة
+  reviewerRate         Float?
 
   // ── التكلفة والهامش — تُجمَّد وقت التسليم (§٨) ──
   // لا تُعاد بتغيّر راتب أو معامل لاحقًا، وإلا تغيّر تاريخ الهوامش
@@ -668,12 +809,13 @@ model Project {
   ownerId String?
   owner   User?   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
-  tasks       Task[]
-  noteItems   Note[]
-  quotes      Quote[]
-  activities  Activity[]
-  steps       ProjectStep[]
-  commissions CommissionEntry[]
+  tasks              Task[]
+  noteItems          Note[]
+  quotes             Quote[]
+  activities         Activity[]
+  steps              ProjectStep[]
+  commissions        CommissionEntry[]
+  freelancerPayments FreelancerPayment[]
 
   @@index([status])
   @@index([ownerId])

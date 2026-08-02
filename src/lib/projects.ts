@@ -80,8 +80,14 @@ export type TransitionRule = {
   to: ProjectStatus;
   /** الصلاحية التي يملكها صاحب الانتقال */
   permission?: Permission;
-  /** حقول لا يصحّ الانتقال بدونها */
-  requires?: { field: string; label: string }[];
+  /**
+   * حقول لا يصحّ الانتقال بدونها.
+   *
+   * `anyOf` تعني «واحد من هذه يكفي» — لأن المنفِّذ قد يكون موظفًا داخليًا
+   * أو فريلانسرًا مسجَّلًا أو اسمًا خارجيًا يدويًا. المطلوب أن يكون
+   * **للمشروع منفِّذ**، لا أن يكون موظفًا بعينه.
+   */
+  requires?: { field: string; label: string; anyOf?: string[] }[];
 };
 
 /**
@@ -95,7 +101,11 @@ export const TRANSITIONS: Record<ProjectStatus, TransitionRule[]> = {
       permission: 'canAssignProduction',
       requires: [
         { field: 'workMode', label: 'نمط التشغيل' },
-        { field: 'primaryProducerId', label: 'المنتِج الرئيسي' },
+        {
+          field: 'primaryProducerId',
+          label: 'المنفِّذ (موظف داخلي أو فريلانسر)',
+          anyOf: ['primaryProducerId', 'primaryFreelancerId', 'externalName'],
+        },
       ],
     },
     { to: 'cancelled' },
@@ -236,3 +246,38 @@ export const SOURCING_TYPES = {
   external: 'تشغيل خارجي',
   mixed: 'مختلط',
 } as const;
+
+// ── من ينفّذ ماذا، حسب نمط التشغيل ─────────────────────────────
+
+/**
+ * اسم دور المنفِّذ الرئيسي في كل نمط.
+ *
+ * «المنتِج الرئيسي» تسمية محاسبية صحيحة لكنها لا تقول لمدير المشاريع من
+ * يختار: في نمط التدقيق يختار **مدقّقًا**، وفي نمط السبتايتل يختار **معدّ
+ * سبتايتل**. الشاشة تسمّي الدور الذي يُسند فعلًا.
+ */
+export const PERFORMER_ROLE: Record<string, string> = {
+  human_full: 'المترجم',
+  mtpe_full: 'المراجع البشري بعد الآلة',
+  mtpe_light: 'المراجع البشري بعد الآلة',
+  review_human: 'المراجع',
+  proofread: 'المدقّق اللغوي',
+  dtp: 'منسّق النشر المكتبي',
+  glossary: 'معدّ المسرد',
+  transcription: 'المفرّغ الصوتي',
+  subtitling: 'معدّ السبتايتل',
+};
+
+export function performerRole(workMode: string | null | undefined): string {
+  return PERFORMER_ROLE[workMode ?? ''] ?? 'المنتِج الرئيسي';
+}
+
+/**
+ * أنماط **هي نفسها مراجعة**. فيها لا يُطلب مراجع ثانٍ: تكلفته لا تُحتسب
+ * أصلًا (شرط منع الاحتساب المزدوج في §٨)، فطلبه في الشاشة وعدٌ كاذب.
+ */
+export const REVIEW_WORK_MODES = ['review_human', 'proofread'];
+
+export function workModeIsReview(workMode: string | null | undefined): boolean {
+  return REVIEW_WORK_MODES.includes(workMode ?? '');
+}

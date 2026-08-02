@@ -14,6 +14,8 @@ import {
   projectBalance,
   isOverdue,
   countsAsRevenue,
+  performerRole,
+  workModeIsReview,
   type ProjectStatus,
   type DiscountType,
 } from '@/lib/projects';
@@ -60,6 +62,9 @@ export default async function ProjectDetailPage({
       projectManager: { select: { name: true } },
       approvedBy: { select: { name: true } },
       primaryProducer: { select: { name: true } },
+      primaryFreelancer: { select: { id: true, name: true } },
+      reviewer: { select: { name: true } },
+      reviewerFreelancer: { select: { id: true, name: true } },
       quotes: { orderBy: { createdAt: 'desc' } },
     },
   });
@@ -239,8 +244,37 @@ export default async function ProjectDetailPage({
               </Field>
               {project.isRush && <Field label="استعجال">مطبَّق</Field>}
               <Field label="نمط التشغيل">{workModeName}</Field>
-              <Field label="المنتِج الرئيسي">
-                {project.primaryProducer?.name ?? 'لم يُسند بعد'}
+              <Field label="مدير المشروع">
+                {project.projectManager?.name ?? 'لم يُحدَّد'}
+              </Field>
+              {/* اسم دور المنفِّذ يتبع نمط التشغيل: مترجم · مدقّق · مفرّغ… */}
+              <Field label={performerRole(project.workMode)}>
+                {project.primaryProducer?.name ??
+                  (project.primaryFreelancer ? (
+                    <>
+                      <Link href={`/freelancers/${project.primaryFreelancer.id}`} className="link">
+                        {project.primaryFreelancer.name}
+                      </Link>
+                      <span className="mr-1 text-xs text-slate-400">(فريلانسر)</span>
+                    </>
+                  ) : (
+                    (project.externalName ?? 'لم يُسند بعد')
+                  ))}
+              </Field>
+              <Field label="المراجع">
+                {project.reviewer?.name ??
+                  (project.reviewerFreelancer ? (
+                    <>
+                      <Link href={`/freelancers/${project.reviewerFreelancer.id}`} className="link">
+                        {project.reviewerFreelancer.name}
+                      </Link>
+                      <span className="mr-1 text-xs text-slate-400">(فريلانسر)</span>
+                    </>
+                  ) : workModeIsReview(project.workMode) ? (
+                    'النمط نفسه مراجعة'
+                  ) : (
+                    'بلا مراجع'
+                  ))}
               </Field>
             </dl>
 
@@ -356,7 +390,12 @@ export default async function ProjectDetailPage({
           )}
 
           <Suspense fallback={<div className="card h-32 animate-pulse bg-slate-100" />}>
-            <ProjectSteps projectId={id} canEdit={canAssign} showCost={showCost} />
+            <ProjectSteps
+              projectId={id}
+              canEdit={canAssign}
+              showCost={showCost}
+              showRates={can(user, 'canViewFreelancerCost')}
+            />
           </Suspense>
 
           {showCost && (

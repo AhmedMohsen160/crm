@@ -154,6 +154,37 @@ async function handle(
       return null;
     }
 
+    // ── حذف بند سعر فريلانسر ──────────────────────────────────
+    case 'freelancerRate.delete': {
+      if (!can(user, 'canManageFreelancers')) throw new Error('لا صلاحية');
+      const rate = await db.freelancerRate.findUnique({ where: { id } });
+      if (!rate) return null;
+      await db.freelancerRate.delete({ where: { id } });
+      await auditEvent(user.id, 'delete', 'FreelancerRate', id, `بند بـ${rate.rate}`);
+      return null;
+    }
+
+    // ── إيقاف فريلانسر ────────────────────────────────────────
+    // §٣ بند ٥: لا شيء يُمحى. الإيقاف يُخرجه من محرّك الاختيار
+    // ويُبقي مشاريعه ومستحقاته منسوبة له.
+    case 'freelancer.deactivate': {
+      if (!can(user, 'canManageFreelancers')) throw new Error('لا صلاحية');
+      const target = await db.freelancer.findUnique({ where: { id } });
+      if (!target) return '/freelancers';
+      await db.freelancer.update({
+        where: { id },
+        data: { active: !target.active, tier: target.active ? 'suspended' : target.tier },
+      });
+      await auditEvent(
+        user.id,
+        'update',
+        'Freelancer',
+        id,
+        target.active ? 'إيقاف الفريلانسر' : 'إعادة تفعيله'
+      );
+      return `/freelancers/${id}`;
+    }
+
     // ── حذف ملاحظة ────────────────────────────────────────────
     case 'note.delete': {
       const note = await db.note.findUnique({ where: { id } });

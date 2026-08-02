@@ -16,6 +16,10 @@ import {
   saveStaffCost,
   decideApproval,
   savePriceItem,
+  saveFreelancer,
+  saveFreelancerRate,
+  payFreelancer,
+  importFreelancers,
   saveCommissionScheme,
   saveCommissionTier,
   saveCommissionAssignment,
@@ -97,6 +101,18 @@ export async function POST(request: NextRequest) {
         break;
       case 'priceItem':
         destination = await savePriceItem(fd, user, id);
+        break;
+      case 'freelancer':
+        destination = await saveFreelancer(fd, user, id);
+        break;
+      case 'freelancerRate':
+        destination = await saveFreelancerRate(fd, user, id);
+        break;
+      case 'freelancerPayment':
+        destination = await payFreelancer(fd, user, id);
+        break;
+      case 'freelancer.import':
+        destination = await importFreelancers(fd, user);
         break;
       case 'commissionScheme':
         destination = await saveCommissionScheme(fd, user, id);

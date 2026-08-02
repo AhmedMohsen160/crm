@@ -1,44 +1,62 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Gauge } from 'lucide-react';
+import { Gauge, UserCog, AlertTriangle } from 'lucide-react';
 import { SaveButton } from '@/components/forms';
+import FreelancerPicker, { type PickerRow } from '@/components/freelancer-picker';
+import { performerRole, workModeIsReview } from '@/lib/projects';
 
 type Option = { value: string; label: string };
 
 /**
- * نموذج الإسناد + **مؤشر التكلفة المجرّد**.
+ * نموذج الإسناد — **من يدير، ومن ينفّذ، ومن يراجع** (§٧.٢، معيار ≤١٥ ثانية).
  *
- * المؤشر هو الاستثناء الوحيد المقصود في §٥: رقمان مجرّدان يظهران لمدير
- * المشاريع لحظة اختياره بين الداخلي والخارجي — **بلا أي إشارة إلى راتب
- * أحد، ولا اسم، ولا نسبة**. الغرض المنصوص عليه: ألا يتخذ أهم قرار تكلفة
- * يومي وهو أعمى.
+ * الحقول تتبع نمط التشغيل المختار أعلاه:
+ *   - اسم دور المنفِّذ يتغيّر: «المترجم» في الترجمة، «المدقّق اللغوي» في
+ *     التدقيق، «معدّ السبتايتل» في السبتايتل… فمدير المشاريع يعرف من يختار.
+ *   - **حقل المراجع يختفي** إن كان النمط مراجعة أو تدقيقًا أصلًا، لأن
+ *     تكلفته لا تُحتسب حينها (§٨) — فطلبه وعدٌ كاذب.
+ *   - داخلي ← قائمة المنتِجين · خارجي ← محرّك اختيار الفريلانسر ·
+ *     مختلط ← الاثنان معًا.
  *
- * الرقمان يأتيان من الخادم عبر `fetch` — الحساب لا يقع في المتصفح، فلا
- * تصله معطيات الراتب أصلًا.
+ * ويبقى **مؤشر التكلفة المجرّد** كما نصّت §٥: رقمان بلا أي إشارة إلى راتب
+ * أحد، يأتيان من الخادم فلا تصل المتصفحَ معطياتُ الراتب أصلًا.
  */
 export default function AssignForm({
   projectId,
   workModes,
   producers,
+  managers,
+  freelancers,
   sourcingTypes,
   current,
   showCostIndicator,
+  showRates,
+  canPickFreelancer,
 }: {
   projectId: string;
   workModes: Option[];
-  producers: { id: string; name: string }[];
+  producers: { id: string; name: string; jobTitle: string | null }[];
+  managers: { id: string; name: string }[];
+  freelancers: PickerRow[];
   sourcingTypes: Option[];
   current: {
     workMode: string | null;
     sourcing: string | null;
+    projectManagerId: string | null;
     primaryProducerId: string | null;
+    primaryFreelancerId: string | null;
     reviewerId: string | null;
+    reviewerFreelancerId: string | null;
     externalName: string | null;
     externalRate: number | null;
+    reviewerRate: number | null;
   };
   showCostIndicator: boolean;
+  showRates: boolean;
+  canPickFreelancer: boolean;
 }) {
+  const [workMode, setWorkMode] = useState(current.workMode ?? '');
   const [sourcing, setSourcing] = useState(current.sourcing ?? 'internal');
   const [producerId, setProducerId] = useState(current.primaryProducerId ?? '');
   const [externalRate, setExternalRate] = useState(
@@ -49,7 +67,10 @@ export default function AssignForm({
     external: number | null;
   } | null>(null);
 
-  const isExternal = sourcing === 'external';
+  const wantsExternal = sourcing === 'external' || sourcing === 'mixed';
+  const wantsInternal = sourcing === 'internal' || sourcing === 'mixed';
+  const role = performerRole(workMode);
+  const modeIsReview = workModeIsReview(workMode);
 
   useEffect(() => {
     if (!showCostIndicator) return;
@@ -84,6 +105,33 @@ export default function AssignForm({
       <input type="hidden" name="id" value={projectId} />
       <input type="hidden" name="back" value={`/projects/${projectId}/assign`} />
 
+      {/* ── من يدير المشروع ──────────────────────────────────── */}
+      <section className="card card-pad space-y-4">
+        <div>
+          <label className="label" htmlFor="projectManagerId">
+            <UserCog className="ml-1 inline h-4 w-4 text-slate-400" />
+            مدير المشروع
+          </label>
+          <select
+            id="projectManagerId"
+            name="projectManagerId"
+            defaultValue={current.projectManagerId ?? ''}
+            className="input"
+          >
+            <option value="">— أنا (من يُسند) —</option>
+            {managers.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-400">
+            المسؤول عن متابعة التنفيذ حتى التسليم — تصله تنبيهات هذا المشروع
+          </p>
+        </div>
+      </section>
+
+      {/* ── نمط التشغيل ومصدره ───────────────────────────────── */}
       <section className="card card-pad space-y-4">
         <div>
           <label className="label" htmlFor="workMode">
@@ -93,7 +141,8 @@ export default function AssignForm({
             id="workMode"
             name="workMode"
             required
-            defaultValue={current.workMode ?? ''}
+            value={workMode}
+            onChange={(e) => setWorkMode(e.target.value)}
             className="input"
           >
             <option value="">— اختر —</option>
@@ -104,7 +153,8 @@ export default function AssignForm({
             ))}
           </select>
           <p className="mt-1 text-xs text-slate-400">
-            يحدد معامل الجهد الذي تُحسب به الصفحات الموزونة
+            يحدد معامل الجهد الذي تُحسب به الصفحات الموزونة — ويحدد من تُسند
+            إليه المهمة أدناه
           </p>
         </div>
 
@@ -133,89 +183,201 @@ export default function AssignForm({
             ))}
           </div>
         </div>
+      </section>
 
-        {isExternal ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="externalName">
-                المنفِّذ الخارجي <span className="text-rose-500">*</span>
-              </label>
-              <input
-                id="externalName"
-                name="externalName"
-                required
-                defaultValue={current.externalName ?? ''}
-                placeholder="اسم الفريلانسر"
-                className="input"
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                محرّك اختيار الفريلانسر يصل في المرحلة القادمة
-              </p>
-            </div>
-            <div>
-              <label className="label" htmlFor="externalRate">
-                الأجر للصفحة
-              </label>
-              <input
-                id="externalRate"
-                name="externalRate"
-                type="number"
-                step="0.01"
-                min="0"
-                value={externalRate}
-                onChange={(e) => setExternalRate(e.target.value)}
-                dir="ltr"
-                className="input text-left"
-              />
-              <p className="mt-1 text-xs text-amber-700">
-                بلا أجر مسجَّل تصير التكلفة صفرًا ويُفتح تنبيه
-              </p>
-            </div>
-          </div>
-        ) : (
+      {/* ── من ينفّذ ─────────────────────────────────────────── */}
+      <section className="card card-pad space-y-4">
+        <h2 className="section-title">من ينفّذ: {role}</h2>
+
+        {wantsInternal && (
           <div>
             <label className="label" htmlFor="primaryProducerId">
-              المنتِج الرئيسي <span className="text-rose-500">*</span>
+              {role} من الفريق الداخلي{' '}
+              {sourcing === 'internal' && <span className="text-rose-500">*</span>}
             </label>
-            <select
-              id="primaryProducerId"
-              name="primaryProducerId"
-              required
-              value={producerId}
-              onChange={(e) => setProducerId(e.target.value)}
-              className="input"
-            >
-              <option value="">— اختر —</option>
-              {producers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            {producers.length === 0 ? (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  لا يوجد موظف مُعلَّم كـ«منتِج» بعد. افتح{' '}
+                  <a href="/settings/users" className="link">
+                    شاشة المستخدمين
+                  </a>{' '}
+                  وفعّل «ينتج فعليًا» لمن يترجم أو يراجع — أو اختر تشغيلًا
+                  خارجيًا وأسنِد لفريلانسر.
+                </span>
+              </div>
+            ) : (
+              <>
+                <select
+                  id="primaryProducerId"
+                  name="primaryProducerId"
+                  required={sourcing === 'internal'}
+                  value={producerId}
+                  onChange={(e) => setProducerId(e.target.value)}
+                  className="input"
+                >
+                  <option value="">— اختر —</option>
+                  {producers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {p.jobTitle ? ` — ${p.jobTitle}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-400">
+                  القائمة تعرض من فُعّل له «ينتج فعليًا» — مستقلًا تمامًا عن دوره
+                </p>
+              </>
+            )}
           </div>
         )}
 
-        <div>
-          <label className="label" htmlFor="reviewerId">
-            المراجع
-          </label>
-          <select
-            id="reviewerId"
-            name="reviewerId"
-            defaultValue={current.reviewerId ?? ''}
-            className="input"
-          >
-            <option value="">— بلا مراجع —</option>
-            {producers.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-slate-400">
-            تكلفته لا تُحتسب إن كان هو المنتِج نفسه، أو إن كان النمط مراجعة أصلًا
+        {wantsExternal &&
+          (canPickFreelancer ? (
+            <>
+              <FreelancerPicker
+                rows={freelancers}
+                name="primaryFreelancerId"
+                label={`${role} من الفريلانسرز`}
+                required={sourcing === 'external'}
+                selectedId={current.primaryFreelancerId}
+                showRates={showRates}
+                hint="مرشَّحون مسبقًا بزوج لغة المشروع وخط خدمته"
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label" htmlFor="externalName">
+                    أو اسم منفِّذ خارجي غير مسجَّل
+                  </label>
+                  <input
+                    id="externalName"
+                    name="externalName"
+                    defaultValue={current.externalName ?? ''}
+                    placeholder="اسم يدوي — يُفضَّل تسجيله في السجل"
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="label" htmlFor="externalRate">
+                    الأجر للصفحة
+                  </label>
+                  <input
+                    id="externalRate"
+                    name="externalRate"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={externalRate}
+                    onChange={(e) => setExternalRate(e.target.value)}
+                    dir="ltr"
+                    className="input text-left"
+                  />
+                  <p className="mt-1 text-xs text-amber-700">
+                    اتركه فارغًا ليُجلب سعر الفريلانسر لهذا الزوج تلقائيًا
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="externalName">
+                  المنفِّذ الخارجي <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="externalName"
+                  name="externalName"
+                  required={sourcing === 'external'}
+                  defaultValue={current.externalName ?? ''}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="externalRate">
+                  الأجر للصفحة
+                </label>
+                <input
+                  id="externalRate"
+                  name="externalRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={externalRate}
+                  onChange={(e) => setExternalRate(e.target.value)}
+                  dir="ltr"
+                  className="input text-left"
+                />
+              </div>
+            </div>
+          ))}
+      </section>
+
+      {/* ── من يراجع ─────────────────────────────────────────── */}
+      <section className="card card-pad space-y-4">
+        <h2 className="section-title">من يراجع</h2>
+
+        {modeIsReview ? (
+          <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            النمط المختار <b>هو نفسه مراجعة</b>، فلا يُسند مراجع ثانٍ — تكلفته
+            محتسَبة في النمط أصلًا، وإضافته تحتسب المراجعة مرتين (§٨).
           </p>
-        </div>
+        ) : (
+          <>
+            <div>
+              <label className="label" htmlFor="reviewerId">
+                مراجع من الفريق الداخلي
+              </label>
+              <select
+                id="reviewerId"
+                name="reviewerId"
+                defaultValue={current.reviewerId ?? ''}
+                className="input"
+              >
+                <option value="">— بلا مراجع داخلي —</option>
+                {producers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-400">
+                تكلفته لا تُحتسب إن كان هو {role} نفسه
+              </p>
+            </div>
+
+            {canPickFreelancer && (
+              <>
+                <FreelancerPicker
+                  rows={freelancers}
+                  name="reviewerFreelancerId"
+                  label="أو مراجع من الفريلانسرز"
+                  selectedId={current.reviewerFreelancerId}
+                  showRates={showRates}
+                  hint="يُحتسب أجره على الصفحات كأي تشغيل خارجي"
+                />
+                <div className="sm:w-1/2">
+                  <label className="label" htmlFor="reviewerRate">
+                    أجر المراجع للصفحة
+                  </label>
+                  <input
+                    id="reviewerRate"
+                    name="reviewerRate"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    defaultValue={current.reviewerRate ?? ''}
+                    dir="ltr"
+                    className="input text-left"
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    اتركه فارغًا ليُجلب سعره تلقائيًا
+                  </p>
+                </div>
+              </>
+            )}
+          </>
+        )}
 
         {showCostIndicator && indicator && (
           <div

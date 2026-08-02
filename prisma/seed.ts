@@ -558,6 +558,48 @@ async function main() {
   });
   console.log('✓ ملاحظات وسجل نشاط\n');
 
+  // ── ألف فريلانسر لاختبار الحجم الحقيقي (§١١ واختبار ٢١) ──────
+  // المواصفة تنص: «الحجم المتوقع حتى 1000 مترجم» — ومحرّك الاختيار
+  // يجب أن يبقى فوريًا عندها. نزرعهم مرة واحدة إن كان السجل فارغًا.
+  if ((await db.freelancer.count()) === 0) {
+    const FIRST = ['أحمد','محمد','سارة','نورا','خالد','مريم','يوسف','هدى','عمر','ليلى',
+      'حسن','منى','طارق','دينا','كريم','رانيا','سامي','ياسمين','أنس','فاطمة'];
+    const LAST = ['حمدان','السيد','عبد الله','مصطفى','فؤاد','شاكر','الجندي','نصر',
+      'الشريف','زكي','بدوي','قاسم','عثمان','الحلبي','مرسي','سليم'];
+    const LANGS = ['en','fr','de','it','es','tr','ru','zh'];
+    const LINES = ['legal','medical','technical','financial','general','marketing'];
+
+    const bulk = Array.from({ length: 1000 }, (_, i) => {
+      const first = FIRST[i % FIRST.length];
+      const last = LAST[(i * 7) % LAST.length];
+      const langCount = 1 + (i % 3);
+      const langs = ['ar', ...Array.from({ length: langCount }, (_, k) => LANGS[(i + k) % LANGS.length])];
+      return {
+        code: `FL-${String(i + 1).padStart(4, '0')}`,
+        name: `${first} ${last} ${i + 1}`,
+        phone: `2010${String(10000000 + i).slice(-8)}`,
+        langs: [...new Set(langs)].sort().join(','),
+        specialisations: LINES[i % LINES.length],
+        // ٪١٠ بلا سعر — «لم يُتفق» لا «مجانًا»، ليُختبر التنبيه
+        defaultRate: i % 10 === 0 ? null : 60 + (i % 40) * 5,
+        rateUnit: i % 50 === 0 ? 'hour' : 'page',
+        currency: 'EGP',
+        // ٢١ معتمدًا كما في تبويب «الأهم المستمرين» بالمصدر
+        tier: i < 21 ? 'approved' : i % 17 === 0 ? 'trial' : 'bench',
+        rating: i % 11 === 0 ? null : 4 + (i % 7),
+        projectsCount: (i * 3) % 25,
+      };
+    });
+
+    await db.freelancer.createMany({ data: bulk });
+    await db.counter.upsert({
+      where: { key: 'freelancer' },
+      update: { value: 1000 },
+      create: { key: 'freelancer', value: 1000 },
+    });
+    console.log('✓ ١٠٠٠ فريلانسر للاختبار الحجمي\n');
+  }
+
   console.log('═══════════════════════════════════════');
   console.log('  ✅ تم التجهيز بنجاح');
   console.log('═══════════════════════════════════════');

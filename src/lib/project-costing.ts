@@ -11,6 +11,9 @@ import {
   attributeRevenue,
   type Attribution,
 } from './costing';
+import { freelancerStepCost } from './freelancers';
+// أنماط التشغيل التي هي أصلًا مراجعة — لا تُحتسب مراجعة فوقها
+import { workModeIsReview } from './projects';
 
 /**
  * تطبيق معادلات §٨ على مشروع حقيقي.
@@ -22,9 +25,6 @@ import {
  * النتيجة **تُجمَّد على المشروع**: تغيير راتب أو معامل بعد التسليم لا يُعيد
  * كتابة هامش الشهر الماضي.
  */
-
-/** أنماط التشغيل التي هي أصلًا مراجعة أو تدقيق — لا تُحتسب مراجعة فوقها */
-const REVIEW_WORK_MODES = ['review_human', 'proofread'];
 
 export type CostBreakdown = {
   weightedPages: number;
@@ -71,6 +71,7 @@ export async function computeProjectCost(projectId: string): Promise<CostBreakdo
   const minUnit = Number(settings.min_weighted_unit) || 1;
   const producerShare = Number(settings.producer_share) || 0.7;
   const reviewerShare = Number(settings.reviewer_share) || 0.3;
+  const wordsPerPage = Number(settings.words_per_page) || 250;
 
   const warnings: string[] = [];
   const pages = project.pages ?? 0;
@@ -92,9 +93,17 @@ export async function computeProjectCost(projectId: string): Promise<CostBreakdo
     for (const step of project.steps) {
       let cost = 0;
       if (step.costSource === 'external') {
-        cost = externalStepCost(step.pages, step.externalRate);
+        // الوحدة ليست تفصيلة: من يُدفع له بالساعة لا تُضرب صفحاته في أجره
+        cost = freelancerStepCost({
+          rate: step.externalRate,
+          rateUnit: step.rateUnit,
+          pages: step.pages,
+          wordsPerPage,
+          units: step.rateUnits,
+        });
         costExternal += cost;
         if (!cost && step.pages > 0) {
+          // اختبار ١٦: صفر **مع تنبيه مفتوح** لا هامش ١٠٠٪ صامت
           warnings.push(`خطوة «${step.stepType}» خارجية بلا أجر مسجَّل — تكلفتها صفر`);
         }
       } else {
@@ -117,6 +126,21 @@ export async function computeProjectCost(projectId: string): Promise<CostBreakdo
         // اختبار ١٦: صفر **مع تنبيه مفتوح** لا هامش ١٠٠٪ صامت
         warnings.push('تشغيل خارجي بلا أجر مسجَّل — التكلفة صفر والهامش غير موثوق');
       }
+      // الأجر على مستوى المشروع يُحسب بالصفحة. من يُدفع له بالساعة أو
+      // بالمشروع تُسجَّل له **خطوة صريحة** بوحدتها، وإلا كان الرقم وهمًا.
+      if (project.primaryFreelancerId) {
+        const unit = await db.freelancer
+          .findUnique({
+            where: { id: project.primaryFreelancerId },
+            select: { rateUnit: true, name: true },
+          })
+          .then((f) => f);
+        if (unit && unit.rateUnit !== 'page') {
+          warnings.push(
+            `أجر «${unit.name}» ليس بالصفحة — أضِف خطوة تنفيذ صريحة بوحدته لتصح التكلفة`
+          );
+        }
+      }
     } else if (project.primaryProducerId) {
       const rate = await staffRateOf(project.primaryProducerId);
       const perPage = rate ? standardCostPerWeightedPage(rate, workingDays) : 0;
@@ -126,7 +150,17 @@ export async function computeProjectCost(projectId: string): Promise<CostBreakdo
       }
     }
 
-    // تكلفة المراجع — بشروط منع الاحتساب المزدوج الثلاثة
+    // المراجع فريلانسر: أجره على الصفحات الخام كأي تشغيل خارجي (§٨)،
+    // وتسقط تكلفته إن كان النمط مراجعة أصلًا — منعًا للاحتساب المزدوج
+    if (project.reviewerFreelancerId && !workModeIsReview(project.workMode)) {
+      const cost = externalStepCost(pages, project.reviewerRate);
+      costExternal += cost;
+      if (!cost && pages > 0) {
+        warnings.push('مراجع خارجي بلا أجر مسجَّل — تكلفته صفر والهامش غير موثوق');
+      }
+    }
+
+    // تكلفة المراجع الداخلي — بشروط منع الاحتساب المزدوج الثلاثة
     if (project.reviewerId) {
       const reviewerRate = await staffRateOf(project.reviewerId);
       const reviewerPerPage = reviewerRate
@@ -136,7 +170,7 @@ export async function computeProjectCost(projectId: string): Promise<CostBreakdo
         pages,
         reviewerId: project.reviewerId,
         primaryProducerId: project.primaryProducerId,
-        workModeIsReview: REVIEW_WORK_MODES.includes(project.workMode ?? ''),
+        workModeIsReview: workModeIsReview(project.workMode),
         reviewFactor,
         lineFactor,
         reviewerCostPerWeightedPage: reviewerPerPage,

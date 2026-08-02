@@ -35,6 +35,12 @@ export async function nextLeadCode(date = new Date()): Promise<string> {
   return `LD-${period}-${String(value).padStart(4, '0')}`;
 }
 
+/** `FL-0001` — سلسلة واحدة لا تتجدّد، فالفريلانسر ليس حدثًا شهريًا */
+export async function nextFreelancerCode(): Promise<string> {
+  const value = await nextValue('freelancer');
+  return `FL-${String(value).padStart(4, '0')}`;
+}
+
 /** `PR-2608-0042` — يُستخدم في المرحلة ٣ */
 export async function nextProjectCode(date = new Date()): Promise<string> {
   const period = yearMonth(date);

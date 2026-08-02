@@ -652,6 +652,226 @@ check(
   'الهدف المحفوظ يظهر عند إعادة فتح الشاشة'
 );
 
+// ── 10ز. الفريلانسرز (المرحلة ٧) ────────────────────────────
+
+// السجل يفتح بألف اسم — واختبار ٢١ يقيس البحث بينهم
+const flListStart = Date.now();
+await go('/freelancers', '17-freelancers');
+const flListMs = Date.now() - flListStart;
+check(await waitForText('الفريلانسرز'), 'سجل الفريلانسرز يفتح');
+check(
+  flListMs <= 3000,
+  `سجل ١٠٠٠ فريلانسر يفتح في ${flListMs} ملّي ثانية`
+);
+
+// «لم يُتفق» لا «مجانًا»: من بلا سعر لا يظهر صفرًا
+check(
+  await waitForText('لم يُتفق'),
+  'من بلا سعر مسجَّل يظهر «لم يُتفق» لا صفرًا (§١٤)'
+);
+
+// إنشاء فريلانسر من الشاشة — نستخدمه في الإسناد بعد قليل
+const FL_NAME = `مترجم اختبار ${RUN}`;
+await go('/freelancers/new');
+await page.fill('#name', FL_NAME);
+await page.fill('#phone', '0128' + String(Date.now()).slice(-7));
+await page.check('input[name=langs][value=ar]');
+await page.check('input[name=langs][value=en]');
+await page.check('input[name=specialisations][value=legal]');
+await page.fill('#defaultRate', '40');
+await page.selectOption('#tier', 'approved');
+await page.fill('#rating', '9');
+await submit();
+await page.waitForURL(/\/freelancers\/(?!new|import|payments)[a-z0-9]+$/, { timeout: 20000 });
+await page.waitForLoadState('networkidle');
+check(await waitForText('FL-'), 'الفريلانسر حصل على معرّف تسلسلي');
+check(await waitForText(FL_NAME), 'ملف الفريلانسر يفتح ببياناته');
+
+// بند سعر استثنائي — أدقّ تطابق يفوز
+await page.selectOption('select[name=langFrom]', 'ar');
+await page.selectOption('select[name=langTo]', 'en');
+await page.selectOption('select[name=serviceLine]', 'legal');
+await page.fill('input[name=rate]', '55');
+await page.click('main form button[type=submit]:has-text("إضافة بند سعر")');
+await page.waitForLoadState('networkidle');
+check(await waitForText('55'), 'بند سعر استثنائي يُضاف لملف الفريلانسر');
+
+// ── الاستيراد: أنماط المصدر الحقيقية ────────────────────────
+const IMPORT_TAG = RUN;
+await go('/freelancers/import', '18-freelancer-import');
+await page.selectOption('#defaultLang', 'fr');
+await page.selectOption('#defaultTier', 'bench');
+await page.fill(
+  '#rows',
+  [
+    'Name\t\t\t\t', // صف رؤوس — يجب أن يُستبعَد
+    `Dr. Claire ${IMPORT_TAG}\t01115550001\t350 Tr - 250 Re\t7/10\t`,
+    `Pierre ${IMPORT_TAG}\t01115550002\t0\t\t`, // صفر = لم يُتفق
+    `Marie ${IMPORT_TAG}\t01115550003\t150-350\t\t`, // نطاق ← يُعلَّم
+    `Luc ${IMPORT_TAG}\t01115550004\t13 E\t\tluc@mail.com`, // يورو
+  ].join('\n')
+);
+await page.click('main form button[type=submit]:has-text("استيراد")');
+await page.waitForLoadState('networkidle');
+
+check(await waitForText('تم الاستيراد'), 'الاستيراد الجماعي ينفَّذ ويعرض حصيلته');
+const importStats = await page.evaluate(() => {
+  const items = [...document.querySelectorAll('li')].map((li) => li.innerText.trim());
+  const pick = (word) => {
+    const row = items.find((t) => t.includes(word));
+    const m = row?.match(/\d+/);
+    return m ? Number(m[0]) : null;
+  };
+  return {
+    created: pick('سجلًا جديدًا'),
+    skipped: pick('استُبعد'),
+    flagged: pick('مراجعة يدوية'),
+  };
+});
+check(importStats.created === 4, `أربعة أسماء حقيقية استُوردت (${importStats.created})`);
+check(
+  importStats.skipped === 1,
+  `صف الرؤوس «Name» استُبعد ولم يصر شخصًا (${importStats.skipped})`
+);
+check(
+  importStats.flagged >= 1,
+  `ما لم يُحسم عُلِّم للمراجعة اليدوية (${importStats.flagged}) — لا حذف ولا تخمين`
+);
+
+// اللقب حُذف من المقدمة
+await go(`/freelancers?q=Claire ${IMPORT_TAG}`);
+check(
+  (await page.locator('table tbody tr').count()) === 1 &&
+    !(await page.content()).includes(`Dr. Claire ${IMPORT_TAG}`),
+  'اللقب «Dr.» حُذف من مقدمة الاسم عند الاستيراد'
+);
+
+// الصفر «لم يُتفق»: بيير بلا سعر
+await go(`/freelancers?q=Pierre ${IMPORT_TAG}`);
+check(
+  await waitForText('لم يُتفق'),
+  'خلية السعر «0» تعني «لم يُتفق» فلا تُخزَّن صفرًا'
+);
+
+// ── محرّك الاختيار: البحث بين ألف اسم في المتصفح ────────────
+// نُنشئ مشروعًا جديدًا لنُسنده خارجيًا
+await go('/leads/new');
+await page.fill('#phone', '015' + String(Date.now()).slice(-8));
+await page.fill('#firstName', 'إسناد خارجي ' + RUN);
+await page.selectOption('#channel', { index: 1 });
+await submit();
+await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
+
+await page.click('a[href$="/convert"]');
+await page.waitForURL(/\/convert$/, { timeout: 15000 });
+await page.selectOption('#serviceLine', 'legal');
+await page.selectOption('#sourceLang', 'ar');
+await page.selectOption('#targetLang', 'en');
+await page.fill('#pages', '12');
+await submit();
+await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+const extProjectId = page.url().split('/').pop();
+
+await go(`/projects/${extProjectId}/assign`, '19-assign-with-freelancer');
+
+// اختبار ٢١: البحث بالاسم **بلا نداء للخادم** — نقيس زمن الترشيح
+await page.selectOption('#workMode', 'human_full');
+await page.click('label:has-text("تشغيل خارجي")');
+await page.waitForSelector('#primaryFreelancerId-search', { timeout: 10000 });
+
+let pickerRequests = 0;
+const countPickerCalls = (req) => {
+  if (req.url().includes('/freelancers') || req.url().includes('/api/freelancer')) {
+    pickerRequests += 1;
+  }
+};
+page.on('request', countPickerCalls);
+
+const searchStart = Date.now();
+await page.fill('#primaryFreelancerId-search', FL_NAME.slice(0, 12));
+await page.waitForFunction(
+  (name) => {
+    const box = document.querySelector('[data-testid=primaryFreelancerId-results]');
+    return Boolean(box && box.textContent && box.textContent.includes(name));
+  },
+  FL_NAME,
+  { timeout: 5000 }
+);
+const searchMs = Date.now() - searchStart;
+page.off('request', countPickerCalls);
+
+check(
+  searchMs <= 300,
+  `اختبار ٢١: البحث بين ١٠٠٠ اسم في ${searchMs} ملّي ثانية (المعيار ≤٣٠٠)`
+);
+check(
+  pickerRequests === 0,
+  `لا نداء للخادم عند كل حرف — الفهرس محمَّل مرة واحدة (${pickerRequests} نداء)`
+);
+
+// الافتراضي: المعتمدون وحدهم
+const allButton = await page.locator('button:has-text("عرض الكل")').first().innerText();
+check(
+  allButton.includes('1001') || /\d{3,}/.test(allButton),
+  `الافتراضي المعتمدون وزر واحد يكشف الباقي — «${allButton.trim()}»`
+);
+
+// نختاره فيُجلب سعره تلقائيًا
+await page.click(`[data-testid=primaryFreelancerId-results] button:has-text("${FL_NAME}")`);
+check(
+  (await page.locator('[data-testid=primaryFreelancerId-chosen]').count()) > 0,
+  'اختيار الفريلانسر يثبّته في النموذج'
+);
+
+await submit();
+await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
+await page.waitForLoadState('networkidle');
+check(await waitForText('قيد التنفيذ'), 'الإسناد لفريلانسر ينقل المشروع إلى «قيد التنفيذ»');
+check(
+  await waitForText(FL_NAME),
+  'اسم الفريلانسر يظهر على المشروع بعد الإسناد'
+);
+
+// ── خطوة لفريلانسر تُنشئ سطر استحقاق تلقائيًا ───────────────
+await page.locator('summary:has-text("خطوات التنفيذ")').first().click();
+await page.selectOption('select[name=stepType]', 'human_translation');
+await page.selectOption('select[name=costSource]', 'external');
+await page.fill('input[name=pages]', '12');
+await page.fill('#freelancerId-search', FL_NAME.slice(0, 12));
+await page.waitForSelector(`[data-testid=freelancerId-results] button:has-text("${FL_NAME}")`, {
+  timeout: 5000,
+});
+await page.click(`[data-testid=freelancerId-results] button:has-text("${FL_NAME}")`);
+await page.click('main details form button[type=submit]');
+await page.waitForLoadState('networkidle');
+check(
+  await waitForText('صفحة موزونة'),
+  'خطوة منفَّذة بفريلانسر تُحفظ بصفحاتها الموزونة'
+);
+
+await go('/freelancers/payments', '20-freelancer-payments');
+check(
+  await waitForText(FL_NAME),
+  '**سطر الاستحقاق يُنشأ تلقائيًا عند الإسناد** لا عند التسليم (§١١ بند ٨)'
+);
+// السعر الخاص بالزوج ar→en/legal هو ٥٥ لا الافتراضي ٤٠: ١٢ صفحة × ٥٥ = ٦٦٠
+check(
+  await waitForText('660'),
+  'الأجر جاء من **بند السعر الخاص** بهذا الزوج (١٢ × ٥٥) لا من السعر الافتراضي'
+);
+
+// تأكيد الصرف يوقّع بمن صرف ولا يحذف السطر
+await page.fill('input[name=reference]', `TRX-${RUN}`);
+await page.click('main button:has-text("تأكيد الإرسال")');
+await page.waitForLoadState('networkidle');
+check(await waitForText('تم'), 'تأكيد الصرف يُسجَّل');
+
+await go('/freelancers/payments?status=paid');
+check(
+  await waitForText('مدفوع') && (await waitForText(FL_NAME)),
+  'المستحق المصروف يبقى في السجل بحاله الجديد — لا حذف (§٣ بند ٥)'
+);
+
 // ── 10و. نسب المبيعات (المرحلة ٦) ───────────────────────────
 
 /** يقرأ قيمة بطاقة إحصائية باسم عنوانها — الأرقام بفواصل ورمز عملة */
