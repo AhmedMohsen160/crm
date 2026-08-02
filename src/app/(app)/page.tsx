@@ -60,7 +60,7 @@ export default async function DashboardPage() {
       select: { amount: true, currency: true },
     }),
     db.lead.count({
-      where: { ...mine, status: { notIn: ['CONVERTED', 'UNQUALIFIED'] } },
+      where: { ...mine, status: { notIn: ['WON', 'LOST'] } },
     }),
     db.task.count({ where: { ...myTasks, status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
     // المهام المتأخرة

@@ -57,7 +57,7 @@ export default async function NewTaskPage({
     pinned
       ? Promise.resolve([])
       : db.lead.findMany({
-          where: { status: { not: 'CONVERTED' } },
+          where: { status: { notIn: ['WON', 'LOST'] } },
           select: { id: true, firstName: true, lastName: true },
           orderBy: { createdAt: 'desc' },
           take: 300,

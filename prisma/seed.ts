@@ -9,8 +9,11 @@
  */
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { normalizePhone } from '../src/lib/phone';
+import { yearMonth } from '../src/lib/sequence-keys';
 
 const db = new PrismaClient();
+const period = yearMonth();
 
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@fasttrans.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
@@ -178,69 +181,120 @@ async function main() {
   });
   console.log('✓ 3 جهات اتصال');
 
-  // ── العملاء المحتملون ───────────────────────────────────────
-  await db.lead.createMany({
-    data: [
-      {
-        firstName: 'منى',
-        lastName: 'الشريف',
-        companyName: 'شركة الأمل للمقاولات',
-        email: 'mona@alamal-const.com',
-        phone: '+20 155 666 7777',
-        source: 'الموقع الإلكتروني',
-        status: 'NEW',
-        serviceInterest: 'ترجمة قانونية',
-        sourceLang: 'العربية',
-        targetLang: 'الإنجليزية',
-        estimatedValue: 8500,
-        notes: 'تحتاج ترجمة عقود مقاولات — حوالي 40 صفحة.',
-        ownerId: agent.id,
+  // ── العملاء والليدز ─────────────────────────────────────────
+  // كل ليد يمرّ بالمسار الحقيقي: عميل بهاتف مطبَّع أولًا، ثم ليد مربوط به.
+  const demoLeads = [
+    {
+      firstName: 'منى',
+      lastName: 'الشريف',
+      companyName: 'شركة الأمل للمقاولات',
+      email: 'mona@alamal-const.com',
+      phone: '01556667777',
+      channel: 'website',
+      contactMethod: 'whatsapp',
+      status: 'NEW',
+      serviceInterest: 'legal',
+      sourceLang: 'ar',
+      targetLang: 'en',
+      estPages: 40,
+      estimatedValue: 8500,
+      notes: 'تحتاج ترجمة عقود مقاولات — حوالي 40 صفحة.',
+      branch: 'mokattam',
+      ownerId: agent.id,
+    },
+    {
+      firstName: 'عمر',
+      lastName: 'فاروق',
+      companyName: 'أكاديمية المستقبل',
+      email: 'omar@future-academy.edu.eg',
+      phone: '01112223333',
+      channel: 'referral',
+      contactMethod: 'call',
+      status: 'CONTACTED',
+      serviceInterest: 'marketing',
+      sourceLang: 'en',
+      targetLang: 'ar',
+      estimatedValue: 22000,
+      notes: 'توطين منصة تعليمية كاملة. اجتماع مبدئي تم.',
+      branch: 'mokattam',
+      ownerId: manager.id,
+    },
+    {
+      firstName: 'Sophie Martin',
+      lastName: null,
+      companyName: 'TravelWise Tours',
+      email: 'sophie@travelwise.fr',
+      phone: '01098765432',
+      channel: 'organic',
+      contactMethod: 'email',
+      status: 'NEGOTIATION',
+      serviceInterest: 'technical',
+      sourceLang: 'fr',
+      targetLang: 'ar',
+      estimatedValue: 15000,
+      notes: 'ترجمة دليل سياحي + موقع إلكتروني.',
+      branch: 'mohandessin',
+      ownerId: admin.id,
+    },
+    {
+      firstName: 'يوسف الغامدي',
+      lastName: null,
+      companyName: 'مجموعة الرياض الطبية',
+      email: null,
+      phone: '966501234567',
+      channel: 'walk_in',
+      contactMethod: 'office',
+      status: 'NEW',
+      serviceInterest: 'medical',
+      sourceLang: 'en',
+      targetLang: 'ar',
+      estimatedValue: 30000,
+      notes: null,
+      branch: 'riyadh',
+      ownerId: agent.id,
+    },
+  ];
+
+  for (const [index, item] of demoLeads.entries()) {
+    const normalized = normalizePhone(item.phone);
+    const client = await db.client.upsert({
+      where: { phoneNormalized: normalized.value },
+      update: {},
+      create: {
+        code: `CL-${String(index + 1).padStart(5, '0')}`,
+        name: item.firstName,
+        phone: item.phone,
+        phoneNormalized: normalized.value,
+        email: item.email,
+        type: item.companyName ? 'company' : 'individual',
+        companyName: item.companyName,
+        firstBranch: item.branch,
+        createdById: item.ownerId,
+        ownerId: item.ownerId,
       },
-      {
-        firstName: 'عمر',
-        lastName: 'فاروق',
-        companyName: 'أكاديمية المستقبل',
-        email: 'omar@future-academy.edu.eg',
-        phone: '+20 111 222 3333',
-        source: 'توصية عميل',
-        status: 'CONTACTED',
-        serviceInterest: 'توطين محتوى',
-        sourceLang: 'الإنجليزية',
-        targetLang: 'العربية',
-        estimatedValue: 22000,
-        notes: 'توطين منصة تعليمية كاملة. اجتماع مبدئي تم.',
-        ownerId: manager.id,
+    });
+
+    await db.lead.create({
+      data: {
+        ...item,
+        code: `LD-${period}-${String(index + 1).padStart(4, '0')}`,
+        clientId: client.id,
+        firstReplyAt: item.status === 'NEW' ? null : new Date(),
       },
-      {
-        firstName: 'Sophie',
-        lastName: 'Martin',
-        companyName: 'TravelWise Tours',
-        email: 'sophie@travelwise.fr',
-        source: 'لينكدإن',
-        status: 'QUALIFIED',
-        serviceInterest: 'ترجمة تقنية',
-        sourceLang: 'الفرنسية',
-        targetLang: 'العربية',
-        estimatedValue: 15000,
-        notes: 'ترجمة دليل سياحي + موقع إلكتروني.',
-        ownerId: admin.id,
-      },
-      {
-        firstName: 'يوسف',
-        lastName: 'الغامدي',
-        companyName: 'مجموعة الرياض الطبية',
-        phone: '+966 50 123 4567',
-        source: 'معرض / فعالية',
-        status: 'NEW',
-        serviceInterest: 'ترجمة طبية',
-        sourceLang: 'الإنجليزية',
-        targetLang: 'العربية',
-        estimatedValue: 30000,
-        ownerId: agent.id,
-      },
-    ],
+    });
+  }
+  // العدّادات تلحق بما زرعناه، وإلا اصطدم أول سجل يُنشأ من الشاشة بمعرّف موجود
+  await db.counter.upsert({
+    where: { key: 'client' },
+    update: { value: demoLeads.length },
+    create: { key: 'client', value: demoLeads.length },
   });
-  console.log('✓ 4 عملاء محتملين');
+  await db.counter.upsert({
+    where: { key: `lead-${period}` },
+    update: { value: demoLeads.length },
+    create: { key: `lead-${period}`, value: demoLeads.length },
+  });
+  console.log('✓ 4 عملاء و4 ليدز');
 
   // ── الصفقات ─────────────────────────────────────────────────
   const deal1 = await db.deal.create({

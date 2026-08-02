@@ -5,6 +5,7 @@ import {
   MutationError,
   saveLead,
   convertLead,
+  saveClient,
   saveCompany,
   saveContact,
   saveDeal,
@@ -22,7 +23,7 @@ import {
  *
  * النموذج يرسل الحقول عاديًا مع:
  *   entity : نوع السجل (lead | company | contact | deal | task | quote |
- *            user | role | listItem | settings | password)
+ *            client | user | role | listItem | settings | password)
  *   id     : فارغ عند الإنشاء، ويحمل المعرّف عند التعديل
  *   back   : الصفحة التي نعود إليها عند وجود خطأ
  *
@@ -47,6 +48,9 @@ export async function POST(request: NextRequest) {
       case 'lead.convert':
         if (!id) throw new MutationError('معرّف العميل المحتمل مفقود');
         destination = await convertLead(fd, user, id);
+        break;
+      case 'client':
+        destination = await saveClient(fd, user, id);
         break;
       case 'company':
         destination = await saveCompany(fd, user, id);

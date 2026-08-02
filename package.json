@@ -17,7 +17,8 @@
     "prebuild": "node scripts/db-provider.mjs",
     "db:deploy": "node scripts/db-provider.mjs && prisma generate && prisma db push --accept-data-loss",
     "vercel-build": "node scripts/db-provider.mjs && prisma generate && prisma db push --skip-generate --accept-data-loss && tsx scripts/bootstrap.ts && next build",
-    "bootstrap": "node scripts/db-provider.mjs && prisma generate && tsx scripts/bootstrap.ts"
+    "bootstrap": "node scripts/db-provider.mjs && prisma generate && tsx scripts/bootstrap.ts",
+    "test:phone": "tsx tests/phone.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",

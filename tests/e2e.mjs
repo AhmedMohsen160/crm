@@ -93,24 +93,110 @@ for (const [p, n] of [
   ['/quotes', null],
   ['/settings', null],
   ['/settings/users', '06-users'],
+  ['/clients', '02b-clients'],
 ]) {
   if ((await go(p, n)) !== 200) allOk = false;
 }
-check(allOk, 'كل الأقسام تفتح بنجاح (10 صفحات)');
+check(allOk, 'كل الأقسام تفتح بنجاح (11 صفحة)');
 
-// ── 3. إنشاء عميل محتمل ─────────────────────────────────────
+// ── 3. ليد جديد — الهاتف أولًا، والمعيار ≤١٥ ثانية ───────────
+// رقم فريد لكل تشغيل، بصيغة محلية ليختبر التطبيع أيضًا
+const TEST_DIGITS = String(Date.now()).slice(-9);
+const TEST_PHONE = '01' + TEST_DIGITS;
+
 await go('/leads/new');
-await page.fill('#firstName', 'اختبار');
-await page.fill('#lastName', RUN);
-await page.fill('#companyName', 'شركة الاختبار ' + RUN);
-await page.fill('#email', 'test@example.com');
-await page.selectOption('#serviceInterest', 'ترجمة معتمدة');
-await page.fill('#estimatedValue', '5000');
+const leadStart = Date.now();
+await page.fill('#phone', TEST_PHONE);
+await page.fill('#firstName', 'اختبار ' + RUN);
+await page.selectOption('#channel', { index: 1 });
+await page.selectOption('#contactMethod', { index: 1 });
+await submit();
+await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
+const leadSeconds = (Date.now() - leadStart) / 1000;
+await page.waitForLoadState('networkidle');
+check(
+  leadSeconds <= 15,
+  `ليد جديد بأربعة حقول في ${leadSeconds.toFixed(1)} ثانية (المعيار ≤١٥)`
+);
+await page.screenshot({ path: `${shots}/07-lead-detail.png`, fullPage: true });
+
+// معرّف تسلسلي بصيغة LD-YYMM-0001
+check(await waitForText('LD-'), 'الليد حصل على معرّف تسلسلي');
+
+// ── 3ب. اختبار ٢٠: عميل عائد بنفس الهاتف لا يُنشئ عميلًا ثانيًا ──
+// نكتب الرقم بصيغة دولية مختلفة تمامًا — التطبيع يجب أن يوحّدهما
+const clientsBefore = await page
+  .goto('http://localhost:3000/clients?q=' + encodeURIComponent(TEST_PHONE), {
+    waitUntil: 'networkidle',
+  })
+  .then(() => page.locator('table tbody tr').count());
+
+await go('/leads/new');
+await page.fill('#phone', '+20 1' + TEST_DIGITS.slice(0, 1) + ' ' + TEST_DIGITS.slice(1));
+// ننتظر ظهور بطاقة العميل الموجود — هذا هو البحث الفوري بالهاتف
+const recognised = await page
+  .waitForSelector('[data-testid=client-found]', { timeout: 10000 })
+  .then(() => true)
+  .catch(() => false);
+check(recognised, 'البحث الفوري بالهاتف تعرّف على العميل رغم اختلاف صيغة كتابته');
+
+await page.fill('#firstName', 'ليد ثانٍ ' + RUN);
+await page.selectOption('#channel', { index: 1 });
+await submit();
+await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
+
+await page.goto('http://localhost:3000/clients?q=' + encodeURIComponent(TEST_PHONE), {
+  waitUntil: 'networkidle',
+});
+const clientsAfter = await page.locator('table tbody tr').count();
+check(
+  clientsAfter === clientsBefore && clientsAfter === 1,
+  `لا عميل مكرر: ${clientsBefore} قبل و${clientsAfter} بعد ليد ثانٍ بنفس الرقم (اختبار ٢٠)`
+);
+
+// ── 3ج. اختبار ٢١: سرعة البحث بالهاتف ≤٣٠٠ ملّي ثانية ────────
+const lookupStart = Date.now();
+const lookup = await page.evaluate(
+  async (phone) => {
+    const res = await fetch('/api/clients/lookup?phone=' + encodeURIComponent(phone));
+    return res.json();
+  },
+  TEST_PHONE
+);
+const lookupMs = Date.now() - lookupStart;
+check(
+  lookup.found === true && lookupMs <= 300,
+  `بحث العميل بالهاتف في ${lookupMs} ملّي ثانية (المعيار ≤٣٠٠)`
+);
+
+// ── 3د. سبب الخسارة إلزامي عند «خاسر» ───────────────────────
+await go('/leads');
+await page.click('table tbody tr:first-child a[href^="/leads/"]');
+await page.waitForLoadState('networkidle');
+const leadUrl = page.url();
+await page.goto(leadUrl + '/edit', { waitUntil: 'networkidle' });
+await page.selectOption('#status', 'LOST');
+await submit();
+await page.waitForLoadState('networkidle');
+const blocked = page.url().includes('error=') || (await waitForText('سبب الخسارة', 5000));
+check(blocked, 'لا يُحفظ ليد خاسر بلا سبب خسارة (§4.2)');
+
+// نكمل بالسبب فيُحفظ
+await page.goto(leadUrl + '/edit', { waitUntil: 'networkidle' });
+await page.selectOption('#status', 'LOST');
+await page.selectOption('#lossReason', { index: 1 });
+await submit();
+await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
+check(await waitForText('ليد خاسر'), 'الليد الخاسر يُحفظ مع سببه ويظهر السبب');
+
+// ── 3هـ. ليد للتحويل ────────────────────────────────────────
+await go('/leads/new');
+await page.fill('#phone', '011' + String(Date.now()).slice(-8));
+await page.fill('#firstName', 'تحويل ' + RUN);
+await page.selectOption('#channel', { index: 1 });
 await submit();
 await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
 await page.waitForLoadState('networkidle');
-check(true, 'إنشاء عميل محتمل');
-await page.screenshot({ path: `${shots}/07-lead-detail.png`, fullPage: true });
 
 // ── 4. تحويله إلى صفقة ──────────────────────────────────────
 await page.click('a[href$="/convert"]');
@@ -191,9 +277,9 @@ check((await page.locator(`td a:has-text("${RUN}")`).count()) > 0, 'البحث �
 
 // الفلترة بقائمة منسدلة تُطبَّق فور الاختيار
 await go('/leads');
-await page.selectOption('select[name=source]', 'لينكدإن');
+await page.selectOption('select[name=channel]', { index: 1 });
 const filtered = await page
-  .waitForURL(/source=/, { timeout: 10000 })
+  .waitForURL(/channel=/, { timeout: 10000 })
   .then(() => true)
   .catch(() => false);
 check(filtered, 'الفلترة بقائمة منسدلة تُطبَّق فورًا');

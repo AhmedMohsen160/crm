@@ -51,6 +51,9 @@ jobs:
       - name: فحص الأنواع (TypeScript)
         run: npx tsc --noEmit
 
+      - name: اختبار قاعدة تطبيع الهاتف (§١٤)
+        run: npm run test:phone
+
       - name: تجهيز قاعدة البيانات
         run: npm run db:deploy
 

@@ -36,23 +36,45 @@ export const STAGE_DEFAULT_PROBABILITY: Record<DealStage, number> = {
   LOST: 0,
 };
 
-// ── حالات العميل المحتمل ───────────────────────────────────────
+// ── مراحل الليد — §4.2 من المواصفة ─────────────────────────────
+// جديد ← تم التواصل ← عرض سعر ← تفاوض ← فائز / خاسر
 export const LEAD_STATUSES = {
   NEW: 'جديد',
   CONTACTED: 'تم التواصل',
-  QUALIFIED: 'مؤهَّل',
-  UNQUALIFIED: 'غير مؤهَّل',
-  CONVERTED: 'تم تحويله',
+  QUOTED: 'عرض سعر',
+  NEGOTIATION: 'تفاوض',
+  WON: 'فائز',
+  LOST: 'خاسر',
 } as const;
 export type LeadStatus = keyof typeof LEAD_STATUSES;
+
+export const LEAD_STATUS_ORDER: LeadStatus[] = [
+  'NEW',
+  'CONTACTED',
+  'QUOTED',
+  'NEGOTIATION',
+  'WON',
+  'LOST',
+];
+
+/** المراحل التي تُغلق الليد — تبصم closedAt */
+export const LEAD_CLOSED_STATUSES: LeadStatus[] = ['WON', 'LOST'];
 
 export const LEAD_STATUS_COLORS: Record<LeadStatus, string> = {
   NEW: 'bg-slate-100 text-slate-700 border-slate-300',
   CONTACTED: 'bg-blue-100 text-blue-700 border-blue-300',
-  QUALIFIED: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-  UNQUALIFIED: 'bg-rose-100 text-rose-700 border-rose-300',
-  CONVERTED: 'bg-violet-100 text-violet-700 border-violet-300',
+  QUOTED: 'bg-sky-100 text-sky-700 border-sky-300',
+  NEGOTIATION: 'bg-amber-100 text-amber-800 border-amber-300',
+  WON: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  LOST: 'bg-rose-100 text-rose-700 border-rose-300',
 };
+
+/** أنواع العميل */
+export const CLIENT_TYPES = {
+  individual: 'فرد',
+  company: 'شركة',
+} as const;
+export type ClientType = keyof typeof CLIENT_TYPES;
 
 // ── المهام ─────────────────────────────────────────────────────
 export const TASK_STATUSES = {

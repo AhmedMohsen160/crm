@@ -1,9 +1,11 @@
 import { db } from '@/lib/db';
-import { requireUser, can, ownerFilter } from '@/lib/auth';
+import { requireUser, can } from '@/lib/auth';
+import { listOptionsMany } from '@/lib/reference';
 import { PageHeader, ErrorAlert } from '@/components/ui';
-import LeadForm from '@/components/lead-form';
+import LeadForm, { type LeadFormLists } from '@/components/lead-form';
 
-export const metadata = { title: 'عميل محتمل جديد' };
+export const metadata = { title: 'ليد جديد' };
+export const dynamic = 'force-dynamic';
 
 export default async function NewLeadPage({
   searchParams,
@@ -14,24 +16,24 @@ export default async function NewLeadPage({
   const user = await requireUser();
   const seeAll = can(user, 'canViewAllLeads');
 
-  const users = seeAll
-    ? await db.user.findMany({
-        where: { active: true },
-        select: { id: true, name: true },
-        orderBy: { name: 'asc' },
-      })
-    : [];
+  const [lists, users] = await Promise.all([
+    listOptionsMany('channel', 'contact_method', 'service_line', 'language', 'loss_reason'),
+    seeAll
+      ? db.user.findMany({
+          where: { active: true },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        })
+      : Promise.resolve([] as { id: string; name: string }[]),
+  ]);
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader
-        title="عميل محتمل جديد"
-        subtitle="سجّل بيانات العميل الذي تواصل معك للمرة الأولى"
-      />
-      <ErrorAlert message={error} />
+    <div className="mx-auto max-w-3xl">
+      <PageHeader title="ليد جديد" subtitle="ابدأ بالهاتف — سيبحث في العملاء تلقائيًا" />
       <ErrorAlert message={error} />
       <LeadForm
         backPath="/leads/new"
+        lists={lists as LeadFormLists}
         users={users}
         currentUserId={user.id}
         canAssign={seeAll}

@@ -17,6 +17,8 @@ import bcrypt from 'bcryptjs';
 import { DEFAULT_ROLES, PERMISSION_KEYS } from '../src/lib/permissions';
 import { LIST_DEFINITIONS } from '../src/lib/lists';
 import { SETTING_DEFINITIONS } from '../src/lib/settings-defs';
+import { normalizePhone } from '../src/lib/phone';
+import { yearMonth } from '../src/lib/sequence-keys';
 
 const db = new PrismaClient();
 
@@ -248,6 +250,146 @@ async function seedFoundingTeam() {
   );
 }
 
+/**
+ * ترحيل مراحل الليد القديمة إلى مراحل §4.2 الست.
+ * يُنفَّذ مرة واحدة عمليًا: بعد أول تشغيل لا يبقى صف بالقيم القديمة.
+ */
+async function migrateLeadStages() {
+  const mapping: Record<string, string> = {
+    QUALIFIED: 'NEGOTIATION',
+    UNQUALIFIED: 'LOST',
+    CONVERTED: 'WON',
+  };
+
+  let moved = 0;
+  for (const [from, to] of Object.entries(mapping)) {
+    const result = await db.lead.updateMany({ where: { status: from }, data: { status: to } });
+    moved += result.count;
+  }
+
+  // الخاسر بلا سبب مخالف للقاعدة الجديدة — نعلّمه بسبب صريح بدل تخمينه
+  const unexplained = await db.lead.updateMany({
+    where: { status: 'LOST', lossReason: null },
+    data: { lossReason: 'other' },
+  });
+
+  if (moved || unexplained.count) {
+    console.log(
+      `  ✓ ترحيل المراحل: ${moved} ليد نُقل، ${unexplained.count} خاسر بلا سبب عُلّم بـ«أخرى»`
+    );
+  }
+}
+
+/**
+ * يملأ المعرّفات التسلسلية للسجلات التي سبقت وجودها، ويُنشئ عميلًا لكل ليد
+ * بلا عميل. بلا هذا تبقى سجلات قديمة بلا رقم ولا بطاقة عميل.
+ */
+async function backfillCodes() {
+  // ١) عملاء بلا كود
+  const codelessClients = await db.client.findMany({
+    where: { code: null },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  let clientSeq =
+    (await db.counter.findUnique({ where: { key: 'client' } }))?.value ??
+    (await db.client.count({ where: { NOT: { code: null } } }));
+
+  for (const client of codelessClients) {
+    clientSeq++;
+    await db.client.update({
+      where: { id: client.id },
+      data: { code: `CL-${String(clientSeq).padStart(5, '0')}` },
+    });
+  }
+  if (codelessClients.length) {
+    await db.counter.upsert({
+      where: { key: 'client' },
+      update: { value: clientSeq },
+      create: { key: 'client', value: clientSeq },
+    });
+  }
+
+  // ٢) ليدز بلا عميل — يُنشأ لها عميل من هاتفها، أو تُربط بالموجود
+  const clientless = await db.lead.findMany({
+    where: { clientId: null },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  let created = 0;
+  for (const lead of clientless) {
+    const normalized = normalizePhone(lead.phone);
+    if (!normalized.ok) continue; // بلا هاتف صالح لا مفتاح — يُترك للمراجعة اليدوية
+
+    let client = await db.client.findUnique({
+      where: { phoneNormalized: normalized.value },
+      select: { id: true },
+    });
+    if (!client) {
+      clientSeq++;
+      client = await db.client.create({
+        data: {
+          code: `CL-${String(clientSeq).padStart(5, '0')}`,
+          name: [lead.firstName, lead.lastName].filter(Boolean).join(' '),
+          phone: lead.phone ?? normalized.value,
+          phoneNormalized: normalized.value,
+          email: lead.email,
+          type: lead.companyName ? 'company' : 'individual',
+          companyName: lead.companyName,
+          firstBranch: lead.branch,
+          ownerId: lead.ownerId,
+          createdById: lead.ownerId,
+        },
+        select: { id: true },
+      });
+      created++;
+    }
+    await db.lead.update({ where: { id: lead.id }, data: { clientId: client.id } });
+  }
+  if (created) {
+    await db.counter.upsert({
+      where: { key: 'client' },
+      update: { value: clientSeq },
+      create: { key: 'client', value: clientSeq },
+    });
+  }
+
+  // ٣) ليدز بلا كود — العدّاد يُرقَّم بشهر إنشاء الليد نفسه لا شهر التشغيل
+  const codelessLeads = await db.lead.findMany({
+    where: { code: null },
+    select: { id: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const perMonth = new Map<string, number>();
+  for (const lead of codelessLeads) {
+    const period = yearMonth(lead.createdAt);
+    if (!perMonth.has(period)) {
+      const counter = await db.counter.findUnique({ where: { key: `lead-${period}` } });
+      perMonth.set(period, counter?.value ?? 0);
+    }
+    const next = (perMonth.get(period) ?? 0) + 1;
+    perMonth.set(period, next);
+    await db.lead.update({
+      where: { id: lead.id },
+      data: { code: `LD-${period}-${String(next).padStart(4, '0')}` },
+    });
+  }
+  for (const [period, value] of perMonth) {
+    await db.counter.upsert({
+      where: { key: `lead-${period}` },
+      update: { value },
+      create: { key: `lead-${period}`, value },
+    });
+  }
+
+  if (codelessClients.length || created || codelessLeads.length) {
+    console.log(
+      `  ✓ استكمال المعرّفات: ${codelessClients.length} عميل، ${created} عميل مُستخرج من ليدز، ${codelessLeads.length} ليد`
+    );
+  }
+}
+
 async function main() {
   console.log('🌱 تجهيز الأساس...');
   await seedRoles();
@@ -255,6 +397,8 @@ async function main() {
   await seedSettings();
   await seedAdmin();
   await seedFoundingTeam();
+  await migrateLeadStages();
+  await backfillCodes();
   console.log('✅ اكتمل التجهيز');
 }
 

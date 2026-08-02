@@ -8,6 +8,7 @@ import {
   UserPlus,
   Building2,
   Users,
+  Contact,
   Handshake,
   ListChecks,
   FileText,
@@ -26,6 +27,7 @@ const COMPANY_AR = process.env.NEXT_PUBLIC_COMPANY_NAME_AR || 'نظام إدار
 const NAV = [
   { href: '/', label: 'لوحة التحكم', icon: LayoutDashboard, exact: true },
   { href: '/leads', label: 'العملاء المحتملون', icon: UserPlus },
+  { href: '/clients', label: 'العملاء', icon: Contact },
   { href: '/companies', label: 'الشركات', icon: Building2 },
   { href: '/contacts', label: 'جهات الاتصال', icon: Users },
   { href: '/deals', label: 'الصفقات', icon: Handshake },

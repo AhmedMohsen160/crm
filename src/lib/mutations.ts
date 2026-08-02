@@ -6,7 +6,17 @@ import { logActivity, readEntityLink, linkPath, type EntityLink } from '@/lib/ac
 import { auditEvent, auditDiff } from '@/lib/audit';
 import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
-import { STAGE_DEFAULT_PROBABILITY, DEAL_STAGES, type DealStage } from '@/lib/constants';
+import { findOrCreateClient } from '@/lib/clients';
+import { normalizePhone } from '@/lib/phone';
+import { nextLeadCode, nextClientCode } from '@/lib/sequence';
+import {
+  STAGE_DEFAULT_PROBABILITY,
+  DEAL_STAGES,
+  LEAD_STATUSES,
+  LEAD_CLOSED_STATUSES,
+  type DealStage,
+  type LeadStatus,
+} from '@/lib/constants';
 
 /**
  * كل عمليات الحفظ في النظام.
@@ -37,31 +47,92 @@ function readLead(fd: FormData) {
     companyName: str(fd, 'companyName'),
     email: str(fd, 'email'),
     phone: str(fd, 'phone'),
-    source: str(fd, 'source'),
+    channel: str(fd, 'channel'),
+    contactMethod: str(fd, 'contactMethod'),
     status: str(fd, 'status') ?? 'NEW',
     serviceInterest: str(fd, 'serviceInterest'),
     sourceLang: str(fd, 'sourceLang'),
     targetLang: str(fd, 'targetLang'),
+    estPages: num(fd, 'estPages'),
     estimatedValue: num(fd, 'estimatedValue'),
+    lossReason: str(fd, 'lossReason'),
     notes: str(fd, 'notes'),
+  };
+}
+
+/**
+ * الطوابع الزمنية المشتقة من المرحلة (§4.2):
+ *   `firstReplyAt` عند **أول** انتقال عن «جديد» — لا يُعاد ضبطه أبدًا،
+ *                   وإلا انهار قياس سرعة الرد.
+ *   `closedAt`      عند الفوز أو الخسارة، ويُمسح إن عاد الليد للحياة.
+ */
+function leadStamps(
+  previousStatus: string | null,
+  nextStatus: string,
+  existing: {
+    firstReplyAt: Date | null;
+    closedAt: Date | null;
+    convertedAt: Date | null;
+  } | null
+) {
+  const now = new Date();
+  const movedOffNew = previousStatus === 'NEW' && nextStatus !== 'NEW';
+  const closed = LEAD_CLOSED_STATUSES.includes(nextStatus as LeadStatus);
+
+  return {
+    firstReplyAt: existing?.firstReplyAt ?? (movedOffNew ? now : null),
+    closedAt: closed ? (existing?.closedAt ?? now) : null,
+    convertedAt: nextStatus === 'WON' ? (existing?.convertedAt ?? now) : null,
   };
 }
 
 export async function saveLead(fd: FormData, user: SessionUser, id?: string) {
   const data = readLead(fd);
   if (!data.firstName) throw new MutationError('اسم العميل مطلوب');
+  if (!data.channel) throw new MutationError('القناة مطلوبة — بلا مصدر لا نعرف ما يعمل');
+
+  // القاعدة الملزمة في §4.2: لا حفظ لليد خاسر بلا سبب. بلا السبب لا يتعلّم
+  // الفريق شيئًا من الخسارة، وهي أهم بيانة في المنظومة كلها.
+  if (data.status === 'LOST' && !data.lossReason) {
+    throw new MutationError('سبب الخسارة إلزامي — اختره من القائمة قبل الحفظ');
+  }
 
   if (!id) {
+    // العميل أولًا: يُربط بالموجود أو يُنشأ. **لا عميل مكرر أبدًا** (§4.1)
+    const phone = data.phone;
+    if (!phone) throw new MutationError('رقم الهاتف مطلوب');
+
+    const client = await findOrCreateClient(
+      {
+        name: data.firstName,
+        phone,
+        email: data.email,
+        type: data.companyName ? 'company' : 'individual',
+        companyName: data.companyName,
+      },
+      user
+    ).catch((error) => {
+      throw new MutationError(error instanceof Error ? error.message : 'تعذّر حفظ العميل');
+    });
+
     const lead = await db.lead.create({
-      data: { ...data, ownerId: str(fd, 'ownerId') ?? user.id },
+      data: {
+        ...data,
+        code: await nextLeadCode(),
+        clientId: client.id,
+        branch: user.branch,
+        ownerId: str(fd, 'ownerId') ?? user.id,
+        ...leadStamps(null, data.status, null),
+      },
     });
     await logActivity({
       type: 'CREATED',
-      title: 'تم إنشاء عميل محتمل',
-      detail: fullName(lead.firstName, lead.lastName),
+      title: client.created ? 'ليد جديد لعميل جديد' : 'ليد جديد لعميل عائد',
+      detail: `${lead.code} — ${fullName(lead.firstName, lead.lastName)}`,
       userId: user.id,
       link: { leadId: lead.id },
     });
+    await auditEvent(user.id, 'create', 'Lead', lead.id, lead.code ?? undefined);
     return `/leads/${lead.id}`;
   }
 
@@ -69,16 +140,22 @@ export async function saveLead(fd: FormData, user: SessionUser, id?: string) {
   if (!existing) throw new MutationError('العميل المحتمل غير موجود');
   requireOwn(existing.ownerId, user, 'ليس لديك صلاحية تعديل هذا السجل');
 
-  await db.lead.update({
-    where: { id },
-    data: { ...data, ownerId: str(fd, 'ownerId') ?? existing.ownerId },
-  });
+  const after = {
+    ...data,
+    ownerId: str(fd, 'ownerId') ?? existing.ownerId,
+    ...leadStamps(existing.status, data.status, existing),
+  };
+
+  await db.lead.update({ where: { id }, data: after });
+  await auditDiff(user.id, 'Lead', id, existing, after);
 
   if (existing.status !== data.status) {
     await logActivity({
       type: 'STATUS_CHANGED',
-      title: 'تغيّرت حالة العميل المحتمل',
-      detail: `${existing.status} ← ${data.status}`,
+      title: 'تغيّرت مرحلة الليد',
+      detail: `${LEAD_STATUSES[existing.status as LeadStatus] ?? existing.status} ← ${
+        LEAD_STATUSES[data.status as LeadStatus] ?? data.status
+      }`,
       userId: user.id,
       link: { leadId: id },
     });
@@ -91,7 +168,7 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
   const lead = await db.lead.findUnique({ where: { id } });
   if (!lead) throw new MutationError('العميل المحتمل غير موجود');
   requireOwn(lead.ownerId, user, 'ليس لديك صلاحية تحويل هذا السجل');
-  if (lead.status === 'CONVERTED') return `/leads/${id}`;
+  if (lead.status === 'WON') return `/leads/${id}`;
 
   const ownerId = lead.ownerId ?? user.id;
 
@@ -137,6 +214,8 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
       description: lead.notes,
       companyId,
       contactId: contact.id,
+      // الصفقة تُنسب للعميل — عليه تقوم بطاقته وتاريخ مشترياته
+      clientId: lead.clientId,
       ownerId,
     },
   });
@@ -145,9 +224,15 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
   await db.task.updateMany({ where: { leadId: id }, data: { dealId: deal.id } });
   await db.note.updateMany({ where: { leadId: id }, data: { dealId: deal.id } });
 
+  const now = new Date();
   await db.lead.update({
     where: { id },
-    data: { status: 'CONVERTED', convertedAt: new Date() },
+    data: {
+      status: 'WON',
+      convertedAt: now,
+      closedAt: now,
+      firstReplyAt: lead.firstReplyAt ?? now,
+    },
   });
 
   await logActivity({
@@ -159,6 +244,79 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
   });
 
   return `/deals/${deal.id}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  العملاء — «لا عميل مكرر أبدًا» (§4.1)
+// ═══════════════════════════════════════════════════════════════
+
+export async function saveClient(fd: FormData, user: SessionUser, id?: string) {
+  const name = str(fd, 'name');
+  const phone = str(fd, 'phone');
+  if (!name) throw new MutationError('اسم العميل مطلوب');
+  if (!phone) throw new MutationError('رقم الهاتف مطلوب');
+
+  const primary = normalizePhone(phone);
+  if (!primary.ok) throw new MutationError(`رقم الهاتف غير صالح: ${primary.reason}`);
+
+  const phoneAlt = str(fd, 'phoneAlt');
+  const alt = phoneAlt ? normalizePhone(phoneAlt) : null;
+  if (phoneAlt && !alt?.ok) throw new MutationError('الهاتف البديل غير صالح');
+
+  const data = {
+    name,
+    phone,
+    phoneNormalized: primary.value,
+    phoneAlt,
+    phoneAltNormalized: alt?.ok ? alt.value : null,
+    email: str(fd, 'email'),
+    type: str(fd, 'type') === 'company' ? 'company' : 'individual',
+    companyName: str(fd, 'companyName'),
+    taxId: str(fd, 'taxId'),
+    country: str(fd, 'country'),
+    city: str(fd, 'city'),
+    notes: str(fd, 'notes'),
+  };
+
+  // القيد الفريد في قاعدة البيانات هو الحارس الحقيقي؛ هذا الفحص يوجد
+  // ليعطي رسالة مفهومة ورابطًا للعميل الموجود بدل خطأ تقني.
+  const clash = await db.client.findUnique({
+    where: { phoneNormalized: primary.value },
+    select: { id: true, code: true, name: true },
+  });
+  if (clash && clash.id !== id) {
+    throw new MutationError(
+      `هذا الرقم مسجَّل بالفعل للعميل «${clash.name}» (${clash.code}) — افتح بطاقته بدل إنشاء عميل جديد`
+    );
+  }
+
+  if (!id) {
+    const client = await db.client.create({
+      data: {
+        ...data,
+        code: await nextClientCode(),
+        firstBranch: user.branch,
+        createdById: user.id,
+        ownerId: str(fd, 'ownerId') ?? user.id,
+      },
+    });
+    await auditEvent(
+      user.id,
+      'create',
+      'Client',
+      client.id,
+      `${client.code} — ${client.name}`
+    );
+    return `/clients/${client.id}`;
+  }
+
+  const existing = await db.client.findUnique({ where: { id } });
+  if (!existing) throw new MutationError('العميل غير موجود');
+  requireOwn(existing.ownerId, user, 'ليس لديك صلاحية تعديل هذا العميل');
+
+  await db.client.update({ where: { id }, data });
+  await auditDiff(user.id, 'Client', id, existing, data);
+  return `/clients/${id}`;
 }
 
 // ═══════════════════════════════════════════════════════════════

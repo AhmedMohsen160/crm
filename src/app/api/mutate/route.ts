@@ -3,11 +3,14 @@ import { redirectTo, redirectWithError } from '@/lib/http';
 import { db } from '@/lib/db';
 import { getCurrentUser, can, type SessionUser } from '@/lib/auth';
 import { logActivity } from '@/lib/actions/helpers';
-import { auditEvent } from '@/lib/audit';
+import { auditEvent, auditDiff } from '@/lib/audit';
 import {
   DEAL_STAGES,
   STAGE_DEFAULT_PROBABILITY,
+  LEAD_STATUSES,
+  LEAD_CLOSED_STATUSES,
   type DealStage,
+  type LeadStatus,
 } from '@/lib/constants';
 
 /**
@@ -110,11 +113,30 @@ async function handle(
       if (!lead) return null;
       if (!seeAll && lead.ownerId !== user.id) throw new Error('لا صلاحية');
 
-      await db.lead.update({ where: { id }, data: { status: value } });
+      // «خاسر» لا يُضبط بضغطة — سبب الخسارة إلزامي، فيمرّ بنموذج التعديل
+      if (value === 'LOST' && !lead.lossReason) {
+        throw new Error('سبب الخسارة إلزامي — عدّل الليد واختر السبب');
+      }
+
+      const now = new Date();
+      const closed = LEAD_CLOSED_STATUSES.includes(value as LeadStatus);
+      const data = {
+        status: value,
+        // أول انتقال عن «جديد» يبصم سرعة الرد — ولا يُعاد ضبطه أبدًا
+        firstReplyAt:
+          lead.firstReplyAt ?? (lead.status === 'NEW' && value !== 'NEW' ? now : null),
+        closedAt: closed ? (lead.closedAt ?? now) : null,
+        convertedAt: value === 'WON' ? (lead.convertedAt ?? now) : null,
+      };
+
+      await db.lead.update({ where: { id }, data });
+      await auditDiff(user.id, 'Lead', id, lead, data);
       await logActivity({
         type: 'STATUS_CHANGED',
-        title: 'تغيّرت حالة العميل المحتمل',
-        detail: `${lead.status} ← ${value}`,
+        title: 'تغيّرت مرحلة الليد',
+        detail: `${LEAD_STATUSES[lead.status as LeadStatus] ?? lead.status} ← ${
+          LEAD_STATUSES[value as LeadStatus] ?? value
+        }`,
         userId: user.id,
         link: { leadId: id },
       });

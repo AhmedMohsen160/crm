@@ -22,7 +22,7 @@ export default async function ConvertLeadPage({
   const lead = await db.lead.findUnique({ where: { id } });
   if (!lead) notFound();
   if (!seeAll && lead.ownerId !== user.id) notFound();
-  if (lead.status === 'CONVERTED') redirect(`/leads/${id}`);
+  if (lead.status === 'WON') redirect(`/leads/${id}`);
 
   const companies = await db.company.findMany({
     select: { id: true, name: true },

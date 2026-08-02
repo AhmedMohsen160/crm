@@ -54,6 +54,8 @@ model User {
   activities     Activity[]
   quotes         Quote[]
   auditEntries   AuditLog[]
+  ownedClients   Client[]   @relation("ClientOwner")
+  createdClients Client[]   @relation("ClientCreator")
 
   @@index([email])
   @@index([reportsToId])
@@ -164,6 +166,7 @@ model Company {
   owner   User?   @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   contacts   Contact[]
+  clients    Client[]
   deals      Deal[]
   tasks      Task[]
   noteItems  Note[]
@@ -212,15 +215,86 @@ model Contact {
 //  العملاء المحتملون (Leads) — قبل التأهيل
 // ───────────────────────────────────────────────
 
+// ───────────────────────────────────────────────
+//  العملاء — كائن واحد يخدم الفرد والشركة
+//  «لا يُنشأ عميل مكرر أبدًا» (§4.1)
+// ───────────────────────────────────────────────
+
+model Client {
+  id   String  @id @default(cuid())
+  /// معرّف تسلسلي دائم بصيغة CL-00001.
+  /// اختياري في السكيما لا في السلوك: كل سجل يُنشأ من النظام يحصل عليه فورًا،
+  /// والاختيارية موجودة ليستطيع النشر إضافة العمود على جدول فيه صفوف قديمة
+  /// ثم يملؤها التجهيز. راجع backfillCodes في scripts/bootstrap.ts.
+  code String? @unique
+  name String
+
+  /// الهاتف كما أدخله المستخدم — للعرض والاتصال
+  phone              String
+  /// الهاتف بعد التطبيع السباعي (§١٤) — **مفتاح منع الازدواج**
+  phoneNormalized    String  @unique
+  phoneAlt           String?
+  /// المطبَّع للهاتف البديل — يدخل البحث ولا يمنع الازدواج
+  phoneAltNormalized String?
+
+  email String?
+  /// individual | company
+  type  String  @default("individual")
+
+  companyName String?
+  taxId       String?
+  country     String?
+  city        String?
+  /// الفرع الذي جاء منه أول مرة — لا يتغيّر
+  firstBranch String?
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?   @relation("ClientCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User?   @relation("ClientOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// ربط اختياري بسجل الشركة (الرقم الضريبي وشروط الدفع)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  leads Lead[]
+  deals Deal[]
+
+  @@index([phoneNormalized])
+  @@index([phoneAltNormalized])
+  @@index([name])
+  @@index([ownerId])
+  @@index([firstBranch])
+}
+
+// ───────────────────────────────────────────────
+//  عدّادات المعرّفات التسلسلية
+// ───────────────────────────────────────────────
+
+/// مفتاح واحد لكل سلسلة: "client" عام، و"lead-2608" يتجدّد شهريًا.
+/// التخصيص يتم داخل معاملة حتى لا يحصل شخصان على الرقم نفسه.
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
 model Lead {
   id              String    @id @default(cuid())
+  /// معرّف تسلسلي بصيغة LD-2608-0001 — العدّاد يتجدّد شهريًا.
+  /// اختياري في السكيما لا في السلوك (انظر التعليق على Client.code).
+  code            String?   @unique
   firstName       String
   lastName        String?
   companyName     String?
   email           String?
   phone           String?
-  source          String? // مصدر العميل: موقع، فيسبوك، توصية...
-  status          String    @default("NEW") // NEW | CONTACTED | QUALIFIED | UNQUALIFIED | CONVERTED
+  source          String? // مصدر قديم — يُستبدل تدريجيًا بـ channel
+  status          String    @default("NEW") // NEW | CONTACTED | QUOTED | NEGOTIATION | WON | LOST
   serviceInterest String? // نوع الخدمة المطلوبة
   sourceLang      String?
   targetLang      String?
@@ -229,6 +303,25 @@ model Lead {
   convertedAt     DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  /// قناة وصول الليد — إلزامية (§4.2)
+  channel       String?
+  /// وسيلة التواصل: واتساب | اتصال | إيميل | مقر
+  contactMethod String?
+  /// فرع الليد — يُملأ تلقائيًا من فرع المستخدم المُنشئ
+  branch        String?
+  /// عدد الصفحات التقديري
+  estPages      Float?
+
+  /// أول انتقال عن «جديد» — منه تُقاس سرعة الرد وقياس الـSLA
+  firstReplyAt DateTime?
+  /// وقت الحسم فوزًا أو خسارة
+  closedAt     DateTime?
+  /// إلزامي عند الخسارة — بلا سبب لا نتعلّم شيئًا
+  lossReason   String?
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   ownerId String?
   owner   User?   @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -239,6 +332,9 @@ model Lead {
 
   @@index([status])
   @@index([ownerId])
+  @@index([clientId])
+  @@index([branch])
+  @@index([createdAt])
 }
 
 // ───────────────────────────────────────────────
@@ -274,6 +370,10 @@ model Deal {
   contactId String?
   contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
+  /// العميل صاحب الصفقة — أساس بطاقة العميل وتاريخ مشترياته
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
   ownerId String?
   owner   User?   @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
@@ -285,6 +385,7 @@ model Deal {
   @@index([stage])
   @@index([ownerId])
   @@index([companyId])
+  @@index([clientId])
 }
 
 // ───────────────────────────────────────────────
