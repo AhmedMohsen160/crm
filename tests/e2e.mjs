@@ -1791,6 +1791,94 @@ if (await readyLink.count()) {
   check(true, 'لا مشاريع للاختبار — تُخطّى بوابة الرصد (اختبار ٢٢)');
 }
 
+// ── 23. الأدوار والتسلسل والملكية المزدوجة (المرحلة ١٤) ──────
+await loginAs('admin@fasttrans.local');
+
+const rolesStatus = await go('/settings/roles', '23-roles');
+check(rolesStatus === 200, 'شاشة الأدوار تفتح لمن يملك تعريفها (اختبار ٢٣)');
+const rolesText = await page.locator('body').innerText();
+check(
+  rolesText.includes('المالك الرئيسي') && rolesText.includes('المدير التنفيذي'),
+  'ودورا المالك الرئيسي والمدير التنفيذي موجودان'
+);
+check(rolesText.includes('مترجم'), 'ودور المترجم — يدخل ليرى أداءه لا ليُسنَد إليه');
+check(
+  rolesText.includes('إنشاء الأدوار وتعديلها'),
+  'و«إنشاء الأدوار» صلاحية مستقلّة عن «إدارة المستخدمين»'
+);
+
+await go('/settings/users/new');
+const userFormText = await page.locator('body').innerText();
+check(userFormText.includes('يتبع إداريًا'), 'ونموذج المستخدم فيه التسلسل الإداري');
+
+const assignStatus = await go('/settings/commissions', '23-commission-target');
+check(assignStatus === 200, 'وشاشة خطط النسب تفتح');
+check(
+  await waitForText('عتبة الاستحقاق'),
+  'وفيها عتبة الاستحقاق — «إذا تجاوز التارجت ياخد ٣٪ ومديره ٢٪»'
+);
+
+await go('/projects/new');
+const projectFormText = await page.locator('body').innerText();
+check(
+  projectFormText.includes('المالك الرئيسي') && projectFormText.includes('المالك الفرعي'),
+  'ونموذج المشروع فيه الملكية المزدوجة: جالبُ الصفقة وخادمُها'
+);
+
+const boardStatus = await go('/leaderboard', '23-leaderboard');
+check(boardStatus === 200, 'ولوحة الترتيب تفتح');
+check(await waitForText('مركزي'), 'وفيها مركز المستخدم بين زملائه');
+
+const meStatus = await go('/me', '23-my-performance');
+check(meStatus === 200, 'وشاشة «أدائي» تفتح');
+// الحجب يُقاس على **حمولة الصفحة** لا على النص المرئي: `ownWork` لا تُرجع
+// حقل تكلفة أصلًا، فلا رقم يُخفى بأنماط
+const meHtml = await page.content();
+check(
+  !meHtml.includes('تكلفة الصفحة') &&
+    !meHtml.includes('سعر البيع') &&
+    !meHtml.includes('صافي الأجر') &&
+    !meHtml.includes('العائد على'),
+  '★ ولا تعرض تكلفةً ولا سعرًا ولا عائدًا — شرط الإدارة الصريح للمترجم'
+);
+
+const hrNewStatus = await go('/hr/employees/new', '23-hire');
+check(hrNewStatus === 200, 'وشاشة تعيين موظف تفتح من الموارد البشرية');
+const hireText = await page.locator('body').innerText();
+check(
+  hireText.includes('الراتب الأساسي') && hireText.includes('الإدارة أو القسم'),
+  'وفيها القسم والراتب — كان تعيين الموظف لا يتم إلا من شاشة المستخدمين'
+);
+check(
+  hireText.includes('بلا حساب دخول'),
+  'وتُنشئ سجلًّا بلا دخول: الحساب يُفتح بعدها ممّن يملك منح الصلاحيات'
+);
+
+// أدمن المبيعات: يرى الترتيب ولا يرى نسب أحد، ولا يُعرّف دورًا
+await loginAs('agent@fasttrans.local');
+// الحجب تحويلٌ لا رمزُ خطأ: نقيس أنه لم يبقَ على المسار
+const notReached = async (path) => {
+  await page.goto('http://localhost:3000' + path, { waitUntil: 'networkidle' });
+  return !page.url().includes(path);
+};
+check(await notReached('/settings/roles'), 'وأدمن المبيعات لا يبلغ شاشة الأدوار');
+const adminBoard = await go('/leaderboard', '23-leaderboard-admin');
+check(adminBoard === 200, 'ويبلغ لوحة الترتيب — المنافسة مقصودة');
+const adminBoardText = await page.locator('body').innerText();
+check(
+  !adminBoardText.includes('يستحق'),
+  '★ وعمود الاستحقاق لا يُرسل إليه أصلًا — لا يُخفى في المتصفح'
+);
+await go('/commissions');
+const adminCommissionText = await page.locator('body').innerText();
+check(
+  !adminCommissionText.includes('كل الفريق'),
+  '★ وشاشة «نسبي» لا تعرض له صفوف زملائه'
+);
+check(await notReached('/hr/employees/new'), 'ولا يعيّن موظفًا — تلك للموارد البشرية');
+
+await loginAs('admin@fasttrans.local');
+
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
 await go('/projects', '12-mobile');

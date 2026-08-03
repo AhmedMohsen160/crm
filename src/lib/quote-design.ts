@@ -120,10 +120,12 @@ export function briefToText(brief: SiteBrief): string {
 //  بناء الأمر
 // ═══════════════════════════════════════════════════════════════
 
-/** هوية فاست ترانس — مستخرجة من عروض الشركة لا مقدَّرة بالعين */
+/** هوية فاست ترانس — مقروءة من ملفات الشعار الرسمية لا مقدَّرة بالعين */
 export const FAST_TRANS_BRAND = {
   navy: '#242E5B',
-  lime: '#B9D716',
+  blue: '#2B57A6',
+  sky: '#5BB5E8',
+  lime: '#C4D82E',
   name: 'فاست ترانس',
   nameEn: 'FAST TRANS',
 } as const;

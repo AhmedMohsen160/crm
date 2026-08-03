@@ -34,6 +34,12 @@ export default async function CommissionsPage({
 
   const seesTeam = can(user, 'canViewTeamAnalytics');
   const seesCompany = can(user, 'canViewCompanyAnalytics');
+  /**
+   * **مبالغ استحقاق الآخرين ونسبهم صلاحية مستقلّة** (قرار الإدارة — المرحلة ١٤).
+   * أدمن المبيعات يرى إنتاج زملائه وترتيبهم تحفيزًا، ولا يرى ما يقبضه أحد.
+   * والترشيح هنا لا في المتصفح: صفٌّ لا يملكه لا يصل جهازه أصلًا (§٣ بند ٢).
+   */
+  const seesOthersCommission = can(user, 'canViewOthersCommission');
 
   const [summary, storedNet, target, clawbacks] = await Promise.all([
     computePeriod(period),
@@ -73,14 +79,34 @@ export default async function CommissionsPage({
 
   // **الترشيح في الخادم:** لا يُرسل سطر خارج نطاق المستخدم ثم يُخفى
   const mine = summary.sellers.find((s) => s.userId === user.id) ?? null;
-  const myTeam = summary.sellers.filter((s) => s.managerId === user.id);
-  const visible = seesCompany
-    ? summary.sellers
-    : seesTeam
-      ? summary.sellers.filter((s) => s.userId === user.id || s.managerId === user.id)
-      : summary.sellers.filter((s) => s.userId === user.id);
+  // حصته من فريقه تُجمع من الصفقات لا من صفوف البائعين: قد يستحقّها عن صفقة
+  // جلبها هو وخدمها غيره، ولو لم يكن مديره الإداري
+  const myTeam = summary.sellers.filter((s) =>
+    s.projects.some((p) => p.managerId === user.id)
+  );
+  const visible = !seesOthersCommission
+    ? summary.sellers.filter((s) => s.userId === user.id)
+    : seesCompany
+      ? summary.sellers
+      : seesTeam
+        ? summary.sellers.filter(
+            (s) => s.userId === user.id || s.projects.some((p) => p.managerId === user.id)
+          )
+        : summary.sellers.filter((s) => s.userId === user.id);
 
-  const myManagerShare = myTeam.reduce((s, x) => s + x.managerAmount, 0);
+  const myManagerShare = myTeam.reduce(
+    (sum, seller) =>
+      sum +
+      // نصيبه من حصة المدير عند هذا البائع = بقدر ما خدم من صفقاته هو
+      (seller.projects.reduce((s, p) => s + p.collected, 0) > 0
+        ? (seller.managerAmount *
+            seller.projects
+              .filter((p) => p.managerId === user.id)
+              .reduce((s, p) => s + p.collected, 0)) /
+          seller.projects.reduce((s, p) => s + p.collected, 0)
+        : 0),
+    0
+  );
   const achieved = mine?.achieved ?? 0;
   const progress = target ? targetProgress(achieved, target.amount) : 0;
 
@@ -142,7 +168,7 @@ export default async function CommissionsPage({
             accent="slate"
           />
         )}
-        {seesTeam && myTeam.length > 0 ? (
+        {seesOthersCommission && myTeam.length > 0 ? (
           <StatCard
             label="حصتي من فريقي"
             value={formatMoney(myManagerShare)}
@@ -160,6 +186,44 @@ export default async function CommissionsPage({
           />
         )}
       </div>
+
+      {/* ── عتبة الاستحقاق الشخصية ─────────────────────────────
+          «إذا تجاوز التارجت ياخد ٣٪ ومديره ٢٪» — وما دونها لا شيء.
+          تُعرض صراحةً حتى يعرف الأدمن أين هو منها، لا أن يفاجأ بصفر. */}
+      {mine?.target && mine.target > 0 && (
+        <div
+          className={`card card-pad ${
+            mine.targetMet ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'
+          }`}
+        >
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span className="font-medium text-slate-700">
+              عتبة استحقاقك
+              <span className="mr-2 text-xs font-normal text-slate-500">
+                {mine.targetMet
+                  ? 'بلغتها — النسبة مستحقّة'
+                  : 'ما دونها لا نسبة — لا لك ولا لمديرك'}
+              </span>
+            </span>
+            <span className="nums text-slate-600">
+              {formatMoney(achieved)} من {formatMoney(mine.target)}
+              {!mine.targetMet && mine.remainingToTarget !== null && (
+                <span className="mr-2 font-semibold text-amber-700">
+                  يتبقى {formatMoney(mine.remainingToTarget)}
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className={`h-full rounded-full transition-all ${
+                mine.targetMet ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}
+              style={{ width: `${Math.min(100, (achieved / mine.target) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {target && target.amount > 0 && (
         <div className="card card-pad">
@@ -213,7 +277,7 @@ export default async function CommissionsPage({
       )}
 
       {/* ── فريقي / الشركة ──────────────────────────────────── */}
-      {(seesTeam || seesCompany) && (
+      {seesOthersCommission && (seesTeam || seesCompany) && (
         <section>
           <h2 className="mb-3 section-title">
             {seesCompany ? 'كل الفريق' : 'فريقي'}
@@ -292,6 +356,16 @@ export default async function CommissionsPage({
             </div>
           )}
         </section>
+      )}
+
+      {!seesOthersCommission && can(user, 'canViewLeaderboard') && (
+        <p className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          استحقاقات زملائك ونسبهم لا تُعرض لك.{' '}
+          <Link href={`/leaderboard?period=${period}`} className="link font-medium">
+            لوحة الترتيب
+          </Link>{' '}
+          تعرض ما حقّقه الفريق ومركزك بينهم.
+        </p>
       )}
 
       {/* ── ما خرج من الحساب ────────────────────────────────── */}

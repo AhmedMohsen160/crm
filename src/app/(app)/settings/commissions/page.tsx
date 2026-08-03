@@ -239,7 +239,13 @@ export default async function CommissionSchemesPage({
                 ? scheme.isDefault
                   ? 'الجميع (افتراضية)'
                   : 'لا أحد بعد'
-                : scheme.assignments.map((a) => a.user.name).join(' · ')}
+                : scheme.assignments
+                    .map((a) =>
+                      a.target
+                        ? `${a.user.name} (عتبة ${a.target.toLocaleString('ar-EG')})`
+                        : a.user.name
+                    )
+                    .join(' · ')}
             </p>
             <form method="post" action="/api/save" className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="entity" value="commissionAssignment" />
@@ -250,6 +256,14 @@ export default async function CommissionSchemesPage({
                 label="إسناد لموظف"
                 name="userId"
                 options={users.map((u) => ({ value: u.id, label: u.name }))}
+              />
+              <FormField
+                label="عتبة الاستحقاق"
+                name="target"
+                type="number"
+                step="1000"
+                min="0"
+                hint="ما دونها لا نسبة — اتركها فارغة لبلا عتبة"
               />
               <FormField label="من تاريخ" name="effectiveFrom" type="date" />
               <SaveButton>إسناد</SaveButton>

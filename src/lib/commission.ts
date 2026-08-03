@@ -40,6 +40,10 @@ export type CommissionResult = {
   nextTierAt: number | null;
   /** كم يتبقى لبلوغ الشريحة التالية */
   remainingToNext: number | null;
+  /** هل بلغ عتبة استحقاقه؟ true دائمًا حين لا عتبة له */
+  targetMet: boolean;
+  /** كم يتبقى لبلوغ العتبة — null حين لا عتبة أو حين بلغها */
+  remainingToTarget: number | null;
 };
 
 /** يرتّب الشرائح تصاعديًا ويتجاهل المشوّه منها */
@@ -63,7 +67,13 @@ function tierIndexFor(sorted: CommissionTier[], amount: number): number {
  * يحسب استحقاق الأدمن ومديره على إجمالي محقَّق في فترة.
  *
  * **قاعدة «من لا مدير له يأخذ النسبة كاملة»:** حين لا يوجد مدير مباشر،
- * يستحق الأدمن حصته وحصة المدير معًا — لأن العمل كله عمله.
+ * يستحق الأدمن حصته وحصة المدير معًا — لأن العمل كله عمله. مثالها الحيّ:
+ * محمد بكري في مدينة نصر بلا أدمن تحته ولا مدير فوقه، فيأخذ الخمسة كاملة.
+ * وعند انضمام أدمن إليه يصير هو مديرَه فتنطبق القسمة تلقائيًا بلا كود جديد.
+ *
+ * **وعتبة الاستحقاق (`target`):** ما دونها لا شيء البتّة — لا للأدمن ولا
+ * لمديره. لأن النسبة مكافأةُ تجاوزٍ لا أجرُ حضور، وتخفيضها تحت العتبة يُلغي
+ * معنى العتبة أصلًا.
  */
 export function computeCommission(params: {
   /** الإجمالي المحقَّق في الفترة (المحصَّل عادةً) */
@@ -72,8 +82,17 @@ export function computeCommission(params: {
   mode: TierMode;
   /** هل له مدير مباشر يستحق حصته؟ */
   hasManager: boolean;
+  /** عتبة الاستحقاق — فارغة تعني بلا عتبة */
+  target?: number | null;
 }): CommissionResult {
   const sorted = sortTiers(params.tiers);
+
+  const target =
+    typeof params.target === 'number' && Number.isFinite(params.target) && params.target > 0
+      ? params.target
+      : null;
+  const total = Number.isFinite(params.total) ? params.total : 0;
+  const targetMet = target === null || total >= target;
 
   const empty: CommissionResult = {
     adminAmount: 0,
@@ -83,10 +102,26 @@ export function computeCommission(params: {
     currentManagerRate: 0,
     nextTierAt: null,
     remainingToNext: null,
+    targetMet,
+    remainingToTarget: target !== null && !targetMet ? round2(target - Math.max(0, total)) : null,
   };
 
   if (sorted.length === 0 || !Number.isFinite(params.total) || params.total <= 0) {
     return empty;
+  }
+
+  // دون العتبة: نُبقي الشريحة والنسبة ظاهرتين ليعرف كم يبعد، والمبلغ صفر
+  if (!targetMet) {
+    const reachedTier = sorted[tierIndexFor(sorted, params.total)];
+    const after = sorted[tierIndexFor(sorted, params.total) + 1] ?? null;
+    return {
+      ...empty,
+      tierIndex: tierIndexFor(sorted, params.total),
+      currentAdminRate: reachedTier.adminRate,
+      currentManagerRate: reachedTier.managerRate,
+      nextTierAt: after ? after.fromAmount : null,
+      remainingToNext: after ? Math.max(0, round2(after.fromAmount - params.total)) : null,
+    };
   }
 
   const index = tierIndexFor(sorted, params.total);
@@ -129,6 +164,8 @@ export function computeCommission(params: {
     currentManagerRate: tier.managerRate,
     nextTierAt: next ? next.fromAmount : null,
     remainingToNext: next ? Math.max(0, round2(next.fromAmount - params.total)) : null,
+    targetMet,
+    remainingToTarget: null,
   };
 }
 
@@ -161,6 +198,115 @@ export function splitByProject(
     };
   }
   return rows;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  الملكية المزدوجة — مالكٌ رئيسي جلب الصفقة وفرعيٌّ يخدمها
+// ═══════════════════════════════════════════════════════════════
+
+/** مشروع في الفترة، ومعه من يستحق حصة المدير عنه هو بعينه */
+export type AttributableProject = {
+  projectId: string;
+  collected: number;
+  /**
+   * مستحقّ حصة المدير عن هذا المشروع:
+   *   • المالك الرئيسي حين تكون الصفقة مخدومةً من غيره
+   *   • وإلا فالمدير المباشر للبائع
+   *   • و`null` حين لا هذا ولا ذاك
+   */
+  managerId: string | null;
+};
+
+export type ShareRow = {
+  userId: string;
+  /** admin = حصة البائع · manager = حصة من فوقه في هذه الصفقة */
+  role: 'admin' | 'manager';
+  projectId: string;
+  amount: number;
+};
+
+/**
+ * يوزّع حصتي الأدمن والمدير على المشاريع، **ولكل مشروع مديرُه هو**.
+ *
+ * لماذا لكل مشروع مديرُه: صفقةٌ جلبها مدير المبيعات وخدمتها نورا تُعطي نورا
+ * حصة الأدمن ومديرَ المبيعات حصةَ المدير — وإن لم يكن مديرها الإداري. وقد
+ * تكون لنورا في الشهر نفسه صفقاتٌ من عندها تذهب حصةُ مديرها فيها لمديرها
+ * الإداري. فالإسناد لا يستقيم على مستوى الشخص، وإنما على مستوى الصفقة.
+ *
+ * **ومشروع بلا مستحقٍّ للحصة الثانية تعود حصتُه للبائع** — امتدادٌ لقاعدة «من
+ * لا مدير له يأخذ النسبة كاملة» إلى مستوى الصفقة الواحدة.
+ *
+ * المجموع محفوظ بالضبط: `Σ rows = adminAmount + managerAmount`.
+ */
+export function attributeShares(params: {
+  sellerId: string;
+  adminAmount: number;
+  managerAmount: number;
+  projects: AttributableProject[];
+}): ShareRow[] {
+  const weights = params.projects.map((p) => ({
+    projectId: p.projectId,
+    collected: p.collected,
+  }));
+  const managerOf = new Map(params.projects.map((p) => [p.projectId, p.managerId]));
+
+  // نجمّع في خريطة لأن حصةً بلا مستحقٍّ تُضاف إلى سطر الأدمن نفسه
+  const merged = new Map<string, ShareRow>();
+  const add = (row: ShareRow) => {
+    if (row.amount === 0) return;
+    const key = `${row.userId}|${row.role}|${row.projectId}`;
+    const found = merged.get(key);
+    if (found) found.amount = round2(found.amount + row.amount);
+    else merged.set(key, { ...row });
+  };
+
+  for (const row of splitByProject(params.adminAmount, weights)) {
+    add({ userId: params.sellerId, role: 'admin', projectId: row.projectId, amount: row.amount });
+  }
+
+  for (const row of splitByProject(params.managerAmount, weights)) {
+    const managerId = managerOf.get(row.projectId) ?? null;
+    add(
+      managerId
+        ? { userId: managerId, role: 'manager', projectId: row.projectId, amount: row.amount }
+        : { userId: params.sellerId, role: 'admin', projectId: row.projectId, amount: row.amount }
+    );
+  }
+
+  return [...merged.values()];
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  لوحة الترتيب — «منافسة دومًا لأعلى سكور ومراكز مرتّبة»
+// ═══════════════════════════════════════════════════════════════
+
+export type Ranked<T> = T & { rank: number };
+
+/**
+ * يرتّب تنازليًا ويمنح المركز، **والمتساويان يشتركان في المركز** ثم يقفز
+ * التالي. أن يُفصل بين متساويين بترتيب الحروف أو بترتيب الإدخال ظلمٌ يراه
+ * الموظف في شاشةٍ غرضُها التحفيز.
+ */
+export function rankBy<T>(rows: T[], score: (row: T) => number): Ranked<T>[] {
+  const sorted = [...rows].sort((a, b) => score(b) - score(a));
+  const out: Ranked<T>[] = [];
+  let rank = 0;
+  let previous: number | null = null;
+
+  for (const [index, row] of sorted.entries()) {
+    const value = score(row);
+    if (previous === null || value !== previous) {
+      rank = index + 1;
+      previous = value;
+    }
+    out.push({ ...row, rank });
+  }
+  return out;
+}
+
+/** وسام المراكز الثلاثة الأولى — وما بعدها بلا وسام */
+export function medal(rank: number): string | null {
+  return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
 }
 
 function round2(value: number): number {

@@ -36,6 +36,15 @@ export default async function DashboardPage() {
   const mine = seeAll ? {} : { ownerId: user.id };
   const myTasks = seeAll ? {} : { assigneeId: user.id };
 
+  /**
+   * المحاسب لا يفتح سجلات الليدز ويعرف **أعدادها**: «يستطيع معرفة عدد الليدز
+   * وتكلفتها وأسعارها». فالعدد يُحسب على المستوى الذي يراه، والبطاقة تفقد
+   * رابطها فلا تقوده إلى شاشة محجوبة عنه.
+   */
+  const seesLeadStats = can(user, 'canViewLeadStats');
+  const opensLeads = seeAll || can(user, 'canViewTeamLeads') || can(user, 'canCreateLead');
+  const leadScope = seeAll || seesLeadStats ? {} : { ownerId: user.id };
+
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
@@ -69,7 +78,7 @@ export default async function DashboardPage() {
       select: { netTotal: true, currency: true },
     }),
     db.lead.count({
-      where: { ...mine, status: { notIn: ['WON', 'LOST'] } },
+      where: { ...leadScope, status: { notIn: ['WON', 'LOST'] } },
     }),
     db.task.count({ where: { ...myTasks, status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
     // المهام المتأخرة
@@ -188,14 +197,16 @@ export default async function DashboardPage() {
           accent="emerald"
           href="/projects?status=delivered"
         />
-        <StatCard
-          label="عملاء محتملون نشطون"
-          value={activeLeads}
-          hint={`${openTasksCount} مهمة مفتوحة`}
-          icon={<UserPlus className="h-5 w-5" />}
-          accent="amber"
-          href="/leads"
-        />
+        {(opensLeads || seesLeadStats) && (
+          <StatCard
+            label="عملاء محتملون نشطون"
+            value={activeLeads}
+            hint={`${openTasksCount} مهمة مفتوحة`}
+            icon={<UserPlus className="h-5 w-5" />}
+            accent="amber"
+            href={opensLeads ? '/leads' : undefined}
+          />
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

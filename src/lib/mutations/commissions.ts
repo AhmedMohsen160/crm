@@ -181,14 +181,28 @@ export async function saveCommissionAssignment(fd: FormData, user: SessionUser) 
   const userId = str(fd, 'userId');
   if (!schemeId || !userId) throw new MutationError('الخطة والموظف مطلوبان');
 
+  /**
+   * عتبة الاستحقاق — «إذا تجاوز التارجت ياخد ٣٪ ومديره ٢٪».
+   * فارغة تعني بلا عتبة: الشرائح وحدها تحكم كما كان قبل المرحلة ١٤.
+   */
+  const target = num(fd, 'target');
+  if (target !== null && target < 0) throw new MutationError('العتبة لا تكون سالبة');
+
   const assignment = await db.commissionAssignment.create({
     data: {
       schemeId,
       userId,
+      target,
       effectiveFrom: date(fd, 'effectiveFrom') ?? new Date(),
     },
   });
-  await auditEvent(user.id, 'create', 'CommissionAssignment', assignment.id, userId);
+  await auditEvent(
+    user.id,
+    'create',
+    'CommissionAssignment',
+    assignment.id,
+    target ? `${userId} — عتبة ${target}` : userId
+  );
   return '/settings/commissions?saved=1';
 }
 

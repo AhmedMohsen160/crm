@@ -1,45 +1,93 @@
 /**
- * هوية فاست ترانس.
+ * هوية فاست ترانس — من ملفات الشعار الرسمية.
  *
- * اللونان مستخرجان من عروض الشركة الرسمية بعينها — الكحلي `#242E5B`
- * والليموني `#B9D716` — لا مختاران بالذوق. والشعار مرسوم بـSVG لا صورة:
- * يبقى حادًّا على كل شاشة، ويأخذ لونه من سياقه فيعمل على الفاتح والداكن معًا.
+ * العلامة كتلة رأسية محفور فيها الحرفان بالفراغ الأبيض، ومعها مربع ليموني
+ * في الأعلى. والألوان الخمسة من الملفات نفسها لا مختارة بالذوق:
+ *
+ *   الكحلي   `#242E5B`  — النص والنسخة الداكنة
+ *   الأزرق   `#2B57A6`  — الكتلة في الشعار الأساسي
+ *   السماوي  `#5BB5E8`  — النسخة الفاتحة
+ *   الليموني `#C4D82E`  — المربع والتأكيد
+ *
+ * مرسومة SVG لا صورة: تبقى حادّة على كل شاشة، وتأخذ لونها من سياقها فتعمل
+ * على الفاتح والداكن معًا.
  */
 
-export function FastTransMark({ className = 'h-8 w-8' }: { className?: string }) {
+export const BRAND = {
+  navy: '#242E5B',
+  blue: '#2B57A6',
+  sky: '#5BB5E8',
+  lime: '#C4D82E',
+} as const;
+
+export type BrandTone = 'primary' | 'navy' | 'sky' | 'lime' | 'mono';
+
+const TONES: Record<BrandTone, { block: string; carve: string; accent: string }> = {
+  // الأساسي: كتلة زرقاء ومربع ليموني — كما في ملف الشعار الأول
+  primary: { block: BRAND.blue, carve: '#FFFFFF', accent: BRAND.lime },
+  navy: { block: BRAND.navy, carve: '#FFFFFF', accent: BRAND.navy },
+  sky: { block: BRAND.sky, carve: '#FFFFFF', accent: BRAND.sky },
+  lime: { block: BRAND.lime, carve: '#FFFFFF', accent: BRAND.lime },
+  // على خلفية داكنة: الكتلة بيضاء والحفر شفّاف
+  mono: { block: 'currentColor', carve: '#FFFFFF', accent: 'currentColor' },
+};
+
+/**
+ * العلامة وحدها.
+ *
+ * النسبة ١٢٠×٢٠٦ مأخوذة من ملف الشعار (٤٢٥×٧٣٠ بكسل) فلا تُشوَّه الكتلة.
+ */
+export function FastTransMark({
+  className = 'h-8 w-8',
+  tone = 'primary',
+}: {
+  className?: string;
+  tone?: BrandTone;
+}) {
+  const c = TONES[tone];
   return (
-    <svg viewBox="0 0 40 40" className={className} aria-hidden fill="none">
-      <rect width="40" height="40" rx="9" fill="#242E5B" />
-      {/* السهم: النقل من لغة إلى لغة — وهو معنى الاسم */}
-      <path
-        d="M11 15.5h13.5M20 10.5l5 5-5 5"
-        stroke="#B9D716"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M29 24.5H15.5M20 29.5l-5-5 5-5"
-        stroke="#FFFFFF"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+    <svg viewBox="0 0 120 206" className={className} aria-hidden>
+      {/* الكتلة */}
+      <rect width="120" height="206" fill={c.block} />
+
+      {/* المربع الليموني — أعلى اليمين */}
+      {tone === 'primary' && <rect x="86" y="46" width="34" height="34" fill={c.accent} />}
+
+      {/* الحفر الأبيض: ذراع الحرف العلوية ثم بدنُه ثم الوعاء السفلي */}
+      <g fill={c.carve}>
+        {/* الذراع العلوية */}
+        <rect x="32" y="32" width="54" height="12" />
+        {/* الفاصل الرأسي الذي يفتح المربع الليموني */}
+        <rect x="74" y="44" width="12" height="36" />
+        {/* الذراع الوسطى */}
+        <rect x="32" y="80" width="54" height="12" />
+        {/* بدن الحرف نازلًا إلى الوعاء */}
+        <rect x="32" y="92" width="12" height="80" />
+        {/* قاع الوعاء */}
+        <rect x="32" y="160" width="54" height="12" />
+        {/* نقطة الوعاء — تفصل الحرف الثاني */}
+        <rect x="74" y="112" width="12" height="12" />
+      </g>
     </svg>
   );
 }
 
-/** الشعار كاملًا: العلامة والاسم — يُستعمل في الترويسة وشاشة الدخول */
+/** الشعار كاملًا: العلامة والاسم — في الترويسة وشاشة الدخول */
 export function FastTransLogo({
   compact = false,
   invert = false,
+  tone,
 }: {
   compact?: boolean;
   invert?: boolean;
+  tone?: BrandTone;
 }) {
   return (
     <span className="flex items-center gap-2.5">
-      <FastTransMark className={compact ? 'h-8 w-8' : 'h-10 w-10'} />
+      <FastTransMark
+        className={compact ? 'h-9 w-[22px]' : 'h-11 w-[26px]'}
+        tone={tone ?? (invert ? 'sky' : 'primary')}
+      />
       {!compact && (
         <span className="leading-tight">
           <span
@@ -47,14 +95,14 @@ export function FastTransLogo({
               invert ? 'text-white' : 'text-brand-600'
             }`}
           >
-            FAST TRANS
+            Fast Trans
           </span>
           <span
-            className={`block text-[10px] font-medium tracking-[0.18em] ${
+            className={`block text-[9px] font-medium tracking-[0.14em] ${
               invert ? 'text-brand-200' : 'text-slate-400'
             }`}
           >
-            CERTIFIED TRANSLATION
+            CERTIFIED TRANSLATION SERVICES
           </span>
         </span>
       )}

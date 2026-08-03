@@ -12,7 +12,7 @@ export default async function NewRolePage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  await requirePermission('canManageUsers');
+  await requirePermission('canManageRoles');
 
   return (
     <div className="mx-auto max-w-3xl">

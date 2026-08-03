@@ -23,6 +23,9 @@ export default async function HrEmployeesPage({
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="الموظفون وهياكل الأجر" subtitle={`أجور شهر ${period}`}>
+        <Link href="/hr/employees/new" className="btn-primary">
+          تعيين موظف
+        </Link>
         <Link href={sp.all === '1' ? '/hr/employees' : '/hr/employees?all=1'} className="btn-secondary">
           {sp.all === '1' ? 'النشطون فقط' : 'أظهر الموقوفين'}
         </Link>

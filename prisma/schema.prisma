@@ -66,7 +66,9 @@ model User {
   ownedCompanies   Company[]     @relation("CompanyOwner")
   ownedContacts    Contact[]     @relation("ContactOwner")
   ownedLeads       Lead[]        @relation("LeadOwner")
+  servicedLeads    Lead[]        @relation("LeadCoOwner")
   ownedProjects    Project[]     @relation("ProjectOwner")
+  servicedProjects Project[]     @relation("ProjectCoOwner")
   managedProjects  Project[]     @relation("ProjectManager")
   producedProjects Project[]     @relation("ProjectProducer")
   reviewedProjects Project[]     @relation("ProjectReviewer")
@@ -143,9 +145,18 @@ model Role {
   canPayFreelancers       Boolean @default(false)
   canManageAccounting     Boolean @default(false)
   canManageUsers          Boolean @default(false)
+  /// تعريف الأدوار — منفصلة عن إدارة المستخدمين عمدًا: مدير المبيعات يضيف
+  /// أدمنز ولا يُعيد تعريف من يرى ماذا.
+  canManageRoles          Boolean @default(false)
   canManageSettings       Boolean @default(false)
   canViewCompanyAnalytics Boolean @default(false)
   canViewTeamAnalytics    Boolean @default(false)
+  /// ترتيب زملائه بالمبيعات — أرقامٌ محقَّقة لا مبالغ استحقاق
+  canViewLeaderboard      Boolean @default(false)
+  /// مبالغ استحقاق غيره ونسبهم — محجوبة عن أدمن المبيعات
+  canViewOthersCommission Boolean @default(false)
+  /// أعداد الليدز وتكلفتها إجمالًا بلا فتح سجلاتها — للمحاسب
+  canViewLeadStats        Boolean @default(false)
   canUseEmail             Boolean @default(false)
   canUseAi                Boolean @default(false)
   canManageHr             Boolean @default(false)
@@ -597,6 +608,16 @@ model CommissionAssignment {
   schemeId String
   scheme   CommissionScheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
 
+  /**
+   * **عتبة الاستحقاق** — «له ٣٪ بعد تحقيق رقم معين نضعه بعد الحسابات
+   * الدقيقة، فإذا تجاوز هذا الرقم (التارجت) ياخد ٣٪ ومديره ٢٪».
+   *
+   * تُقاس على نفس أساس الخطة (المحصَّل عادةً). ما دون العتبة **لا نسبة
+   * أصلًا** — لا نسبةً مخفَّضة. وفارغها يعني بلا عتبة: الشرائح وحدها تحكم.
+   * وهي على الإسناد لا على الخطة، فيشترك عشرة في خطة واحدة ولكلٍّ تارجته.
+   */
+  target Float?
+
   effectiveFrom DateTime @default(now())
   createdAt     DateTime @default(now())
 
@@ -732,6 +753,12 @@ model Lead {
 
   ownerId String?
   owner   User?   @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// **المالك الفرعي** — من يخدم الصفقة فعليًا حين يكون جالبها غيره.
+  /// جاء العميل إلى مدير المبيعات، وأكملت المتابعةَ أدمنُ الفرع المستلِم:
+  /// فالملكية الرئيسية للجالب، والخدمة للفرعي، ولكلٍّ حصته في النسب.
+  coOwnerId String?
+  coOwner   User?   @relation("LeadCoOwner", fields: [coOwnerId], references: [id], onDelete: SetNull)
 
   tasks      Task[]
   noteItems  Note[]
@@ -879,6 +906,13 @@ model Project {
 
   ownerId String?
   owner   User?   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// **المالك الفرعي** — من يخدم الصفقة فعليًا حين يكون جالبها غيره.
+  /// حين يُملأ: يُحسب المحقَّق له هو (حصة الأدمن)، ويأخذ **المالك الرئيسي**
+  /// حصة المدير عن هذا المشروع بعينه أيًّا كان التسلسل الإداري بينهما.
+  /// والفرع يبقى فرع الاستلام: الصفقة تُنسب لمن سلّم العميل لا لمن جلبه.
+  coOwnerId String?
+  coOwner   User?   @relation("ProjectCoOwner", fields: [coOwnerId], references: [id], onDelete: SetNull)
 
   tasks              Task[]
   noteItems          Note[]

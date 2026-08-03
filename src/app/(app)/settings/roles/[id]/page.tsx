@@ -18,7 +18,7 @@ export default async function EditRolePage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  await requirePermission('canManageUsers');
+  await requirePermission('canManageRoles');
 
   const role = await db.role.findUnique({
     where: { id },

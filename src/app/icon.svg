@@ -1,7 +1,18 @@
+<!-- أيقونة التبويب: علامة فاست ترانس نفسها مصغَّرة، لا رسمًا آخر.
+     الإحداثيات الداخلية ١٢٠×٢٠٦ كما في src/components/brand.tsx
+     فيبقى الشكل واحدًا في كل مكان. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
   <rect width="40" height="40" rx="9" fill="#242E5B"/>
-  <path d="M11 15.5h13.5M20 10.5l5 5-5 5" stroke="#B9D716" stroke-width="2.6"
-        stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <path d="M29 24.5H15.5M20 29.5l-5-5 5-5" stroke="#FFFFFF" stroke-width="2.6"
-        stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <g transform="translate(11.9 6) scale(0.1359)">
+    <rect width="120" height="206" fill="#2B57A6"/>
+    <rect x="86" y="46" width="34" height="34" fill="#C4D82E"/>
+    <g fill="#FFFFFF">
+      <rect x="32" y="32" width="54" height="12"/>
+      <rect x="74" y="44" width="12" height="36"/>
+      <rect x="32" y="80" width="54" height="12"/>
+      <rect x="32" y="92" width="12" height="80"/>
+      <rect x="32" y="160" width="54" height="12"/>
+      <rect x="74" y="112" width="12" height="12"/>
+    </g>
+  </g>
 </svg>

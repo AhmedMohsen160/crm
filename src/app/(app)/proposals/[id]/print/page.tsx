@@ -25,7 +25,7 @@ export const metadata = { title: 'عرض فاست ترانس' };
  * المستند القابل للطباعة — **هذا هو المُنتَج الذي يصل العميل**.
  *
  * مبنيّ بنسق عرض «Tristar» نفسه وبألوان الهوية المستخرجة من ملفاته:
- * الكحلي `#242E5B` والليموني `#B9D716`. ويُطبَع من المتصفح إلى PDF مباشرةً
+ * الكحلي `#242E5B` والليموني `#C4D82E`. ويُطبَع من المتصفح إلى PDF مباشرةً
  * (Ctrl+P ← حفظ بصيغة PDF) — بلا مكتبة توليد ولا خادم إضافي، فما يراه
  * معدّ العرض على الشاشة هو ما يصل العميل حرفيًا.
  */
@@ -81,7 +81,8 @@ export default async function ProposalPrintPage({
         {/* ── الغلاف ────────────────────────────────────────── */}
         <header className="rounded-xl bg-brand-600 p-8 text-white print:rounded-none">
           <div className="mb-8 flex items-center justify-between">
-            <FastTransMark className="h-12 w-12" />
+            {/* على الغلاف الكحلي: النسخة السماوية — الزرقاء تختفي فيه */}
+            <FastTransMark className="h-12 w-7" tone="sky" />
             <span className="text-[10px] font-medium tracking-[0.2em] text-brand-200">
               CERTIFIED TRANSLATION &amp; LANGUAGE SOLUTIONS
             </span>

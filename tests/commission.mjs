@@ -10,6 +10,9 @@
 import {
   computeCommission,
   splitByProject,
+  attributeShares,
+  rankBy,
+  medal,
   sortTiers,
   targetProgress,
   periodOf,
@@ -183,6 +186,172 @@ check(
   range.start.getMonth() === 7 && range.end.getMonth() === 8,
   'مدى الفترة يبدأ بأول الشهر وينتهي بأول التالي'
 );
+
+// ═══════════════════════════════════════════════════════════════
+//  عتبة الاستحقاق — المرحلة ١٤
+//
+//  «محمد الصاوي في الإسكندرية له ٣٪ بعد تحقيق رقم معين. فإذا تجاوز هذا
+//   الرقم (التارجت) ياخد ٣٪ ومديره أحمد مجلي ٢٪ فيكون الإجمالي ٥٪.
+//   ومحمد بكري في مدينة نصر — بلا أدمن تحته ولا مدير فوقه — ياخد ٥٪
+//   من مبيعاته كاملة.»
+// ═══════════════════════════════════════════════════════════════
+
+console.log('\nعتبة الاستحقاق والملكية المزدوجة\n');
+
+// خطة الإدارة كما وصفها أحمد: نسبة واحدة على المبلغ كله فوق العتبة
+const FLAT = [{ fromAmount: 0, toAmount: null, adminRate: 0.03, managerRate: 0.02 }];
+
+const belowTarget = computeCommission({
+  total: 250_000,
+  tiers: FLAT,
+  mode: 'whole',
+  hasManager: true,
+  target: 300_000,
+});
+near(belowTarget.adminAmount, 0, 'دون العتبة: لا شيء للأدمن');
+near(belowTarget.managerAmount, 0, 'دون العتبة: ولا شيء لمديره — العتبة تُسقط النصيبين');
+check(belowTarget.targetMet === false, 'دون العتبة: targetMet = false');
+near(belowTarget.remainingToTarget, 50_000, 'دون العتبة: يتبقى ٥٠ ألفًا');
+near(belowTarget.currentAdminRate, 0.03, 'دون العتبة: النسبة تبقى ظاهرة ليعرف ما ينتظره');
+
+const sawy = computeCommission({
+  total: 400_000,
+  tiers: FLAT,
+  mode: 'whole',
+  hasManager: true,
+  target: 300_000,
+});
+near(sawy.adminAmount, 12_000, 'الصاوي فوق العتبة: ٣٪ من ٤٠٠ ألف');
+near(sawy.managerAmount, 8_000, 'ومجلي مديره: ٢٪');
+near(sawy.adminAmount + sawy.managerAmount, 20_000, 'الإجمالي ٥٪ لا أكثر');
+check(sawy.targetMet === true, 'فوق العتبة: targetMet = true');
+check(sawy.remainingToTarget === null, 'فوق العتبة: لا متبقٍّ للعتبة');
+
+const bakri = computeCommission({
+  total: 400_000,
+  tiers: FLAT,
+  mode: 'whole',
+  hasManager: false,
+  target: 300_000,
+});
+near(bakri.adminAmount, 20_000, 'بكري بلا مدير فوقه: يأخذ الخمسة كاملة');
+near(bakri.managerAmount, 0, 'ولا حصة مدير معلَّقة بلا مستحقّ');
+
+// العتبة عند المساواة بالضبط: **بلوغها استحقاق** لا تجاوزها
+const exactly = computeCommission({
+  total: 300_000,
+  tiers: FLAT,
+  mode: 'whole',
+  hasManager: true,
+  target: 300_000,
+});
+near(exactly.adminAmount, 9_000, 'بلوغ العتبة تمامًا يستحق — لا يُشترط تجاوزها');
+
+// بلا عتبة: السلوك السابق للمرحلة ١٤ كما هو تمامًا
+const noTarget = computeCommission({
+  total: 100_000,
+  tiers: TIERS,
+  mode: 'progressive',
+  hasManager: true,
+});
+near(noTarget.adminAmount, 3_000, 'بلا عتبة: الشرائح وحدها تحكم كما كانت');
+check(noTarget.targetMet === true, 'بلا عتبة: targetMet = true دائمًا');
+
+// عتبة صفر أو سالبة = بلا عتبة، لا عتبة يستحيل بلوغها
+near(
+  computeCommission({ total: 100_000, tiers: TIERS, mode: 'progressive', hasManager: true, target: 0 })
+    .adminAmount,
+  3_000,
+  'عتبة صفر تُقرأ «بلا عتبة»'
+);
+
+// ── توزيع الحصص بالصفقة — الملكية المزدوجة ───────────────────
+
+const bothManaged = attributeShares({
+  sellerId: 'nora',
+  adminAmount: 300,
+  managerAmount: 200,
+  projects: [
+    { projectId: 'p1', collected: 600, managerId: 'magly' },
+    { projectId: 'p2', collected: 400, managerId: 'magly' },
+  ],
+});
+near(
+  bothManaged.filter((r) => r.userId === 'nora').reduce((s, r) => s + r.amount, 0),
+  300,
+  'نورا تأخذ حصة الأدمن كاملة'
+);
+near(
+  bothManaged.filter((r) => r.userId === 'magly').reduce((s, r) => s + r.amount, 0),
+  200,
+  'ومجلي حصة المدير كاملة'
+);
+near(
+  bothManaged.find((r) => r.userId === 'magly' && r.projectId === 'p1').amount,
+  120,
+  'وحصة المدير موزّعة بنسبة تحصيل كل صفقة'
+);
+
+// صفقةٌ لها مستحقٌّ للحصة الثانية وأخرى بلا — القاعدة تنزل لمستوى الصفقة
+const mixed = attributeShares({
+  sellerId: 'nora',
+  adminAmount: 300,
+  managerAmount: 200,
+  projects: [
+    { projectId: 'p1', collected: 600, managerId: 'magly' },
+    { projectId: 'p2', collected: 400, managerId: null },
+  ],
+});
+near(
+  mixed.filter((r) => r.userId === 'magly').reduce((s, r) => s + r.amount, 0),
+  120,
+  'المدير يستحق عن صفقته هو فقط'
+);
+near(
+  mixed.filter((r) => r.userId === 'nora').reduce((s, r) => s + r.amount, 0),
+  380,
+  'وصفقةٌ بلا مستحقٍّ للحصة الثانية تعود حصتُها للبائع'
+);
+near(
+  mixed.reduce((s, r) => s + r.amount, 0),
+  500,
+  'المجموع محفوظ: لا جنيه يضيع ولا يُخلق'
+);
+check(
+  mixed.filter((r) => r.userId === 'nora' && r.projectId === 'p2').length === 1,
+  'الحصتان تُدمجان في سطر واحد للصفقة الواحدة لا سطرين متكرّرين'
+);
+
+// كل الصفقات بلا مستحقٍّ ثانٍ — كأن لا مدير أصلًا
+near(
+  attributeShares({
+    sellerId: 'bakri',
+    adminAmount: 500,
+    managerAmount: 0,
+    projects: [{ projectId: 'p1', collected: 1000, managerId: null }],
+  }).reduce((s, r) => s + r.amount, 0),
+  500,
+  'المستقل يأخذ كل شيء في سطر واحد'
+);
+
+// ── لوحة الترتيب ─────────────────────────────────────────────
+
+const ranked = rankBy(
+  [
+    { name: 'أ', achieved: 100 },
+    { name: 'ب', achieved: 300 },
+    { name: 'ج', achieved: 300 },
+    { name: 'د', achieved: 50 },
+  ],
+  (r) => r.achieved
+);
+check(ranked[0].rank === 1 && ranked[1].rank === 1, 'المتساويان يشتركان في المركز الأول');
+check(ranked[2].rank === 3, 'والتالي يقفز إلى الثالث لا الثاني');
+check(ranked[3].rank === 4, 'ثم يستمر الترقيم من موقعه الفعلي');
+check(ranked[0].achieved === 300, 'الترتيب تنازلي بالمحقَّق');
+check(rankBy([], (r) => r.achieved).length === 0, 'قائمة فارغة لا تنكسر');
+check(medal(1) === '🥇' && medal(3) === '🥉', 'أوسمة المراكز الثلاثة');
+check(medal(4) === null, 'وما بعد الثالث بلا وسام — لا وسام مشاركة');
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n═══ النتيجة: ${results.length - failed.length}/${results.length} نجحت ═══`);

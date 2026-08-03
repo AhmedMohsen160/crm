@@ -71,6 +71,88 @@ async function createsCycle(deptId: string, parentId: string): Promise<boolean> 
   return false;
 }
 
+// ── الموظفون ───────────────────────────────────────────────────
+
+/**
+ * **تعيين موظف من شاشة الموارد البشرية.**
+ *
+ * كان تسجيل الموظف لا يتم إلا من شاشة المستخدمين، وهي بيد من يدير
+ * المستخدمين — فبقيت الموارد البشرية بلا باب تُدخل منه موظفًا. وهذا يفصل
+ * الأمرين: الموارد البشرية **تُعيّن** (القسم والمدير والراتب)، وإدارة
+ * المستخدمين **تفتح الحساب** بعدها إن احتاج الموظف دخولًا.
+ *
+ * فالسجل يُولد **بلا دخول**: أغلب المعيَّنين — مترجمون ومراجعون — لا يدخلون
+ * النظام أصلًا، ومديرهم هو من يرصد عملهم. ومن يحتاج حسابًا يُمنح له من
+ * شاشة المستخدمين بدور وبريد وكلمة مرور، فلا تُمنح الصلاحيات من حيث لا
+ * تُراجَع.
+ *
+ * والراتب الأساسي — إن كُتب — يُنشأ **بندًا** لا عمودًا: الأجر بنودٌ بتاريخ
+ * سريان، فتبقى كشوف الماضي كما صُرفت مهما تغيّر راتب الغد.
+ */
+export async function saveEmployee(fd: FormData, user: SessionUser, id?: string) {
+  if (!can(user, 'canManageHr')) {
+    throw new MutationError('تعيين الموظفين لمن يدير الموارد البشرية');
+  }
+
+  const name = str(fd, 'name');
+  if (!name) throw new MutationError('اسم الموظف مطلوب');
+
+  const hireDate = date(fd, 'hireDate');
+  const basicSalary = num(fd, 'basicSalary');
+  if (basicSalary !== null && basicSalary < 0) {
+    throw new MutationError('الراتب الأساسي لا يكون سالبًا');
+  }
+
+  const data = {
+    name,
+    phone: str(fd, 'phone'),
+    jobTitle: str(fd, 'jobTitle'),
+    branch: str(fd, 'branch'),
+    departmentId: str(fd, 'departmentId'),
+    reportsToId: str(fd, 'reportsToId'),
+    employmentType: str(fd, 'employmentType') ?? 'full_time',
+    hireDate,
+    nationalId: str(fd, 'nationalId'),
+    payMethod: str(fd, 'payMethod'),
+    bankAccount: str(fd, 'bankAccount'),
+    isProducer: fd.get('isProducer') === 'on',
+  };
+
+  if (id) {
+    const existing = await db.user.findUnique({ where: { id } });
+    if (!existing) throw new MutationError('الموظف غير موجود');
+    if (data.reportsToId === id) throw new MutationError('لا يتبع الموظف نفسه');
+
+    // الدور والبريد وكلمة المرور خارج هذه الشاشة عمدًا — لا تُمسّ من هنا
+    await db.user.update({ where: { id }, data });
+    await auditDiff(user.id, 'User', id, existing, data);
+    return `/hr/employees/${id}`;
+  }
+
+  const created = await db.user.create({
+    data: { ...data, canLogin: false, active: true },
+  });
+  await auditEvent(user.id, 'create', 'User', created.id, `تعيين ${name}`);
+
+  if (basicSalary !== null && basicSalary > 0) {
+    await db.salaryComponent.create({
+      data: {
+        userId: created.id,
+        kind: 'basic',
+        label: 'الراتب الأساسي',
+        amount: basicSalary,
+        isPercent: false,
+        frequency: 'monthly',
+        // يسري من تاريخ التعيين لا من تاريخ الإدخال — وإلا ضاع شهرُ تعيينه
+        effectiveFrom: hireDate ?? new Date(),
+      },
+    });
+    await auditEvent(user.id, 'create', 'SalaryComponent', created.id, `أساسي ${basicSalary}`);
+  }
+
+  return `/hr/employees/${created.id}`;
+}
+
 // ── بنود الأجر ─────────────────────────────────────────────────
 
 /**

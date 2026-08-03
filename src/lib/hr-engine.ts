@@ -219,6 +219,106 @@ export async function performance(params: {
   return rows.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 }
 
+export type OwnWork = {
+  /** خطوات نفّذها في الفترة — عمله هو كما رصده مدير المشاريع */
+  steps: {
+    id: string;
+    stepType: string;
+    pages: number;
+    weightedPages: number;
+    projectId: string;
+    projectCode: string | null;
+    projectTitle: string;
+    deliveredAt: Date | null;
+  }[];
+  weightedPages: number;
+  projectCount: number;
+  producedCount: number;
+  reviewedCount: number;
+  /** نسبة التسليم في الموعد — `null` حين لا مشروع مسلَّم يُقاس عليه */
+  onTimePct: number | null;
+  /** ملاحظات الجودة لكل مئة صفحة موزونة — `null` حين لا إنتاج */
+  qaPer100: number | null;
+};
+
+/**
+ * **عمل الشخص نفسه — بلا رقم تكلفة واحد.**
+ *
+ * هذه شاشة المترجم: «وجوده على النظام ليس شرطًا، لكن لو أراد رؤية أدائه
+ * وتقدّمه ومشاريعه — دون عرض للتكلفات». فلا `cost` ولا `hourlyCost` ولا
+ * `revenue` ولا `roi` في هذا النوع أصلًا، لا محجوبةً في الواجهة: الحقل الذي
+ * لا يملكه المستخدم **لا يُبنى** (§٣ بند ٢).
+ *
+ * وما لا يُقاس يُعاد `null` لا صفرًا: شهرٌ بلا تسليم «غير مقيس» لا «صفر
+ * التزام بالمواعيد».
+ */
+export async function ownWork(userId: string, from: Date, to: Date): Promise<OwnWork> {
+  const [steps, produced, reviewed] = await Promise.all([
+    db.projectStep.findMany({
+      where: {
+        performerId: userId,
+        project: { deliveredAt: { gte: from, lte: to } },
+      },
+      select: {
+        id: true,
+        stepType: true,
+        pages: true,
+        weightedPages: true,
+        projectId: true,
+        project: { select: { code: true, title: true, deliveredAt: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    }),
+    db.project.findMany({
+      where: {
+        primaryProducerId: userId,
+        status: { in: ['delivered', 'collected'] },
+        deliveredAt: { gte: from, lte: to },
+      },
+      select: { qaIssues: true, deadline: true, deliveredAt: true, weightedPages: true },
+    }),
+    db.project.count({
+      where: {
+        reviewerId: userId,
+        status: { in: ['delivered', 'collected'] },
+        deliveredAt: { gte: from, lte: to },
+      },
+    }),
+  ]);
+
+  const stepPages = round2(steps.reduce((s, x) => s + x.weightedPages, 0));
+  const producedPages = round2(produced.reduce((s, p) => s + (p.weightedPages ?? 0), 0));
+  // الخطوات أدقّ حين وُجدت؛ وإلا فالمشاريع التي كان منفِّذها الرئيسي
+  const weightedPages = stepPages > 0 ? stepPages : producedPages;
+
+  const qaIssues = produced.reduce((s, p) => s + (p.qaIssues ?? 0), 0);
+  const timing = onTimeRate(
+    produced.map((p) => ({ deadline: p.deadline, deliveredAt: p.deliveredAt }))
+  );
+
+  const projectIds = new Set(steps.map((s) => s.projectId));
+
+  return {
+    steps: steps.map((s) => ({
+      id: s.id,
+      stepType: s.stepType,
+      pages: s.pages,
+      weightedPages: s.weightedPages,
+      projectId: s.projectId,
+      projectCode: s.project.code,
+      projectTitle: s.project.title,
+      deliveredAt: s.project.deliveredAt,
+    })),
+    weightedPages,
+    projectCount: projectIds.size,
+    producedCount: produced.length,
+    reviewedCount: reviewed,
+    onTimePct: timing.rate,
+    qaPer100: weightedPages > 0 ? round2((qaIssues / weightedPages) * 100) : null,
+  };
+}
+
 /**
  * يبني كشف رواتب الشهر من هيكل الأجر الساري.
  *

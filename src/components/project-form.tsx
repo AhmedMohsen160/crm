@@ -24,6 +24,7 @@ type ProjectData = {
   contactId: string | null;
   clientId: string | null;
   ownerId: string | null;
+  coOwnerId: string | null;
 };
 
 export type ProjectFormLists = {
@@ -196,12 +197,23 @@ export default function ProjectForm({
             }))}
           />
           {canAssign && (
-            <SelectField
-              label="أدمن المبيعات"
-              name="ownerId"
-              defaultValue={project?.ownerId ?? currentUserId}
-              options={users.map((u) => ({ value: u.id, label: u.name }))}
-            />
+            <>
+              <SelectField
+                label="المالك الرئيسي"
+                name="ownerId"
+                defaultValue={project?.ownerId ?? currentUserId}
+                options={users.map((u) => ({ value: u.id, label: u.name }))}
+                hint="من جلب الصفقة"
+              />
+              <SelectField
+                label="المالك الفرعي"
+                name="coOwnerId"
+                defaultValue={project?.coOwnerId}
+                placeholder="لا يوجد — الجالب هو الخادم"
+                options={users.map((u) => ({ value: u.id, label: u.name }))}
+                hint="من يخدم الصفقة: له حصة الأدمن، وللجالب حصة المدير، والفرع فرعُه هو"
+              />
+            </>
           )}
           <TextAreaField
             label="تفاصيل"

@@ -16,7 +16,7 @@ import {
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { PageHeader } from '@/components/ui';
-import type { Permission } from '@/lib/permissions';
+import { PERMISSION_KEYS, type Permission } from '@/lib/permissions';
 
 export const metadata = { title: 'الإعدادات' };
 export const dynamic = 'force-dynamic';
@@ -49,8 +49,8 @@ export default async function SettingsPage() {
       href: '/settings/roles',
       icon: ShieldCheck,
       title: 'الأدوار والصلاحيات',
-      description: `أنشئ دورًا وامنحه ما تشاء من ١٨ صلاحية — ${roleCount} دور`,
-      permission: 'canManageUsers',
+      description: `أنشئ دورًا وامنحه ما تشاء من ${PERMISSION_KEYS.length} صلاحية — ${roleCount} دور`,
+      permission: 'canManageRoles',
     },
     {
       href: '/settings/lists',

@@ -5,7 +5,7 @@ import { can, hashPassword, verifyPassword, type SessionUser } from '@/lib/auth'
 import { str, num, date, fullName } from '@/lib/utils';
 import { logActivity, readEntityLink, linkPath, type EntityLink } from '@/lib/actions/helpers';
 import { auditEvent, auditDiff } from '@/lib/audit';
-import { PERMISSION_KEYS } from '@/lib/permissions';
+import { PERMISSION_KEYS, PERMISSIONS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
 import { normalizePhone } from '@/lib/phone';
@@ -122,6 +122,7 @@ export async function saveUser(fd: FormData, admin: SessionUser, id?: string) {
   if (canLogin && !roleId) throw new MutationError('الدور مطلوب لمن يدخل النظام');
   const role = roleId ? await db.role.findUnique({ where: { id: roleId } }) : null;
   if (roleId && !role) throw new MutationError('الدور المختار غير موجود');
+  if (role) assertNoEscalation(admin, role);
 
   const hrData = {
     departmentId: str(fd, 'departmentId'),
@@ -238,6 +239,24 @@ export async function saveUser(fd: FormData, admin: SessionUser, id?: string) {
   return '/settings/users';
 }
 
+/**
+ * **لا يمنح أحدٌ ما لا يملك.**
+ *
+ * صار «إدارة المستخدمين» بيد مدير المبيعات ليضيف أدمنز — وهي في يده بابٌ
+ * مفتوح لولا هذا الفحص: يُنشئ حسابًا بدور «المالك الرئيسي» ويدخل به، أو
+ * يرفع نفسه بتعديل حسابه. فالقاعدة أن الدور المُسنَد لا يحمل صلاحيةً
+ * يفتقدها المُسنِد. ومن يملك كل الصلاحيات يمنح كل الأدوار كما كان.
+ */
+function assertNoEscalation(admin: SessionUser, role: Record<string, unknown>) {
+  const excess = PERMISSION_KEYS.filter((key) => role[key] === true && !can(admin, key));
+  if (excess.length > 0) {
+    throw new MutationError(
+      'لا تُسنِد دورًا يملك صلاحيات ليست لديك: ' +
+        excess.map((key) => PERMISSIONS[key]).join('، ')
+    );
+  }
+}
+
 /** هل يجعل هذا الاختيار المستخدمَ تابعًا لأحد مرؤوسيه؟ */
 async function reportsToCreatesCycle(userId: string, managerId: string): Promise<boolean> {
   let current: string | null = managerId;
@@ -260,8 +279,10 @@ async function reportsToCreatesCycle(userId: string, managerId: string): Promise
 // ═══════════════════════════════════════════════════════════════
 
 export async function saveRole(fd: FormData, admin: SessionUser, id?: string) {
-  if (!can(admin, 'canManageUsers')) {
-    throw new MutationError('ليس لديك صلاحية إدارة الأدوار');
+  // صلاحية مستقلّة عن «إدارة المستخدمين» عمدًا: مدير المبيعات يضيف أدمنز
+  // ولا يُعيد تعريف من يرى ماذا (قرار الإدارة — المرحلة ١٤)
+  if (!can(admin, 'canManageRoles')) {
+    throw new MutationError('ليس لديك صلاحية إنشاء الأدوار أو تعديلها');
   }
 
   const label = str(fd, 'label');
@@ -272,6 +293,9 @@ export async function saveRole(fd: FormData, admin: SessionUser, id?: string) {
   const permissions = Object.fromEntries(
     PERMISSION_KEYS.map((key) => [key, fd.get(key) === 'on'])
   ) as Record<(typeof PERMISSION_KEYS)[number], boolean>;
+
+  // ولا يُنشئ دورًا أقوى من نفسه — القاعدة نفسها التي تحكم إسناد الأدوار
+  assertNoEscalation(admin, permissions);
 
   const discountLimit = num(fd, 'discountLimit') ?? 0;
   if (discountLimit < 0 || discountLimit > 1) {

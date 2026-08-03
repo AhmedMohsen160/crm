@@ -129,15 +129,33 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
     }
   }
 
+  /**
+   * **الملكية المزدوجة**: مالكٌ رئيسي جلب الصفقة، ومالكٌ فرعي يخدمها.
+   * والفرع فرعُ الخادم لا الجالب — الصفقة تُنسب لمن سلّم العميل.
+   */
+  const rawCoOwnerId = str(fd, 'coOwnerId');
+  /** يُلغى المالك الفرعي إن ساوى الرئيسي — وإلا صار الشخص مديرَ نفسه في النسب */
+  const resolveCoOwner = async (ownerId: string | null) => {
+    const coOwnerId = rawCoOwnerId && rawCoOwnerId !== ownerId ? rawCoOwnerId : null;
+    const branch = coOwnerId
+      ? ((await db.user.findUnique({ where: { id: coOwnerId }, select: { branch: true } }))
+          ?.branch ?? null)
+      : null;
+    return { coOwnerId, branch };
+  };
+
   if (!id) {
+    const ownerId = str(fd, 'ownerId') ?? user.id;
+    const servicing = await resolveCoOwner(ownerId);
     const project = await db.project.create({
       data: {
         ...data,
         code: await nextProjectCode(),
         status: 'pending_assignment',
-        branch: user.branch,
+        branch: servicing.branch ?? user.branch,
         convertedAt: new Date(),
-        ownerId: str(fd, 'ownerId') ?? user.id,
+        ownerId,
+        coOwnerId: servicing.coOwnerId,
       },
     });
     await logActivity({
@@ -155,12 +173,20 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
   if (!existing) throw new MutationError('المشروع غير موجود');
   requireOwn(existing.ownerId, user, 'ليس لديك صلاحية تعديل هذا المشروع');
 
+  const nextOwnerId = str(fd, 'ownerId') ?? existing.ownerId;
+  // النموذج الذي لا يحمل الحقل أصلًا لا يمسّ ملكيةً فرعية قائمة
+  const servicing = fd.has('coOwnerId')
+    ? await resolveCoOwner(nextOwnerId)
+    : { coOwnerId: existing.coOwnerId, branch: null };
+
   const after = {
     ...data,
     ...(discountType ? { discountType: discountType === 'none' ? null : discountType } : {}),
     ...(discountValue !== null ? { discountValue } : {}),
     ...approvalPatch,
-    ownerId: str(fd, 'ownerId') ?? existing.ownerId,
+    ownerId: nextOwnerId,
+    coOwnerId: servicing.coOwnerId,
+    ...(servicing.branch ? { branch: servicing.branch } : {}),
   };
   await db.project.update({ where: { id }, data: after });
   await auditDiff(user.id, 'Project', id, existing, after);

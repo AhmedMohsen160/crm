@@ -111,6 +111,7 @@ export {
 // الموارد البشرية: الأقسام · هيكل الأجر · كشف الرواتب
 export {
   saveDepartment,
+  saveEmployee,
   saveSalaryComponent,
   endSalaryComponent,
   runPayroll,

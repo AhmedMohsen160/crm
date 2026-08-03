@@ -39,6 +39,7 @@ import {
   deriveAllocationRate,
   closeBranchPeriod,
   saveDepartment,
+  saveEmployee,
   saveSalaryComponent,
   endSalaryComponent,
   runPayroll,
@@ -220,6 +221,9 @@ export async function POST(request: NextRequest) {
       // ── الموارد البشرية ──────────────────────────────────
       case 'department':
         destination = await saveDepartment(fd, user, id);
+        break;
+      case 'employee':
+        destination = await saveEmployee(fd, user, id);
         break;
       case 'salaryComponent':
         destination = await saveSalaryComponent(fd, user, id);

@@ -68,8 +68,9 @@ export default async function EmployeeHrPage({
         {!user.canLogin && (
           <Badge className="border-lime-300 bg-lime-50 text-lime-800">منفِّذ داخلي</Badge>
         )}
-        <Link href={`/settings/users/${id}`} className="btn-secondary">
-          بياناته الأساسية
+        {/* بياناته من هنا لا من شاشة المستخدمين: تلك بيد من يمنح الصلاحيات */}
+        <Link href={`/hr/employees/${id}/edit`} className="btn-secondary">
+          تعديل بياناته
         </Link>
         <Link href="/hr/employees" className="btn-secondary">
           رجوع للقائمة

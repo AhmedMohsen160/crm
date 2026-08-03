@@ -16,7 +16,8 @@ export default async function LoginPage({
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 w-fit">
-            <FastTransMark className="h-14 w-14 shadow-lg shadow-brand-600/25" />
+            {/* العرض من الارتفاع بنسبة الشعار ١٢٠:٢٠٦ — لا مربّعًا فتُشوَّه الكتلة */}
+            <FastTransMark className="h-14 w-[33px] shadow-lg shadow-brand-600/25" />
           </div>
           <h1 className="text-xl font-bold text-brand-600">{COMPANY_AR}</h1>
           <p className="mt-1 text-xs font-medium tracking-[0.18em] text-slate-400">

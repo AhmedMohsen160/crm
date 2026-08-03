@@ -14,7 +14,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#1f44f5',
+  // كحلي الهوية — كان أزرقًا سابقًا من قبل توحيد الهوية
+  themeColor: '#242E5B',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

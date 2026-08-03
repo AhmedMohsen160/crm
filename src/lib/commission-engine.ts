@@ -2,7 +2,7 @@ import 'server-only';
 import { db } from './db';
 import {
   computeCommission,
-  splitByProject,
+  attributeShares,
   periodRange,
   type CommissionTier,
   type TierMode,
@@ -25,6 +25,8 @@ export type SchemeWithTiers = {
   basis: string;
   tierMode: string;
   tiers: CommissionTier[];
+  /** عتبة استحقاق هذا الشخص — من إسناده لا من الخطة */
+  target: number | null;
 };
 
 /** الخطة السارية لمستخدم في تاريخ محدَّد — أو الافتراضية */
@@ -38,14 +40,14 @@ export async function schemeForUser(
     include: { scheme: { include: { tiers: true } } },
   });
 
-  const scheme =
-    assignment?.scheme?.active === true
-      ? assignment.scheme
-      : await db.commissionScheme.findFirst({
-          where: { isDefault: true, active: true, effectiveFrom: { lte: asOf } },
-          orderBy: { effectiveFrom: 'desc' },
-          include: { tiers: true },
-        });
+  const assigned = assignment?.scheme?.active === true;
+  const scheme = assigned
+    ? assignment!.scheme
+    : await db.commissionScheme.findFirst({
+        where: { isDefault: true, active: true, effectiveFrom: { lte: asOf } },
+        orderBy: { effectiveFrom: 'desc' },
+        include: { tiers: true },
+      });
 
   if (!scheme) return null;
   return {
@@ -53,6 +55,8 @@ export async function schemeForUser(
     name: scheme.name,
     basis: scheme.basis,
     tierMode: scheme.tierMode,
+    // العتبة تتبع الإسناد: سقطت الخطة المسنَدة فسقطت عتبتها معها
+    target: assigned ? (assignment!.target ?? null) : null,
     tiers: scheme.tiers.map((t) => ({
       fromAmount: t.fromAmount,
       toAmount: t.toAmount,
@@ -69,6 +73,7 @@ export type PeriodSummary = {
   sellers: {
     userId: string;
     userName: string;
+    /** المدير الغالب في صفقات الفترة — للعرض وحده، والإسناد يقع بالصفقة */
     managerId: string | null;
     managerName: string | null;
     schemeName: string | null;
@@ -79,7 +84,21 @@ export type PeriodSummary = {
     currentAdminRate: number;
     nextTierAt: number | null;
     remainingToNext: number | null;
-    projects: { id: string; code: string | null; title: string; collected: number }[];
+    /** عتبة استحقاقه وحالها */
+    target: number | null;
+    targetMet: boolean;
+    remainingToTarget: number | null;
+    projects: {
+      id: string;
+      code: string | null;
+      title: string;
+      collected: number;
+      /** مستحقّ حصة المدير عن هذه الصفقة */
+      managerId: string | null;
+      managerName: string | null;
+      /** هل هي صفقة جلبها غيرُه وخدمها هو؟ */
+      isServiced: boolean;
+    }[];
   }[];
   totalAchieved: number;
   totalCommission: number;
@@ -109,26 +128,34 @@ export async function computePeriod(period: string): Promise<PeriodSummary> {
       collectedAmount: true,
       ownerId: true,
       owner: { select: { id: true, name: true, reportsToId: true } },
+      coOwnerId: true,
+      coOwner: { select: { id: true, name: true, reportsToId: true } },
     },
   });
 
-  // نجمّع بالبائع
+  /**
+   * **البائع الفعلي هو المالك الفرعي إن وُجد.** الصفقة التي جلبها مدير
+   * المبيعات وخدمتها نورا تُحسب في محقَّق نورا (حصة الأدمن)، وتذهب حصة
+   * المدير عنها للجالب. وإلا فالبائع هو المالك ومديره مديرُه الإداري.
+   */
   const byOwner = new Map<string, typeof projects>();
   for (const project of projects) {
-    if (!project.ownerId) continue;
-    const list = byOwner.get(project.ownerId) ?? [];
+    const sellerId = project.coOwnerId ?? project.ownerId;
+    if (!sellerId) continue;
+    const list = byOwner.get(sellerId) ?? [];
     list.push(project);
-    byOwner.set(project.ownerId, list);
+    byOwner.set(sellerId, list);
   }
 
-  const managerIds = [
-    ...new Set(
-      [...byOwner.values()].map((list) => list[0].owner?.reportsToId).filter(Boolean)
-    ),
-  ] as string[];
-  const managers = managerIds.length
+  const managerIds = new Set<string>();
+  for (const project of projects) {
+    const seller = project.coOwnerId ? project.coOwner : project.owner;
+    const managerId = project.coOwnerId ? project.ownerId : (seller?.reportsToId ?? null);
+    if (managerId && managerId !== (project.coOwnerId ?? project.ownerId)) managerIds.add(managerId);
+  }
+  const managers = managerIds.size
     ? await db.user.findMany({
-        where: { id: { in: managerIds } },
+        where: { id: { in: [...managerIds] } },
         select: { id: true, name: true },
       })
     : [];
@@ -136,33 +163,48 @@ export async function computePeriod(period: string): Promise<PeriodSummary> {
 
   const sellers: PeriodSummary['sellers'] = [];
 
-  for (const [ownerId, list] of byOwner) {
-    const scheme = await schemeForUser(ownerId, end);
-    const owner = list[0].owner;
-    const managerId = owner?.reportsToId ?? null;
+  for (const [sellerId, list] of byOwner) {
+    const scheme = await schemeForUser(sellerId, end);
+    const seller = list[0].coOwnerId === sellerId ? list[0].coOwner : list[0].owner;
 
     // المحصَّل من كل مشروع = المقدم + ما حُصّل بعده
-    const perProject = list.map((p) => ({
-      id: p.id,
-      code: p.code,
-      title: p.title,
-      collected:
-        scheme?.basis === 'net' ? p.netTotal : Math.min(p.netTotal, p.deposit + p.collectedAmount),
-    }));
+    const perProject = list.map((p) => {
+      const isServiced = Boolean(p.coOwnerId);
+      // مستحقّ حصة المدير عن هذه الصفقة بعينها — لا عن الشهر كله
+      const rawManagerId = isServiced ? p.ownerId : (seller?.reportsToId ?? null);
+      // لا يأخذ أحد الحصتين عن نفسه: صفقةٌ مالكها الرئيسي هو خادمها
+      const managerId = rawManagerId && rawManagerId !== sellerId ? rawManagerId : null;
+      return {
+        id: p.id,
+        code: p.code,
+        title: p.title,
+        collected:
+          scheme?.basis === 'net' ? p.netTotal : Math.min(p.netTotal, p.deposit + p.collectedAmount),
+        managerId,
+        managerName: managerId ? (managerName.get(managerId) ?? null) : null,
+        isServiced,
+      };
+    });
     const achieved = perProject.reduce((s, p) => s + p.collected, 0);
 
     const result = computeCommission({
       total: achieved,
       tiers: scheme?.tiers ?? [],
       mode: (scheme?.tierMode as TierMode) ?? 'progressive',
-      hasManager: Boolean(managerId),
+      // يكفي أن يكون لصفقةٍ واحدة مستحقٌّ لحصة المدير ليُحسب النصيبان،
+      // ثم يُوزَّع كلٌّ على صفقته، وما لا مستحقّ له يعود للبائع.
+      hasManager: perProject.some((p) => p.managerId),
+      target: scheme?.target ?? null,
     });
 
+    // المدير الغالب — للعرض في صف الملخّص وحده
+    const dominant = perProject.find((p) => p.managerId)?.managerId ?? null;
+
     sellers.push({
-      userId: ownerId,
-      userName: owner?.name ?? 'غير معروف',
-      managerId,
-      managerName: managerId ? (managerName.get(managerId) ?? null) : null,
+      userId: sellerId,
+      userName: seller?.name ?? 'غير معروف',
+      managerId: dominant,
+      managerName: dominant ? (managerName.get(dominant) ?? null) : null,
       schemeName: scheme?.name ?? null,
       achieved,
       adminAmount: result.adminAmount,
@@ -171,6 +213,9 @@ export async function computePeriod(period: string): Promise<PeriodSummary> {
       currentAdminRate: result.currentAdminRate,
       nextTierAt: result.nextTierAt,
       remainingToNext: result.remainingToNext,
+      target: scheme?.target ?? null,
+      targetMet: result.targetMet,
+      remainingToTarget: result.remainingToTarget,
       projects: perProject,
     });
   }
@@ -222,42 +267,34 @@ export async function rebuildPeriod(period: string): Promise<{ written: number; 
 
   for (const seller of summary.sellers) {
     const scheme = await schemeForUser(seller.userId, periodRange(period).end);
+    const baseOf = new Map(seller.projects.map((p) => [p.id, p.collected]));
 
-    // حصة الأدمن موزّعة على مشاريعه، فيمكن تتبّع كل جنيه لمصدره
-    for (const row of splitByProject(seller.adminAmount, seller.projects.map((p) => ({
-      projectId: p.id,
-      collected: p.collected,
-    })))) {
+    /**
+     * الحصتان تُوزَّعان على المشاريع، **ولكل مشروع مديرُه هو** — فصفقةٌ جلبها
+     * مدير المبيعات وخدمها الأدمن تُعطي المديرَ حصتَه عنها هي وحدها. فيمكن
+     * تتبّع كل جنيه إلى صفقته ومستحقّه، وعكسُه وحده عند الاسترداد.
+     */
+    for (const row of attributeShares({
+      sellerId: seller.userId,
+      adminAmount: seller.adminAmount,
+      managerAmount: seller.managerAmount,
+      projects: seller.projects.map((p) => ({
+        projectId: p.id,
+        collected: p.collected,
+        managerId: p.managerId,
+      })),
+    })) {
       rows.push({
         period,
-        userId: seller.userId,
-        role: 'admin',
+        userId: row.userId,
+        role: row.role,
         sourceUserId: seller.userId,
         projectId: row.projectId,
-        base: seller.projects.find((p) => p.id === row.projectId)?.collected ?? 0,
-        rate: seller.currentAdminRate,
+        base: baseOf.get(row.projectId) ?? 0,
+        rate: row.role === 'admin' ? seller.currentAdminRate : 0,
         amount: row.amount,
         schemeId: scheme?.id ?? null,
       });
-    }
-
-    if (seller.managerId && seller.managerAmount > 0) {
-      for (const row of splitByProject(seller.managerAmount, seller.projects.map((p) => ({
-        projectId: p.id,
-        collected: p.collected,
-      })))) {
-        rows.push({
-          period,
-          userId: seller.managerId,
-          role: 'manager',
-          sourceUserId: seller.userId,
-          projectId: row.projectId,
-          base: seller.projects.find((p) => p.id === row.projectId)?.collected ?? 0,
-          rate: 0,
-          amount: row.amount,
-          schemeId: scheme?.id ?? null,
-        });
-      }
     }
   }
 

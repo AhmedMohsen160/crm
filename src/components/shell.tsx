@@ -16,6 +16,8 @@ import {
   FileText,
   FileSignature,
   Percent,
+  Gauge,
+  Trophy,
   Calculator,
   BarChart3,
   Mail,
@@ -37,7 +39,16 @@ const COMPANY_AR = process.env.NEXT_PUBLIC_COMPANY_NAME_AR || 'نظام إدار
 
 const NAV = [
   { href: '/', label: 'لوحة التحكم', icon: LayoutDashboard, exact: true },
-  { href: '/leads', label: 'العملاء المحتملون', icon: UserPlus },
+  /**
+   * قسم الليدز محجوب عن المحاسب بقرار الإدارة: «هو يتعامل فقط مع العملاء».
+   * ويبقى له `canViewLeadStats` — الأعداد والتكلفة إجمالًا في التحليلات.
+   */
+  {
+    href: '/leads',
+    label: 'العملاء المحتملون',
+    icon: UserPlus,
+    anyOf: ['canViewAllLeads', 'canViewTeamLeads', 'canCreateLead'] as const,
+  },
   { href: '/clients', label: 'العملاء', icon: Contact },
   { href: '/companies', label: 'الشركات', icon: Building2 },
   { href: '/contacts', label: 'جهات الاتصال', icon: Users },
@@ -62,8 +73,15 @@ const NAV = [
     permission: 'canViewSellPrice' as const,
   },
   { href: '/tasks', label: 'المهام', icon: ListChecks },
-  // «نسبي» بلا صلاحية: كل موظف يرى استحقاقه هو. الترشيح في الخادم.
+  // «نسبي» و«أدائي» بلا صلاحية: كلٌّ يرى نفسه. الترشيح في الخادم.
   { href: '/commissions', label: 'نسبي', icon: Percent },
+  { href: '/me', label: 'أدائي', icon: Gauge, exact: true },
+  {
+    href: '/leaderboard',
+    label: 'لوحة الترتيب',
+    icon: Trophy,
+    permission: 'canViewLeaderboard' as const,
+  },
   {
     href: '/email',
     label: 'البريد',
@@ -116,7 +134,11 @@ export default function Shell({
 
   const nav = (
     <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
-      {NAV.filter((item) => !item.permission || hasPermission(user, item.permission)).map(
+      {NAV.filter(
+        (item) =>
+          (!item.permission || hasPermission(user, item.permission)) &&
+          (!item.anyOf || hasAnyPermission(user, ...item.anyOf))
+      ).map(
         (item) => {
         const Icon = item.icon;
         const active = isActive(item.href, item.exact);
@@ -165,7 +187,7 @@ export default function Shell({
         )}
       </Link>
 
-      {hasAnyPermission(user, 'canManageUsers', 'canManageSettings') && (
+      {hasAnyPermission(user, 'canManageUsers', 'canManageRoles', 'canManageSettings') && (
         <>
           <div className="my-2 border-t border-slate-200" />
           <Link
@@ -226,7 +248,7 @@ export default function Shell({
       {/* الشريط العلوي — الجوال */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
         <div className="flex items-center gap-2">
-          <FastTransMark className="h-8 w-8" />
+          <FastTransMark className="h-8 w-[19px]" />
           <span className="truncate text-sm font-bold text-brand-600">FAST TRANS</span>
         </div>
         <button
