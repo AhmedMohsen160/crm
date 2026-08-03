@@ -76,6 +76,7 @@ model User {
   closedFiscal    FiscalPeriod[]    @relation("PeriodCloser")
   approvedBudgets Budget[]          @relation("BudgetApprover")
   resolvedReviews MigrationReview[] @relation("ReviewResolver")
+  notifications   Notification[]
 
   @@index([email])
   @@index([reportsToId])
@@ -1277,4 +1278,42 @@ model MigrationReview {
   createdAt DateTime @default(now())
 
   @@index([source, status])
+}
+
+/// تنبيه مُرسَل (§١٢) — **ملخص واحد لكل شخص لكل حدث** لا رسالة لكل سجل
+model Notification {
+  id       String @id @default(cuid())
+  /// مفتاح الحدث من NOTIFICATION_EVENTS
+  eventKey String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title     String
+  body      String
+  link      String?
+  /// info | warn | urgent
+  severity  String  @default("info")
+  /// عدد السجلات التي جمعها هذا الملخص
+  count     Int     @default(1)
+  /// معرّفات السجلات مفصولة بفواصل — العرض يُختصر والبيانات لا
+  recordIds String?
+
+  /// الحدث + الشخص + الدورة — يمنع رسالتين لنفس الشيء
+  dedupeKey String @unique
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([eventKey])
+}
+
+/// آخر مرة رُوجع فيها حدثٌ — عليه يقوم قرار «هل حان الملخص؟»
+model NotificationRun {
+  eventKey   String    @id
+  lastSentAt DateTime?
+  lastRunAt  DateTime  @default(now())
+  lastCount  Int       @default(0)
+  note       String?
 }

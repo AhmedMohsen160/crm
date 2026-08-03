@@ -37,6 +37,7 @@ import {
 } from '@/lib/freelancers';
 import { syncStepPayment, recordFreelancerUse, resolveFreelancerRate } from '@/lib/freelancer-engine';
 import { importLeadSheet, importSalesSheet } from '@/lib/import-legacy';
+import { runAllEvents } from '@/lib/notification-engine';
 import { freezeProjectCost, stepWeightedPages } from '@/lib/project-costing';
 import { priceForProject, discountLimitOf, discountRatio } from '@/lib/pricing';
 import { rebuildPeriod, reverseProjectCommission } from '@/lib/commission-engine';
@@ -2676,4 +2677,45 @@ export async function resolveMigrationRow(fd: FormData, user: SessionUser, id?: 
   });
   await auditEvent(user.id, 'update', 'MigrationReview', id, action);
   return '/settings/import/review?saved=1';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  التنبيهات (§١٢)
+// ═══════════════════════════════════════════════════════════════
+
+/** يعلّم تنبيهًا — أو كل تنبيهات صاحبه — مقروءًا */
+export async function markNotificationsRead(fd: FormData, user: SessionUser, id?: string) {
+  const scope = str(fd, 'scope');
+
+  if (scope === 'all') {
+    await db.notification.updateMany({
+      // **المستخدم نفسه وحده**: لا يعلّم أحد تنبيهات غيره
+      where: { userId: user.id, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return '/notifications?saved=1';
+  }
+
+  if (!id) throw new MutationError('معرّف التنبيه مفقود');
+  await db.notification.updateMany({
+    where: { id, userId: user.id },
+    data: { readAt: new Date() },
+  });
+  return '/notifications';
+}
+
+/**
+ * يفحص أحداث §١٢ الثمانية ويكتب ما استحقّ.
+ *
+ * يُستدعى عادةً من مؤقّت خارجي، ومن الشاشة عند الحاجة. **آمن التكرار.**
+ */
+export async function runNotifications(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageSettings')) {
+    throw new MutationError('تشغيل الفحص لمن يملك إدارة الإعدادات');
+  }
+
+  const results = await runAllEvents();
+  const written = results.reduce((s, r) => s + r.written, 0);
+  await auditEvent(user.id, 'create', 'Notification', 'run', `فحص التنبيهات: ${written} رسالة`);
+  return `/notifications?saved=1&written=${written}`;
 }

@@ -20,6 +20,8 @@ import {
   saveFreelancerRate,
   payFreelancer,
   importFreelancers,
+  markNotificationsRead,
+  runNotifications,
   importLegacySheet,
   resolveMigrationRow,
   saveAccount,
@@ -124,6 +126,12 @@ export async function POST(request: NextRequest) {
         break;
       case 'freelancer.import':
         destination = await importFreelancers(fd, user);
+        break;
+      case 'notifications.read':
+        destination = await markNotificationsRead(fd, user, id);
+        break;
+      case 'notifications.run':
+        destination = await runNotifications(fd, user);
         break;
       case 'legacy.import':
         destination = await importLegacySheet(fd, user);

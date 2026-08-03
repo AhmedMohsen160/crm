@@ -1348,6 +1348,91 @@ check(
 await go('/analytics?scope=month');
 check(await waitForText('الشهر الحالي'), 'والتحليلات تُعرض بالشهر كذلك');
 
+// ── 10ي. التنبيهات (المرحلة ١٠) ─────────────────────────────
+
+await go('/notifications', '33-notifications');
+check(await waitForText('التنبيهات'), 'صندوق التنبيهات يفتح');
+check(
+  await waitForText('أحداث التنبيه الثمانية'),
+  'وجدول أحداث §١٢ الثمانية يظهر لمن يدير الإعدادات'
+);
+
+// التوقيتات الحرفية من §١٢
+const cadenceText = await page.evaluate(() => document.body.innerText);
+check(
+  cadenceText.includes('18:00') && cadenceText.includes('9:00'),
+  'بتوقيتاتها المنصوصة: «تستحق غدًا» ٦ مساءً و«المتأخرة» ٩ صباحًا'
+);
+check(cadenceText.includes('كل 3 ساعات'), 'و«ليد بلا رد» كل ٣ ساعات');
+
+// الفحص يكتب ما استحق
+await page.click('main form button[type=submit]:has-text("افحص الآن")');
+await page.waitForLoadState('networkidle');
+check(await waitForText('تم'), 'زر الفحص يشتغل ويكتب ما استحق');
+
+const notifCount = await page.locator('main article').count();
+check(notifCount > 0, `التنبيهات وصلت (${notifCount} بطاقة)`);
+
+// **القاعدة المنصوصة**: ملخص واحد لكل حدث لا بطاقة لكل سجل
+const digestShape = await page.evaluate(() => {
+  const cards = [...document.querySelectorAll('main article')];
+  const titles = cards.map((c) => c.innerText.split('\n')[0] ?? '');
+  const withCounts = cards
+    .map((c) => {
+      const m = c.innerText.match(/\((\d+)\)/);
+      const lines = (c.innerText.match(/^•/gm) ?? []).length;
+      return m ? { count: Number(m[1]), lines } : null;
+    })
+    .filter(Boolean);
+  return {
+    cards: cards.length,
+    uniqueTitles: new Set(titles).size,
+    grouped: withCounts.find((w) => w.count > 1) ?? null,
+  };
+});
+check(
+  digestShape.cards === digestShape.uniqueTitles,
+  `لا بطاقتان لنفس الحدث — ${digestShape.cards} بطاقة و${digestShape.uniqueTitles} عنوانًا مميزًا`
+);
+if (digestShape.grouped) {
+  check(
+    digestShape.grouped.lines > 1,
+    `**رسالة واحدة تجمع ${digestShape.grouped.count} سجلًا في ${digestShape.grouped.lines} سطرًا** — لا رسالة لكل سجل (§١٢)`
+  );
+}
+
+// عدّاد الجرس
+const badge = await page.locator('[data-testid=unread-badge]').first();
+const badgeShown = (await badge.count()) > 0;
+check(badgeShown, 'وعدّاد التنبيهات غير المقروءة يظهر على الجرس');
+
+// إعادة الفحص لا تُكرّر
+await page.click('main form button[type=submit]:has-text("افحص الآن")');
+await page.waitForLoadState('networkidle');
+const afterRerun = await page.locator('main article').count();
+check(
+  afterRerun === notifCount,
+  `إعادة الفحص لا تُكرّر الرسائل (${notifCount} ← ${afterRerun}) — آمن التكرار`
+);
+
+// علّم الكل مقروءًا
+await page.click('main form button[type=submit]:has-text("علّم الكل مقروءًا")');
+await page.waitForLoadState('networkidle');
+check(
+  (await page.locator('main article').count()) === 0,
+  'و«علّم الكل مقروءًا» يُفرغ صندوق غير المقروءة'
+);
+check(
+  (await page.locator('[data-testid=unread-badge]').count()) === 0,
+  'ويختفي العدّاد من الجرس'
+);
+
+await go('/notifications?filter=all');
+check(
+  (await page.locator('main article').count()) > 0,
+  'والمقروءة تبقى في السجل — لا تُحذف'
+);
+
 // ── 11. الصلاحيات — اختبارات §١٧ من المواصفة ────────────────
 
 async function loginAs(email, password = 'ChangeMe123!') {

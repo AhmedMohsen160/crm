@@ -17,6 +17,7 @@ import {
   Percent,
   Calculator,
   BarChart3,
+  Bell,
   Settings,
   Menu,
   X,
@@ -69,9 +70,12 @@ const NAV = [
 export default function Shell({
   user,
   children,
+  unread = 0,
 }: {
   user: SessionUser;
   children: React.ReactNode;
+  /** عدد التنبيهات غير المقروءة — يُقرأ في الخادم لا بنداء دوري */
+  unread?: number;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -105,6 +109,32 @@ export default function Shell({
         );
         }
       )}
+
+      {/* التنبيهات لكل مستخدم: كلٌّ يرى ما وُجّه إليه هو */}
+      <Link
+        href="/notifications"
+        onClick={() => setOpen(false)}
+        className={cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+          isActive('/notifications')
+            ? 'bg-brand-600 text-white shadow-sm'
+            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+        )}
+      >
+        <Bell className="h-[18px] w-[18px] shrink-0" />
+        <span className="truncate">التنبيهات</span>
+        {unread > 0 && (
+          <span
+            data-testid="unread-badge"
+            className={cn(
+              'mr-auto rounded-full px-2 py-0.5 text-xs font-bold',
+              isActive('/notifications') ? 'bg-white text-brand-700' : 'bg-rose-500 text-white'
+            )}
+          >
+            {unread}
+          </span>
+        )}
+      </Link>
 
       {hasAnyPermission(user, 'canManageUsers', 'canManageSettings') && (
         <>
