@@ -124,23 +124,6 @@ function leadStamps(
   };
 }
 
-/**
- * **المالك الفرعي** — من يخدم الصفقة حين يكون جالبها غيره.
- *
- * يُلغى إن ساوى المالك الرئيسي: صفقةٌ جالبها خادمُها لا ملكية مزدوجة فيها،
- * وإبقاؤه يجعل الشخص مديرَ نفسه في احتساب النسبة.
- */
-function coOwnerOf(
-  fd: FormData,
-  ownerId: string | null,
-  /** ما هو محفوظ الآن — يُبقى كما هو حين لا يحمل النموذج الحقل أصلًا */
-  current: string | null = null
-): string | null {
-  if (!fd.has('coOwnerId')) return current;
-  const coOwnerId = str(fd, 'coOwnerId');
-  return coOwnerId && coOwnerId !== ownerId ? coOwnerId : null;
-}
-
 export async function saveLead(fd: FormData, user: SessionUser, id?: string) {
   const data = readLead(fd);
   if (!data.firstName) throw new MutationError('اسم العميل مطلوب');
@@ -177,7 +160,6 @@ export async function saveLead(fd: FormData, user: SessionUser, id?: string) {
         clientId: client.id,
         branch: user.branch,
         ownerId: str(fd, 'ownerId') ?? user.id,
-        coOwnerId: coOwnerOf(fd, str(fd, 'ownerId') ?? user.id),
         ...leadStamps(null, data.status, null),
       },
     });
@@ -196,11 +178,9 @@ export async function saveLead(fd: FormData, user: SessionUser, id?: string) {
   if (!existing) throw new MutationError('العميل المحتمل غير موجود');
   requireOwn(existing.ownerId, user, 'ليس لديك صلاحية تعديل هذا السجل');
 
-  const ownerId = str(fd, 'ownerId') ?? existing.ownerId;
   const after = {
     ...data,
-    ownerId,
-    coOwnerId: coOwnerOf(fd, ownerId, existing.coOwnerId),
+    ownerId: str(fd, 'ownerId') ?? existing.ownerId,
     ...leadStamps(existing.status, data.status, existing),
   };
 
@@ -239,12 +219,6 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
   if (lead.status === 'WON') return `/leads/${id}`;
 
   const ownerId = lead.ownerId ?? user.id;
-  // الملكية المزدوجة تنتقل مع الليد إلى مشروعه — وإلا ضاع الجالب عند التحويل
-  const coOwnerId = lead.coOwnerId && lead.coOwnerId !== ownerId ? lead.coOwnerId : null;
-  const servicingBranch = coOwnerId
-    ? ((await db.user.findUnique({ where: { id: coOwnerId }, select: { branch: true } }))?.branch ??
-      null)
-    : null;
   const pages = num(fd, 'pages');
   const serviceLine = str(fd, 'serviceLine') ?? lead.serviceInterest;
   const sourceLang = str(fd, 'sourceLang') ?? lead.sourceLang;
@@ -330,15 +304,12 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
       isRush,
       ...readDeadline(fd),
       description: lead.notes,
-      // **الفرع فرعُ الاستلام لا فرع الجالب**: تواصل العميل مع مدير المبيعات
-      // واستلم من المهندسين، فالصفقة للمهندسين — عليه تُبنى محاسبة الفرع كلها.
-      branch: servicingBranch ?? lead.branch ?? user.branch,
+      branch: lead.branch ?? user.branch,
       leadId: id,
       clientId,
       companyId,
       convertedAt: now,
       ownerId,
-      coOwnerId,
     },
   });
 

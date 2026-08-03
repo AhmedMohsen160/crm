@@ -14,6 +14,7 @@ import {
 import { yearRange, monthRange, fiscalMonth } from '@/lib/accounting';
 import { formatMoney } from '@/lib/utils';
 import { PageHeader, StatCard, Badge, EmptyState } from '@/components/ui';
+import { BarList, ColumnChart, Funnel, HeroNumber, NumbersDetails } from '@/components/chart';
 
 export const metadata = { title: 'التحليلات' };
 export const dynamic = 'force-dynamic';
@@ -126,8 +127,46 @@ export default async function AnalyticsPage({
           </div>
         ) : (
           <>
+            {/* الحكم أولًا بالأرقام الثلاثة التي تُتّخذ بها القرارات */}
+            <div className="mb-4 grid gap-3 sm:grid-cols-3">
+              <HeroNumber
+                label="أعلى نمط هامشًا مستوعبًا"
+                value={best ? pct(best.loadedMarginPct) : '—'}
+                hint={best?.label}
+                tone={best && best.loadedMarginPct > 0 ? 'good' : 'default'}
+              />
+              <HeroNumber
+                label="إيراد المسلَّم في المدى"
+                value={formatMoney(totalRevenue)}
+                hint={`${modes.rows.reduce((s, m) => s + m.projects, 0)} مشروعًا مسلَّمًا`}
+              />
+              <HeroNumber
+                label="العبء غير المباشر المحمَّل"
+                value={formatMoney(modes.overheadAbsorbed)}
+                hint="موزَّعًا بالصفحات الموزونة — يُضبط من إعدادات النظام"
+              />
+            </div>
+
+            <div className="card card-pad">
+              <p className="mb-3 text-xs font-medium text-slate-500">
+                الهامش المستوعب لكل نمط — والشريط بطوله من الأعلى
+              </p>
+              <BarList
+                rows={modes.rows.map((row) => ({
+                  key: row.workMode,
+                  label: row.label,
+                  value: Math.max(0, row.loadedMarginPct),
+                  display: pct(row.loadedMarginPct),
+                  hint: `${row.projects} مشروعًا · ${formatMoney(row.revenue)}`,
+                  tone: row.loadedMarginPct >= 0.25 ? 'good' : row.loadedMarginPct >= 0 ? 'warn' : 'bad',
+                }))}
+                max={Math.max(...modes.rows.map((r) => Math.max(0, r.loadedMarginPct)), 0.5)}
+              />
+            </div>
+
+            <NumbersDetails>
             <div className="card table-wrap">
-              <table className="tbl">
+              <table className="tbl tbl-wide">
                 <thead>
                   <tr>
                     <th>النمط</th>
@@ -166,6 +205,7 @@ export default async function AnalyticsPage({
                 </tbody>
               </table>
             </div>
+            </NumbersDetails>
 
             {/* الحكم — لا الأرقام وحدها */}
             {human && aiMargin !== null && (
@@ -213,22 +253,16 @@ export default async function AnalyticsPage({
       </section>
 
       {/* ══ القمع وقيمة العميل ═════════════════════════════════ */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {steps.map((step, i) => (
-          <StatCard
-            key={step.stage}
-            label={step.stage}
-            value={String(step.count)}
-            hint={
-              i > 0 && steps[0].count > 0
-                ? `${((step.count / steps[0].count) * 100).toFixed(0)}٪ من الليدز`
-                : undefined
-            }
-            icon={<Target className="h-5 w-5" />}
-            accent={i === 0 ? 'brand' : i === steps.length - 1 ? 'emerald' : 'slate'}
-          />
-        ))}
-      </div>
+      <section className="card card-pad">
+        <h2 className="mb-1 flex items-center gap-2 section-title">
+          <Target className="h-4 w-4 text-brand-600" />
+          قمع المبيعات
+        </h2>
+        <p className="mb-4 text-xs text-slate-500">
+          العمود الأخير هو <b>الفاقد</b> عند كل مرحلة — وهو ما يُعالَج، لا العدد.
+        </p>
+        <Funnel steps={steps.map((s) => ({ stage: s.stage, count: s.count }))} />
+      </section>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
@@ -256,8 +290,29 @@ export default async function AnalyticsPage({
       {/* ══ أداء أدمن المبيعات ═════════════════════════════════ */}
       <section>
         <h2 className="mb-3 section-title">أداء أدمن المبيعات</h2>
+        <div className="card card-pad mb-3">
+          <p className="mb-3 text-xs font-medium text-slate-500">
+            الإيراد المحقَّق — ومعه معدل التحويل و<b>متوسط زمن الرد الأول</b>
+          </p>
+          <BarList
+            rows={sellers.map((s) => ({
+              key: s.userId,
+              label: s.name,
+              value: s.revenue,
+              display: formatMoney(s.revenue),
+              hint: [
+                s.leads > 0 ? `تحويل ${pct(s.conversionPct)}` : 'بلا ليدز',
+                s.avgFirstReplyHours === null
+                  ? 'زمن الرد غير مقيس'
+                  : `الرد الأول ${s.avgFirstReplyHours} س`,
+              ].join(' · '),
+            }))}
+            emptyLabel="لا نشاط في هذا المدى"
+          />
+        </div>
+        <NumbersDetails>
         <div className="card table-wrap">
-          <table className="tbl">
+          <table className="tbl tbl-wide">
             <thead>
               <tr>
                 <th>الأدمن</th>
@@ -297,6 +352,7 @@ export default async function AnalyticsPage({
             </tbody>
           </table>
         </div>
+        </NumbersDetails>
         <p className="mt-2 text-xs text-slate-400">
           فارق معدل التحويل داخل الفريق الواحد هو سبب وجود هذا الجدول — وهو ما
           يُدرَّب عليه، لا ما يُعاقَب به.
@@ -311,8 +367,28 @@ export default async function AnalyticsPage({
             الإنفاق مقروء من <b>دفتر الأستاذ</b> (حسابات الإعلانات المدفوعة) لا من
             إدخال يدوي — فالرقم يطابق ما صُرف فعلًا.
           </p>
+          <div className="card card-pad mb-3">
+            <p className="mb-3 text-xs font-medium text-slate-500">
+              الإيراد لكل قناة — والعائد على الإنفاق بجانبه
+            </p>
+            <BarList
+              rows={channels.map((c) => ({
+                key: c.channel,
+                label: c.label,
+                value: c.revenue,
+                display: formatMoney(c.revenue),
+                // القناة بلا عملاء لا CAC لها — والصفر هنا كذبة
+                hint:
+                  c.cac === null
+                    ? `${c.leads} ليدًا · لا بيانات لتكلفة الاكتساب`
+                    : `تكلفة الاكتساب ${formatMoney(c.cac)}${c.roas === null ? '' : ` · عائد ${c.roas}×`}`,
+                tone: c.roas === null ? 'default' : c.roas >= 3 ? 'good' : c.roas >= 1 ? 'warn' : 'bad',
+              }))}
+            />
+          </div>
+          <NumbersDetails>
           <div className="card table-wrap">
-            <table className="tbl">
+            <table className="tbl tbl-wide">
               <thead>
                 <tr>
                   <th>القناة</th>
@@ -356,6 +432,7 @@ export default async function AnalyticsPage({
               </tbody>
             </table>
           </div>
+          </NumbersDetails>
         </section>
       )}
 
@@ -363,8 +440,40 @@ export default async function AnalyticsPage({
       {seesCompany && producers.length > 0 && (
         <section>
           <h2 className="mb-3 section-title">أداء المنتِجين</h2>
+          <div className="card card-pad mb-3">
+            <p className="mb-3 text-xs font-medium text-slate-500">
+              الصفحات الموزونة المنتَجة — والالتزام بالمواعيد بجانب كل اسم
+            </p>
+            <BarList
+              rows={producers
+                // من لم ينتج صفحةً واحدة في المدى **غير مقيس** — يبقى في
+                // الجدول ولا يُرسم له شريطٌ فارغ يُطيل الشاشة بلا معنى
+                .filter((p) => p.weightedPages > 0)
+                .slice(0, 12)
+                .map((p) => ({
+                key: p.userId,
+                label: p.name,
+                value: p.weightedPages,
+                display: p.weightedPages.toLocaleString('en-US'),
+                hint:
+                  p.onTime.onTime + p.onTime.late === 0
+                    ? 'لا مواعيد مسجَّلة'
+                    : `التزام ${pct(p.onTime.rate)}`,
+                tone:
+                  p.onTime.onTime + p.onTime.late === 0
+                    ? 'default'
+                    : p.onTime.rate >= 0.9
+                      ? 'good'
+                      : p.onTime.rate >= 0.7
+                        ? 'warn'
+                        : 'bad',
+              }))}
+              emptyLabel="لا إنتاج مسجَّل في هذا المدى"
+            />
+          </div>
+          <NumbersDetails>
           <div className="card table-wrap">
-            <table className="tbl">
+            <table className="tbl tbl-wide">
               <thead>
                 <tr>
                   <th>المنتِج</th>
@@ -408,6 +517,7 @@ export default async function AnalyticsPage({
               </tbody>
             </table>
           </div>
+          </NumbersDetails>
         </section>
       )}
 
@@ -415,6 +525,21 @@ export default async function AnalyticsPage({
       {seesCompany && trend.length > 0 && (
         <section>
           <h2 className="mb-3 section-title">الاتجاه على أربع سنوات</h2>
+          <div className="card card-pad mb-3">
+            <ColumnChart
+              columns={trend.map((t) => ({
+                key: String(t.year),
+                label: String(t.year),
+                value: t.revenue,
+                display: formatMoney(t.revenue).replace(/\s?ج\.م/, ''),
+                muted: t.incomplete,
+              }))}
+            />
+            <p className="mt-3 text-xs text-slate-400">
+              العمود <b>المخطَّط</b> سنةٌ ناقصة البيانات — يُعرض ولا يُحذف، ولا يُقارَن به نمو.
+            </p>
+          </div>
+          <NumbersDetails>
           <div className="card table-wrap">
             <table className="tbl">
               <thead>
@@ -462,6 +587,7 @@ export default async function AnalyticsPage({
               </tbody>
             </table>
           </div>
+          </NumbersDetails>
           <p className="mt-2 text-xs text-slate-500">
             السنة المعلَّمة <b>«ناقصة»</b> لا تصلح خط أساس (§١٤): بياناتها لم
             تُسجَّل كاملة، والنمو المقارَن بها يضلّل. نقولها هنا بدل أن نعرض

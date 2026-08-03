@@ -234,7 +234,9 @@ export default async function DashboardPage() {
                 return (
                   <Link
                     key={stage}
-                    href={`/deals?stage=${stage}`}
+                    // المسار `/projects` والمرشِّح `status` — وكان `/deals?stage`
+                    // بقيّةً من التسمية القديمة، فيقع كل شريط في صفحة ٤٠٤
+                    href={`/projects?status=${stage}&view=list`}
                     className="block rounded-lg p-2 transition-colors hover:bg-slate-50"
                   >
                     <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">

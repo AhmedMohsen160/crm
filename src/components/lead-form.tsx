@@ -22,7 +22,6 @@ type LeadData = {
   lossReason: string | null;
   notes: string | null;
   ownerId: string | null;
-  coOwnerId: string | null;
 };
 
 export type LeadFormLists = {
@@ -181,23 +180,13 @@ export default function LeadForm({
             />
           )}
           {canAssign && (
-            <>
-              <SelectField
-                label="المالك الرئيسي"
-                name="ownerId"
-                defaultValue={lead?.ownerId ?? currentUserId}
-                options={users.map((u) => ({ value: u.id, label: u.name }))}
-                hint="من جلب العميل — الصفقة تبقى مملوكةً له"
-              />
-              <SelectField
-                label="المالك الفرعي"
-                name="coOwnerId"
-                defaultValue={lead?.coOwnerId}
-                placeholder="لا يوجد — الجالب هو الخادم"
-                options={users.map((u) => ({ value: u.id, label: u.name }))}
-                hint="من يكمل التواصل ويخدم العميل — وله حصة الأدمن في النسبة"
-              />
-            </>
+            <SelectField
+              label="الموظف المسؤول"
+              name="ownerId"
+              defaultValue={lead?.ownerId ?? currentUserId}
+              options={users.map((u) => ({ value: u.id, label: u.name }))}
+              hint="صاحب السجل — وله حصة الأدمن في النسبة، ولمديره حصة المدير"
+            />
           )}
           <TextAreaField
             label="ملاحظات"

@@ -1,6 +1,8 @@
 import { db } from '@/lib/db';
 import { requireUser, can } from '@/lib/auth';
 import { listOptionsMany } from '@/lib/reference';
+import { DISCOUNT_TYPES } from '@/lib/projects';
+import { discountLimitOf } from '@/lib/pricing';
 import { PageHeader, ErrorAlert } from '@/components/ui';
 import ProjectForm, { type ProjectFormLists } from '@/components/project-form';
 
@@ -16,7 +18,7 @@ export default async function NewProjectPage({
   const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 
-  const [lists, companies, contacts, users, client] = await Promise.all([
+  const [lists, companies, contacts, users, client, limit] = await Promise.all([
     listOptionsMany('service_line', 'language', 'currency'),
     db.company.findMany({
       select: { id: true, name: true },
@@ -41,6 +43,7 @@ export default async function NewProjectPage({
           select: { id: true, name: true, code: true },
         })
       : Promise.resolve(null),
+    discountLimitOf(user),
   ]);
 
   return (
@@ -68,6 +71,11 @@ export default async function NewProjectPage({
         currentUserId={user.id}
         canAssign={seeAll}
         showPrice={can(user, 'canViewSellPrice')}
+        canDiscount={can(user, 'canDiscount')}
+        discountTypes={Object.entries(DISCOUNT_TYPES)
+          .filter(([v]) => v === 'percent' || v === 'amount')
+          .map(([value, label]) => ({ value, label }))}
+        discountHint={`حدّك ${(limit * 100).toFixed(0)}٪ — ما فوقه يوقف المشروع للاعتماد`}
         cancelHref="/projects"
       />
     </div>

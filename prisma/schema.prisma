@@ -66,9 +66,7 @@ model User {
   ownedCompanies   Company[]     @relation("CompanyOwner")
   ownedContacts    Contact[]     @relation("ContactOwner")
   ownedLeads       Lead[]        @relation("LeadOwner")
-  servicedLeads    Lead[]        @relation("LeadCoOwner")
   ownedProjects    Project[]     @relation("ProjectOwner")
-  servicedProjects Project[]     @relation("ProjectCoOwner")
   managedProjects  Project[]     @relation("ProjectManager")
   producedProjects Project[]     @relation("ProjectProducer")
   reviewedProjects Project[]     @relation("ProjectReviewer")
@@ -754,12 +752,6 @@ model Lead {
   ownerId String?
   owner   User?   @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
-  /// **المالك الفرعي** — من يخدم الصفقة فعليًا حين يكون جالبها غيره.
-  /// جاء العميل إلى مدير المبيعات، وأكملت المتابعةَ أدمنُ الفرع المستلِم:
-  /// فالملكية الرئيسية للجالب، والخدمة للفرعي، ولكلٍّ حصته في النسب.
-  coOwnerId String?
-  coOwner   User?   @relation("LeadCoOwner", fields: [coOwnerId], references: [id], onDelete: SetNull)
-
   tasks      Task[]
   noteItems  Note[]
   activities Activity[]
@@ -906,13 +898,6 @@ model Project {
 
   ownerId String?
   owner   User?   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-
-  /// **المالك الفرعي** — من يخدم الصفقة فعليًا حين يكون جالبها غيره.
-  /// حين يُملأ: يُحسب المحقَّق له هو (حصة الأدمن)، ويأخذ **المالك الرئيسي**
-  /// حصة المدير عن هذا المشروع بعينه أيًّا كان التسلسل الإداري بينهما.
-  /// والفرع يبقى فرع الاستلام: الصفقة تُنسب لمن سلّم العميل لا لمن جلبه.
-  coOwnerId String?
-  coOwner   User?   @relation("ProjectCoOwner", fields: [coOwnerId], references: [id], onDelete: SetNull)
 
   tasks              Task[]
   noteItems          Note[]

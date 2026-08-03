@@ -2,6 +2,7 @@ import Link from '@/components/link';
 import { FormField, SelectField, TextAreaField } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
 import ExpressDeadline from '@/components/express-deadline';
+import LiveTotal from '@/components/live-total';
 import { toDateInput } from '@/lib/utils';
 import type { Option } from '@/lib/reference';
 
@@ -24,7 +25,8 @@ type ProjectData = {
   contactId: string | null;
   clientId: string | null;
   ownerId: string | null;
-  coOwnerId: string | null;
+  discountType: string | null;
+  discountValue: number | null;
 };
 
 export type ProjectFormLists = {
@@ -51,6 +53,9 @@ export default function ProjectForm({
   currentUserId,
   canAssign,
   showPrice,
+  canDiscount,
+  discountTypes,
+  discountHint,
   cancelHref,
 }: {
   recordId?: string;
@@ -63,6 +68,9 @@ export default function ProjectForm({
   currentUserId: string;
   canAssign: boolean;
   showPrice: boolean;
+  canDiscount: boolean;
+  discountTypes: { value: string; label: string }[];
+  discountHint: string;
   cancelHref: string;
 }) {
   const asOptions = (items: Option[]) =>
@@ -108,15 +116,6 @@ export default function ProjectForm({
             options={asOptions(lists.language)}
           />
           <FormField
-            label="عدد الصفحات"
-            name="pages"
-            type="number"
-            step="0.5"
-            min="0"
-            required
-            defaultValue={project?.pages}
-          />
-          <FormField
             label="عدد الكلمات"
             name="wordCount"
             type="number"
@@ -138,45 +137,50 @@ export default function ProjectForm({
         </label>
       </section>
 
-      {/* لا تُعرض ولا تُقبل من الخادم لمن لا يملك canViewSellPrice */}
-      {showPrice && (
-        <section className="card card-pad">
-          <h2 className="mb-4 section-title">المالية</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <FormField
-              label="إجمالي المشروع"
-              name="netTotal"
-              type="number"
-              step="0.01"
-              min="0"
-              defaultValue={project?.netTotal}
-            />
-            <FormField
-              label="سعر الوحدة"
-              name="unitPrice"
-              type="number"
-              step="0.01"
-              min="0"
-              defaultValue={project?.unitPrice}
-            />
-            <SelectField
-              label="العملة"
-              name="currency"
-              defaultValue={project?.currency ?? 'EGP'}
-              placeholder="جنيه مصري"
-              options={asOptions(lists.currency)}
-            />
-            <FormField
-              label="المقدم المقبوض"
-              name="deposit"
-              type="number"
-              step="0.01"
-              min="0"
-              defaultValue={project?.deposit}
-            />
-          </div>
-        </section>
-      )}
+      {/* ── الصفحات والسعر والخصم — والإجمالي يُحسب أمام العين ──── */}
+      <section className="card card-pad">
+        <h2 className="mb-4 section-title">التسعير</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <LiveTotal
+            currency={project?.currency ?? 'EGP'}
+            defaultPages={project?.pages}
+            defaultUnitPrice={project?.unitPrice}
+            defaultNetTotal={project?.netTotal}
+            defaultDiscountType={project?.discountType}
+            defaultDiscountPercent={
+              project?.discountType === 'percent' && project?.discountValue
+                ? project.discountValue * 100
+                : null
+            }
+            defaultDiscountAmount={
+              project?.discountType === 'amount' ? project?.discountValue : null
+            }
+            discountTypes={discountTypes}
+            discountHint={discountHint}
+            showPrice={showPrice}
+            canDiscount={canDiscount}
+          />
+          {showPrice && (
+            <>
+              <SelectField
+                label="العملة"
+                name="currency"
+                defaultValue={project?.currency ?? 'EGP'}
+                placeholder="جنيه مصري"
+                options={asOptions(lists.currency)}
+              />
+              <FormField
+                label="المقدم المقبوض"
+                name="deposit"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={project?.deposit}
+              />
+            </>
+          )}
+        </div>
+      </section>
 
       <section className="card card-pad">
         <h2 className="mb-4 section-title">الربط</h2>
@@ -197,23 +201,13 @@ export default function ProjectForm({
             }))}
           />
           {canAssign && (
-            <>
-              <SelectField
-                label="المالك الرئيسي"
-                name="ownerId"
-                defaultValue={project?.ownerId ?? currentUserId}
-                options={users.map((u) => ({ value: u.id, label: u.name }))}
-                hint="من جلب الصفقة"
-              />
-              <SelectField
-                label="المالك الفرعي"
-                name="coOwnerId"
-                defaultValue={project?.coOwnerId}
-                placeholder="لا يوجد — الجالب هو الخادم"
-                options={users.map((u) => ({ value: u.id, label: u.name }))}
-                hint="من يخدم الصفقة: له حصة الأدمن، وللجالب حصة المدير، والفرع فرعُه هو"
-              />
-            </>
+            <SelectField
+              label="أدمن المبيعات"
+              name="ownerId"
+              defaultValue={project?.ownerId ?? currentUserId}
+              options={users.map((u) => ({ value: u.id, label: u.name }))}
+              hint="صاحب الصفقة — وله حصة الأدمن في النسبة، ولمديره حصة المدير"
+            />
           )}
           <TextAreaField
             label="تفاصيل"

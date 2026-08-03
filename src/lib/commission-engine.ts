@@ -96,8 +96,6 @@ export type PeriodSummary = {
       /** مستحقّ حصة المدير عن هذه الصفقة */
       managerId: string | null;
       managerName: string | null;
-      /** هل هي صفقة جلبها غيرُه وخدمها هو؟ */
-      isServiced: boolean;
     }[];
   }[];
   totalAchieved: number;
@@ -128,30 +126,27 @@ export async function computePeriod(period: string): Promise<PeriodSummary> {
       collectedAmount: true,
       ownerId: true,
       owner: { select: { id: true, name: true, reportsToId: true } },
-      coOwnerId: true,
-      coOwner: { select: { id: true, name: true, reportsToId: true } },
     },
   });
 
   /**
-   * **البائع الفعلي هو المالك الفرعي إن وُجد.** الصفقة التي جلبها مدير
-   * المبيعات وخدمتها نورا تُحسب في محقَّق نورا (حصة الأدمن)، وتذهب حصة
-   * المدير عنها للجالب. وإلا فالبائع هو المالك ومديره مديرُه الإداري.
+   * **مالكٌ واحد للصفقة: من أدخلها** (قرار الإدارة — المرحلة ١٦).
+   *
+   * كانت هناك «ملكية مزدوجة» تُقسّم الحصص بين جالبٍ وخادم، فأُلغيت: «من يدخل
+   * البيانات هو المالك الرئيسي وله ٣٪»، ولمديره المباشر ٢٪ عن كل صفقة له.
    */
   const byOwner = new Map<string, typeof projects>();
   for (const project of projects) {
-    const sellerId = project.coOwnerId ?? project.ownerId;
-    if (!sellerId) continue;
-    const list = byOwner.get(sellerId) ?? [];
+    if (!project.ownerId) continue;
+    const list = byOwner.get(project.ownerId) ?? [];
     list.push(project);
-    byOwner.set(sellerId, list);
+    byOwner.set(project.ownerId, list);
   }
 
   const managerIds = new Set<string>();
   for (const project of projects) {
-    const seller = project.coOwnerId ? project.coOwner : project.owner;
-    const managerId = project.coOwnerId ? project.ownerId : (seller?.reportsToId ?? null);
-    if (managerId && managerId !== (project.coOwnerId ?? project.ownerId)) managerIds.add(managerId);
+    const managerId = project.owner?.reportsToId ?? null;
+    if (managerId && managerId !== project.ownerId) managerIds.add(managerId);
   }
   const managers = managerIds.size
     ? await db.user.findMany({
@@ -165,26 +160,21 @@ export async function computePeriod(period: string): Promise<PeriodSummary> {
 
   for (const [sellerId, list] of byOwner) {
     const scheme = await schemeForUser(sellerId, end);
-    const seller = list[0].coOwnerId === sellerId ? list[0].coOwner : list[0].owner;
+    const seller = list[0].owner;
+    // مستحقّ حصة المدير — المدير المباشر للبائع، ولا يأخذ أحدٌ الحصتين عن نفسه
+    const rawManagerId = seller?.reportsToId ?? null;
+    const managerId = rawManagerId && rawManagerId !== sellerId ? rawManagerId : null;
 
     // المحصَّل من كل مشروع = المقدم + ما حُصّل بعده
-    const perProject = list.map((p) => {
-      const isServiced = Boolean(p.coOwnerId);
-      // مستحقّ حصة المدير عن هذه الصفقة بعينها — لا عن الشهر كله
-      const rawManagerId = isServiced ? p.ownerId : (seller?.reportsToId ?? null);
-      // لا يأخذ أحد الحصتين عن نفسه: صفقةٌ مالكها الرئيسي هو خادمها
-      const managerId = rawManagerId && rawManagerId !== sellerId ? rawManagerId : null;
-      return {
-        id: p.id,
-        code: p.code,
-        title: p.title,
-        collected:
-          scheme?.basis === 'net' ? p.netTotal : Math.min(p.netTotal, p.deposit + p.collectedAmount),
-        managerId,
-        managerName: managerId ? (managerName.get(managerId) ?? null) : null,
-        isServiced,
-      };
-    });
+    const perProject = list.map((p) => ({
+      id: p.id,
+      code: p.code,
+      title: p.title,
+      collected:
+        scheme?.basis === 'net' ? p.netTotal : Math.min(p.netTotal, p.deposit + p.collectedAmount),
+      managerId,
+      managerName: managerId ? (managerName.get(managerId) ?? null) : null,
+    }));
     const achieved = perProject.reduce((s, p) => s + p.collected, 0);
 
     const result = computeCommission({

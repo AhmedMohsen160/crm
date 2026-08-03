@@ -45,7 +45,6 @@ export default function LiveTotal({
 }) {
   const [pages, setPages] = useState(defaultPages ?? null);
   const [unitPrice, setUnitPrice] = useState(defaultUnitPrice ?? null);
-  const [netTotal, setNetTotal] = useState(defaultNetTotal ?? null);
   const [discountType, setDiscountType] = useState(defaultDiscountType ?? '');
   const [percent, setPercent] = useState(defaultDiscountPercent ?? null);
   const [amount, setAmount] = useState(defaultDiscountAmount ?? null);
@@ -55,9 +54,14 @@ export default function LiveTotal({
     return raw.trim() === '' || !Number.isFinite(value) ? null : value;
   };
 
-  // الإجمالي المكتوب يدويًا يسبق المحسوب — الخادم يفعل الشيء نفسه
-  const computed = pages !== null && unitPrice !== null ? pages * unitPrice : null;
-  const gross = netTotal ?? computed;
+  /**
+   * **الصفحة هي الوحدة، والإجمالي مشتقّ منها ومن سعرها.**
+   *
+   * كانت هناك خانةٌ ثالثة اسمها «إجمالي المشروع» تُكتب باليد — فصار للرقم
+   * الواحد مصدران يختلفان، ولا يُعرف أيّهما الصحيح حين يختلفان. حُذفت،
+   * والإجمالي يُحسب: هنا للعرض، وفي الخادم للحفظ.
+   */
+  const gross = pages !== null && unitPrice !== null ? pages * unitPrice : (defaultNetTotal ?? null);
 
   const discount =
     gross === null
@@ -95,17 +99,6 @@ export default function LiveTotal({
             defaultValue={defaultUnitPrice}
             hint="اتركه فارغًا ليُقرأ من قائمة الأسعار تلقائيًا"
             onChange={(e) => setUnitPrice(num(e.target.value))}
-          />
-          <FormField
-            label="إجمالي المشروع"
-            name="netTotal"
-            type="number"
-            step="0.01"
-            min="0"
-            dir="ltr"
-            defaultValue={defaultNetTotal}
-            hint="اتركه فارغًا ليُحسب من السعر والصفحات"
-            onChange={(e) => setNetTotal(num(e.target.value))}
           />
         </>
       )}
@@ -154,9 +147,9 @@ export default function LiveTotal({
           <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-sm">
             <span className="text-slate-600">
               الإجمالي قبل الخصم
-              {netTotal === null && computed !== null && (
+              {pages !== null && unitPrice !== null && (
                 <span className="mr-1 text-xs text-slate-400">
-                  ({pages} × {unitPrice})
+                  ({pages} صفحة × {unitPrice})
                 </span>
               )}
             </span>

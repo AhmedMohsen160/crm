@@ -294,7 +294,7 @@ export default async function ProjectDetailPage({
               <h2 className="mb-3 section-title">المالية</h2>
               <dl className="grid gap-x-6 sm:grid-cols-3">
                 <Field label="الإجمالي">
-                  <span className="nums font-semibold">
+                  <span data-testid="project-total" className="nums font-semibold">
                     {formatMoney(project.netTotal, project.currency)}
                   </span>
                 </Field>

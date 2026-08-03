@@ -25,6 +25,8 @@
     font-variant-numeric: tabular-nums;
     direction: ltr;
     display: inline-block;
+    /* الرقم لا يُكسر سطرين: «21,720.00» تصير عمودًا مشوَّهًا في الجدول الضيّق */
+    white-space: nowrap;
   }
 }
 
@@ -91,6 +93,12 @@
 
   .tbl {
     @apply w-full min-w-[640px] text-right text-sm;
+  }
+
+  /* جدولٌ بعشرة أعمدة لا يتّسع في ٦٤٠ بكسل فتتكدّس خاناته سطورًا.
+     يُمرَّر أفقيًّا بعرضه الحقيقي بدل أن يُعصر. */
+  .tbl-wide {
+    @apply min-w-[1000px];
   }
 
   .tbl thead th {

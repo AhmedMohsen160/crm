@@ -71,6 +71,8 @@ export default function AssignForm({
   const wantsInternal = sourcing === 'internal' || sourcing === 'mixed';
   const role = performerRole(workMode);
   const modeIsReview = workModeIsReview(workMode);
+  /** نمط الآلة: المنفّذ من شغّلها، والمراجعة البشرية خطوةٌ تالية مستقلّة */
+  const machineMode = workMode === 'mtpe_full' || workMode === 'mtpe_light';
 
   useEffect(() => {
     if (!showCostIndicator) return;
@@ -187,7 +189,15 @@ export default function AssignForm({
 
       {/* ── من ينفّذ ─────────────────────────────────────────── */}
       <section className="card card-pad space-y-4">
-        <h2 className="section-title">من ينفّذ: {role}</h2>
+        <h2 className="section-title">
+          {machineMode ? '١ · من شغّل الذكاء الاصطناعي' : `من ينفّذ: ${role}`}
+        </h2>
+        {machineMode && (
+          <p className="rounded-lg bg-marine-400/10 px-4 py-2.5 text-sm text-slate-600">
+            في نمط الآلة <b>خطوتان لا واحدة</b>: من شغّل الترجمة الآليّة، ثم من راجعها
+            بشريًّا. وكانت الشاشة تسأل عن مراجعٍ مرتين ولا تسأل عن مشغّل الآلة أصلًا.
+          </p>
+        )}
 
         {wantsInternal && (
           <div>
@@ -315,7 +325,7 @@ export default function AssignForm({
 
       {/* ── من يراجع ─────────────────────────────────────────── */}
       <section className="card card-pad space-y-4">
-        <h2 className="section-title">من يراجع</h2>
+        <h2 className="section-title">{machineMode ? '٢ · من يراجع بعد الآلة' : 'من يراجع'}</h2>
 
         {modeIsReview ? (
           <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">

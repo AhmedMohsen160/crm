@@ -215,7 +215,13 @@ await page.selectOption('#serviceLine', { index: 1 });
 await page.selectOption('#sourceLang', { index: 1 });
 await page.selectOption('#targetLang', { index: 2 });
 await page.fill('#pages', '20');
-await page.fill('#netTotal', '5000');
+// **الصفحة هي الوحدة**: خانة «إجمالي المشروع» حُذفت، والإجمالي يُحسب من
+// الصفحات وسعرها — في الشاشة للعرض وفي الخادم للحفظ
+await page.fill('#unitPrice', '250');
+check(
+  (await page.locator('#netTotal').count()) === 0,
+  'خانة «إجمالي المشروع» اليدوية حُذفت — والإجمالي مشتقّ لا مُدخَل'
+);
 await page.click('main button:has-text("فوري")'); // زر «فوري» بضغطة واحدة
 await submit();
 await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
@@ -227,6 +233,21 @@ check(
 );
 const dealUrl = page.url();
 const projectId = dealUrl.split('/').pop();
+
+/**
+ * **الإجمالي مشتقّ لا مثبَّت في الاختبار.**
+ *
+ * كان الاختبار يكتب ٥٠٠٠ في خانة «إجمالي المشروع» فيتجاوز التسعير كلَّه.
+ * وقد حُذفت الخانة، فصار الإجمالي يُحسب: الصفحات × السعر، ثم خصم العميل
+ * المتكرر وشرائح الكمية. فنقرأ ما حسبه النظام ونبني عليه — وإلا اختبرنا
+ * رقمًا نحن كتبناه لا رقمًا حسبه النظام.
+ */
+const projectTotal = await page.evaluate(() => {
+  const el = document.querySelector('[data-testid=project-total]');
+  const match = (el?.textContent ?? '').replace(/,/g, '').match(/\d+(\.\d+)?/);
+  return match ? Number(match[0]) : 0;
+});
+check(projectTotal > 0, `الإجمالي حُسب من الصفحات وسعرها: ${projectTotal}`);
 await page.screenshot({ path: `${shots}/08-project-detail.png`, fullPage: true });
 
 check(await waitForText('PR-'), 'المشروع حصل على معرّف تسلسلي');
@@ -387,7 +408,7 @@ await go('/projects/new');
 await page.fill('#title', `مشروع بلا سعر ${RUN}`);
 await page.selectOption('#serviceLine', { index: 1 });
 await page.fill('#pages', '5');
-await page.fill('#netTotal', '0');
+// بلا سعر صفحة لا إجمالي — والمشروع يُحفظ بصفر فيمسكه حقل التنبيه
 await submit();
 await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
 await page.waitForLoadState('networkidle');
@@ -469,8 +490,8 @@ const attributionSum = await page.evaluate(() => {
   return nums.reduce((a, b) => a + b, 0);
 });
 check(
-  attributionSum === 5000,
-  `اختبار ١٢ في المتصفح: مجموع الإيراد المنسوب ${attributionSum} = ٥٠٠٠`
+  Math.abs(attributionSum - projectTotal) < 1,
+  `اختبار ١٢ في المتصفح: مجموع الإيراد المنسوب ${attributionSum} = ${projectTotal}`
 );
 
 // خطوة تنفيذ تُحسب صفحاتها الموزونة عند الحفظ
@@ -949,7 +970,7 @@ const entitled = await statCard('ما استحققته');
 // (نتحقق من **القاعدة** لا من رقم ثابت، فالمحصَّل يتراكم بين التشغيلات)
 const expectedEntitlement = achieved <= 200000 ? achieved * 0.05 : null;
 check(
-  achieved >= 5000,
+  achieved >= projectTotal,
   `«نسبي» تعرض المحصَّل من المشاريع المحصَّلة (${achieved})`
 );
 check(
@@ -1024,8 +1045,8 @@ check(
 );
 const afterClawback = await statCard('ما حصّلته هذا الشهر');
 check(
-  Math.abs(afterClawback - (achieved - 5000)) < 1,
-  `المحصَّل نقص بمقدار المشروع المسترد: ${afterClawback} = ${achieved} − ٥٠٠٠`
+  Math.abs(afterClawback - (achieved - projectTotal)) < 1,
+  `المحصَّل نقص بمقدار المشروع المسترد: ${afterClawback} = ${achieved} − ${projectTotal}`
 );
 check(
   Math.abs((await statCard('ما استحققته')) - afterClawback * 0.05) < 1,
@@ -1832,8 +1853,13 @@ check(
 await go('/projects/new');
 const projectFormText = await page.locator('body').innerText();
 check(
-  projectFormText.includes('المالك الرئيسي') && projectFormText.includes('المالك الفرعي'),
-  'ونموذج المشروع فيه الملكية المزدوجة: جالبُ الصفقة وخادمُها'
+  !projectFormText.includes('المالك الفرعي'),
+  '★ والملكية المزدوجة أُلغيت — مالكٌ واحد للصفقة: من أدخلها'
+);
+check(
+  (await page.locator('#netTotal').count()) === 0 &&
+    (await page.locator('#unitPrice').count()) === 1,
+  'وشاشة المشروع تسأل عن سعر الصفحة لا عن الإجمالي'
 );
 
 const boardStatus = await go('/leaderboard', '23-leaderboard');

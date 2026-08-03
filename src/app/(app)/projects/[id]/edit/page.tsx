@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
 import { requireUser, can } from '@/lib/auth';
 import { listOptionsMany } from '@/lib/reference';
+import { DISCOUNT_TYPES } from '@/lib/projects';
+import { discountLimitOf } from '@/lib/pricing';
 import { PageHeader, ErrorAlert } from '@/components/ui';
 import ProjectForm, { type ProjectFormLists } from '@/components/project-form';
 
@@ -24,7 +26,7 @@ export default async function EditProjectPage({
   if (!project) notFound();
   if (!seeAll && project.ownerId !== user.id) notFound();
 
-  const [lists, companies, contacts, users] = await Promise.all([
+  const [lists, companies, contacts, users, limit] = await Promise.all([
     listOptionsMany('service_line', 'language', 'currency'),
     db.company.findMany({
       select: { id: true, name: true },
@@ -43,6 +45,7 @@ export default async function EditProjectPage({
           orderBy: { name: 'asc' },
         })
       : Promise.resolve([] as { id: string; name: string }[]),
+    discountLimitOf(user),
   ]);
 
   return (
@@ -60,6 +63,11 @@ export default async function EditProjectPage({
         currentUserId={user.id}
         canAssign={seeAll}
         showPrice={can(user, 'canViewSellPrice')}
+        canDiscount={can(user, 'canDiscount')}
+        discountTypes={Object.entries(DISCOUNT_TYPES)
+          .filter(([v]) => v === 'percent' || v === 'amount')
+          .map(([value, label]) => ({ value, label }))}
+        discountHint={`حدّك ${(limit * 100).toFixed(0)}٪ — ما فوقه يوقف المشروع للاعتماد`}
         cancelHref={`/projects/${id}`}
       />
     </div>

@@ -41,6 +41,7 @@ import { importLeadSheet, importSalesSheet } from '@/lib/import-legacy';
 import { runAllEvents } from '@/lib/notification-engine';
 import { freezeProjectCost, stepWeightedPages } from '@/lib/project-costing';
 import { priceForProject, discountLimitOf, discountRatio } from '@/lib/pricing';
+import { priceProject } from '@/lib/costing';
 import { rebuildPeriod, reverseProjectCommission } from '@/lib/commission-engine';
 import { periodOf } from '@/lib/commission';
 import { allSettings } from '@/lib/reference';
@@ -118,46 +119,62 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
   const discountValue = discount.value;
   let approvalPatch: Record<string, unknown> = {};
 
-  if (discountType && discountType !== 'none' && discountValue) {
+  /**
+   * **الصفحة هي الوحدة، والإجمالي مشتقّ.**
+   *
+   * كانت الشاشة تطلب «إجمالي المشروع» يدويًّا إلى جانب سعر الصفحة، فصار
+   * للرقم مصدران يختلفان ولا يُعرف أيّهما الصحيح. الآن يُحسب:
+   * `الصفحات × سعر الصفحة`، ثم رسم الاستعجال، ثم الخصم — بنفس المعادلة
+   * التي يُسعَّر بها الليد عند تحويله، فلا تختلف شاشتان على رقم واحد.
+   *
+   * والإجمالي المرسَل صراحةً (من نموذج قديم أو تعديل يدوي) يُحترم كما هو.
+   */
+  if (can(user, 'canViewSellPrice')) {
+    const unitPrice = num(fd, 'unitPrice');
     const settings = await allSettings();
-    const gross = (pages ?? 0) * (num(fd, 'unitPrice') ?? 0);
-    const afterRush = data.isRush
-      ? gross * (1 + (Number(settings.rush_surcharge) || 0))
-      : gross;
-    const limit = await discountLimitOf(user);
-    const ratio = discountRatio({ type: discountType, value: discountValue }, afterRush);
-    if (ratio > limit + 1e-9) {
-      approvalPatch = { approvalState: 'pending', approvedById: null, approvedAt: null };
+
+    if (!fd.has('netTotal') && pages && unitPrice) {
+      const priced = priceProject({
+        pages,
+        unitPrice,
+        isRush: data.isRush,
+        discount: { type: discountType, value: discountValue },
+        settings: {
+          rushSurcharge: Number(settings.rush_surcharge) || 0,
+          minOrderValue: Number(settings.min_order_value) || 0,
+        },
+      });
+      data.netTotal = priced.netTotal;
+    }
+
+    if (discountType && discountType !== 'none' && discountValue) {
+      const gross = (pages ?? 0) * (unitPrice ?? 0);
+      const afterRush = data.isRush ? gross * (1 + (Number(settings.rush_surcharge) || 0)) : gross;
+      const limit = await discountLimitOf(user);
+      const ratio = discountRatio({ type: discountType, value: discountValue }, afterRush);
+      if (ratio > limit + 1e-9) {
+        approvalPatch = { approvalState: 'pending', approvedById: null, approvedAt: null };
+      }
     }
   }
 
   /**
-   * **الملكية المزدوجة**: مالكٌ رئيسي جلب الصفقة، ومالكٌ فرعي يخدمها.
-   * والفرع فرعُ الخادم لا الجالب — الصفقة تُنسب لمن سلّم العميل.
+   * **مالكٌ واحد للصفقة: من أدخلها.** (قرار الإدارة — المرحلة ١٦)
+   *
+   * كانت هناك «ملكية مزدوجة» — جالبٌ وخادم — فأُلغيت: «حتى لا نتلخبط، من
+   * يدخل البيانات هو المالك الرئيسي وله ٣٪». والمدير المباشر يأخذ ٢٪ عن كل
+   * صفقة لمرؤوسيه، فلا حاجة إلى بُعدٍ ثانٍ يقسم الحصص.
    */
-  const rawCoOwnerId = str(fd, 'coOwnerId');
-  /** يُلغى المالك الفرعي إن ساوى الرئيسي — وإلا صار الشخص مديرَ نفسه في النسب */
-  const resolveCoOwner = async (ownerId: string | null) => {
-    const coOwnerId = rawCoOwnerId && rawCoOwnerId !== ownerId ? rawCoOwnerId : null;
-    const branch = coOwnerId
-      ? ((await db.user.findUnique({ where: { id: coOwnerId }, select: { branch: true } }))
-          ?.branch ?? null)
-      : null;
-    return { coOwnerId, branch };
-  };
-
   if (!id) {
     const ownerId = str(fd, 'ownerId') ?? user.id;
-    const servicing = await resolveCoOwner(ownerId);
     const project = await db.project.create({
       data: {
         ...data,
         code: await nextProjectCode(),
         status: 'pending_assignment',
-        branch: servicing.branch ?? user.branch,
+        branch: user.branch,
         convertedAt: new Date(),
         ownerId,
-        coOwnerId: servicing.coOwnerId,
       },
     });
     await logActivity({
@@ -175,20 +192,12 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
   if (!existing) throw new MutationError('المشروع غير موجود');
   requireOwn(existing.ownerId, user, 'ليس لديك صلاحية تعديل هذا المشروع');
 
-  const nextOwnerId = str(fd, 'ownerId') ?? existing.ownerId;
-  // النموذج الذي لا يحمل الحقل أصلًا لا يمسّ ملكيةً فرعية قائمة
-  const servicing = fd.has('coOwnerId')
-    ? await resolveCoOwner(nextOwnerId)
-    : { coOwnerId: existing.coOwnerId, branch: null };
-
   const after = {
     ...data,
     ...(discountType ? { discountType: discountType === 'none' ? null : discountType } : {}),
     ...(discountValue !== null ? { discountValue } : {}),
     ...approvalPatch,
-    ownerId: nextOwnerId,
-    coOwnerId: servicing.coOwnerId,
-    ...(servicing.branch ? { branch: servicing.branch } : {}),
+    ownerId: str(fd, 'ownerId') ?? existing.ownerId,
   };
   await db.project.update({ where: { id }, data: after });
   await auditDiff(user.id, 'Project', id, existing, after);
