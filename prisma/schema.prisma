@@ -77,6 +77,12 @@ model User {
   approvedBudgets Budget[]          @relation("BudgetApprover")
   resolvedReviews MigrationReview[] @relation("ReviewResolver")
   notifications   Notification[]
+  proposals       Proposal[]        @relation("ProposalOwner")
+
+  mailboxes     Mailbox[]      @relation("MailboxOwner")
+  handledEmails EmailMessage[] @relation("EmailHandler")
+  aiThreads     AiThread[]     @relation("AiThreadOwner")
+  aiRuns        AiRun[]        @relation("AiRunUser")
 
   @@index([email])
   @@index([reportsToId])
@@ -96,7 +102,7 @@ model Role {
   isSystem  Boolean @default(false) /// أدوار النظام لا تُحذف
   sortOrder Int     @default(0)
 
-  // ── الصلاحيات الثماني عشرة (§٥ من المواصفة) ──
+  // ── الصلاحيات (§٥ من المواصفة، وما أُضيف بعدها) ──
   canCreateLead           Boolean @default(false)
   canViewAllLeads         Boolean @default(false)
   canViewTeamLeads        Boolean @default(false)
@@ -116,6 +122,8 @@ model Role {
   canManageSettings       Boolean @default(false)
   canViewCompanyAnalytics Boolean @default(false)
   canViewTeamAnalytics    Boolean @default(false)
+  canUseEmail             Boolean @default(false)
+  canUseAi                Boolean @default(false)
 
   /// أقصى نسبة خصم يمنحها صاحب هذا الدور بلا اعتماد (٠٫١ تعني ١٠٪).
   /// عمود في الدور لا مفتاح إعدادات باسم دور، لأن الأدوار تُنشأ من الشاشة.
@@ -196,10 +204,12 @@ model Company {
   contacts   Contact[]
   clients    Client[]
   projects   Project[]
+  proposals  Proposal[]
   tasks      Task[]
   noteItems  Note[]
   quotes     Quote[]
   activities Activity[]
+  emails     EmailMessage[]
 
   @@index([name])
   @@index([ownerId])
@@ -290,10 +300,12 @@ model Client {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  leads    Lead[]
-  projects Project[]
+  leads     Lead[]
+  projects  Project[]
   /// حسابه الشخصي في شجرة «العملاء» — يربط بطاقته بدفتر الأستاذ
-  accounts Account[]
+  accounts  Account[]
+  proposals Proposal[]
+  emails    EmailMessage[]
 
   @@index([phoneNormalized])
   @@index([phoneAltNormalized])
@@ -691,6 +703,8 @@ model Lead {
   noteItems  Note[]
   activities Activity[]
   projects   Project[]
+  proposals  Proposal[]
+  emails     EmailMessage[]
 
   @@index([status])
   @@index([ownerId])
@@ -834,6 +848,7 @@ model Project {
   commissions        CommissionEntry[]
   freelancerPayments FreelancerPayment[]
   journalEntries     JournalEntry[]
+  emails             EmailMessage[]
 
   @@index([status])
   @@index([ownerId])
@@ -1316,4 +1331,241 @@ model NotificationRun {
   lastRunAt  DateTime  @default(now())
   lastCount  Int       @default(0)
   note       String?
+}
+
+/// عرض سعر احترافي (على غرار عرض Tristar) — مستند يُرسَل لا سطر في جدول
+model Proposal {
+  id       String  @id @default(cuid())
+  /// مرجع العرض: FT-KSA-2608-021
+  code     String? @unique
+  /// رقم المراجعة — العرض المنقَّح يحمل رقمًا لا يُستبدل الأصل
+  revision Int     @default(1)
+
+  title         String
+  /// الجهة المستقبِلة
+  clientName    String
+  attention     String?
+  attentionRole String?
+
+  /// زوج اللغات المعروض عليه
+  sourceLang String?
+  targetLang String?
+
+  currency          String @default("SAR")
+  /// نسبة ضريبة القيمة المضافة — ٠٫١٥ = ١٥٪
+  vatRate           Float  @default(0.15)
+  validityDays      Int    @default(30)
+  paymentDays       Int    @default(30)
+  contractingEntity String @default("فاست ترانس — الرياض، المملكة العربية السعودية")
+
+  /// الشرائح — **بأثر رجعي على حجم الشهر كاملًا**
+  tiers         ProposalTierRow[]
+  /// أحجام المثال في جدول «ما يعنيه هذا عمليًا» — مفصولة بفواصل
+  sampleVolumes String            @default("100000,250000,500000,1000000")
+
+  /// draft | sent | accepted | declined | expired
+  status       String    @default("draft")
+  sentAt       DateTime?
+  decidedAt    DateTime?
+  decisionNote String?
+
+  /// نصوص يحرّرها معدّ العرض فوق الافتراضي
+  intro       String?
+  positioning String?
+  nextSteps   String?
+  notes       String?
+
+  /// من أصدره ومن يوقّعه
+  ownerId     String?
+  owner       User?   @relation("ProposalOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  signerName  String?
+  signerTitle String?
+
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([clientId])
+  @@index([ownerId])
+}
+
+model ProposalTierRow {
+  id         String   @id @default(cuid())
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  label       String
+  fromWords   Int
+  toWords     Int?
+  discountPct Float  @default(0)
+  ratePerPage Float
+  sortOrder   Int    @default(0)
+
+  @@index([proposalId, fromWords])
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  البريد والذكاء الاصطناعي
+// ═══════════════════════════════════════════════════════════════
+
+/// صندوق بريد مربوط بالنظام.
+///
+/// `ownerId` فارغًا يعني **صندوقًا مشتركًا** يراه كل من يملك صلاحية البريد،
+/// وممتلئًا يعني صندوق شخص بعينه لا يقرؤه غيره. القرار بين النمطين إعداد
+/// لا كود، لأن المكتب قد يبدأ بصندوق `info@` واحد ثم يفرد لكل أدمن صندوقه.
+model Mailbox {
+  id      String  @id @default(cuid())
+  label   String
+  address String  @unique
+  ownerId String?
+  owner   User?   @relation("MailboxOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  imapHost   String
+  imapPort   Int     @default(993)
+  imapSecure Boolean @default(true)
+  smtpHost   String
+  smtpPort   Int     @default(465)
+  smtpSecure Boolean @default(true)
+  username   String
+  /// كلمة مرور التطبيق مُعمّاة — لا تُقرأ في أي شاشة ولا تُرسل للمتصفح
+  secret     String
+  folder     String  @default("INBOX")
+  /// اسم المرسِل الظاهر في الردود
+  fromName   String?
+  /// توقيع يُذيَّل به كل رد
+  signature  String?
+  active     Boolean @default(true)
+
+  /// آخر UID قُرئ — نسحب ما بعده وحده فلا نعيد تنزيل الصندوق كل مرة
+  lastUid    Int       @default(0)
+  lastSyncAt DateTime?
+  lastError  String?
+
+  messages  EmailMessage[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([ownerId])
+}
+
+/// رسالة بريد — واردة أو صادرة.
+///
+/// تُحفظ بنصّها كاملًا لا بمرجعٍ إلى الخادم: صندوق البريد قد يُحذف منه، وسجلّ
+/// المراسلة مع العميل جزء من ملفّه لا من الصندوق (§٣ بند ٥).
+model EmailMessage {
+  id        String  @id @default(cuid())
+  mailboxId String
+  mailbox   Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  /// in = واردة · out = صادرة
+  direction String  @default("in")
+  messageId String? @unique
+  inReplyTo String?
+  /// مفتاح الخيط: الموضوع بعد تجريده من Re/Fwd + عنوان الطرف الآخر
+  threadKey String
+  uid       Int?
+
+  fromAddress String
+  fromName    String?
+  toAddresses String
+  ccAddresses String?
+  subject     String
+  bodyText    String
+  bodyHtml    String?
+  /// النص بعد نزع الاقتباس والتوقيع — ما يُرسل للتحليل
+  cleanText   String?
+
+  sentAt          DateTime
+  receivedAt      DateTime @default(now())
+  attachmentNames String?
+
+  /// تحليل الذكاء الاصطناعي — كلّه اختياري: الرسالة تُحفظ ولو تعطّل التحليل
+  intent         String?
+  language       String?
+  urgency        String?
+  sentiment      String?
+  summary        String?
+  suggestedReply String?
+  analyzedAt     DateTime?
+
+  /// الربط بسجلّات النظام — يُستنتج بالعنوان أو يُصحَّح يدويًا
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  /// من عالجها ومتى — الوارد غير المعالَج هو ما يظهر في التنبيهات
+  handledAt   DateTime?
+  handledById String?
+  handledBy   User?     @relation("EmailHandler", fields: [handledById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([mailboxId, direction])
+  @@index([threadKey])
+  @@index([leadId])
+  @@index([clientId])
+  @@index([handledAt])
+}
+
+/// محادثة مع مساعد النظام الذكي — يقرأ أرقام النظام ويجيب عنها بالعربية.
+model AiThread {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("AiThreadOwner", fields: [userId], references: [id], onDelete: Cascade)
+  title  String @default("محادثة جديدة")
+
+  messages  AiMessage[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+model AiMessage {
+  id       String   @id @default(cuid())
+  threadId String
+  thread   AiThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  /// user | assistant
+  role     String
+  content  String
+  /// أسماء الأدوات التي استُخدمت للإجابة — مفصولة بفواصل
+  usedData String?
+
+  createdAt DateTime @default(now())
+
+  @@index([threadId])
+}
+
+/// سجلّ كل نداء للذكاء الاصطناعي — للتكلفة والتدقيق.
+///
+/// النموذج يُنادى بمال، ونداء لا يُسجَّل لا يُحاسَب عليه أحد.
+model AiRun {
+  id        String  @id @default(cuid())
+  userId    String?
+  user      User?   @relation("AiRunUser", fields: [userId], references: [id], onDelete: SetNull)
+  /// email.analyze | email.reply | assistant | proposal.draft
+  purpose   String
+  model     String
+  inTokens  Int     @default(0)
+  outTokens Int     @default(0)
+  costUsd   Float   @default(0)
+  ms        Int     @default(0)
+  ok        Boolean @default(true)
+  error     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([purpose, createdAt])
 }

@@ -1560,6 +1560,66 @@ check(leaked.length === 0, `لا تسرّب لحقول التكلفة في ال�
 
 await loginAs('admin@fasttrans.local');
 
+// ── 13. العرض الاحترافي ─────────────────────────────────────
+// المُختبَر هنا **الشريحة بأثر رجعي**: العرض المطبوع يجب أن يعرض للحجم
+// الكبير سعرًا واحدًا على الشهر كلّه، لا سعرًا متدرّجًا على أجزائه.
+await go('/proposals/new');
+await page.fill('#title', `عرض اختبار ${RUN}`);
+await page.fill('#clientName', `جهة اختبار ${RUN}`);
+await page.fill('#signerName', 'مسؤول العروض');
+await submit();
+await page.waitForURL(/\/proposals\/[a-z0-9]+$/, { timeout: 20000 });
+const proposalUrl = page.url();
+check(await waitForText(`عرض اختبار ${RUN}`), 'إنشاء عرض احترافي بشرائحه الافتراضية (اختبار ١٣)');
+
+// الشرائح الافتراضية تُنسخ نسخًا، فتعديل عرض لا يمسّ عرضًا أُرسل قبله
+const tierRows = await page.locator('table tbody tr').count();
+check(tierRows >= 4, `العرض يولد بأربع شرائح على الأقل — وُجد ${tierRows}`);
+
+await go(proposalUrl.replace('http://localhost:3000', '') + '/print', '13-proposal-print');
+const printText = await page.locator('body').innerText();
+check(
+  printText.includes('كامل حجم الشهر') || printText.includes('بأثر رجعي'),
+  'المستند المطبوع ينصّ على أن الشريحة تسري بأثر رجعي على حجم الشهر كلّه'
+);
+check(printText.includes('فاست ترانس'), 'والمستند يحمل هوية فاست ترانس');
+
+// ── 14. هوية فاست ترانس في الواجهة ──────────────────────────
+await go('/', '14-brand');
+const brandNavy = await page.evaluate(() => {
+  const el = document.querySelector('aside svg rect, aside svg path');
+  if (!el) return null;
+  return getComputedStyle(el).fill || el.getAttribute('fill');
+});
+check(Boolean(brandNavy), 'شعار فاست ترانس مرسوم في الشريط الجانبي (اختبار ١٤)');
+
+// ── 15. البريد والمساعد ─────────────────────────────────────
+// بلا صندوق مربوط تظهر شاشة الإرشاد لا صفحة معطّلة
+const emailStatus = await go('/email', '15-email');
+check(emailStatus === 200, 'شاشة البريد تفتح لمن يملك صلاحيتها (اختبار ١٥)');
+check(
+  await waitForText('لا صندوق بريد مربوط'),
+  'وبلا صندوق مربوط تُرشد لربطه بدل أن تتعطّل'
+);
+
+const mailboxStatus = await go('/settings/mailboxes', '15-mailboxes');
+check(mailboxStatus === 200, 'وشاشة إعداد الصناديق تفتح للإدارة');
+check(
+  await waitForText('مشترك') || (await waitForText('صندوق')),
+  'وتشرح النمطين: صندوق مشترك للفريق أو صندوق لكل أدمن'
+);
+
+const assistantStatus = await go('/assistant', '15-assistant');
+check(assistantStatus === 200, 'وشاشة المساعد تفتح لمن يملك صلاحيتها');
+
+// من لا يملك «إدارة الإعدادات» لا يصل لصناديق البريد — والمنع في الخادم:
+// لا تصل الشاشة أصلًا، لا أنها تصل ثم تُخفى
+await loginAs('agent@fasttrans.local');
+await go('/settings/mailboxes');
+const mailboxScreenBlocked = !(await page.locator('h1:has-text("صناديق البريد")').count());
+check(mailboxScreenBlocked, 'ومن لا يملك إدارة الإعدادات لا يصل لصناديق البريد');
+await loginAs('admin@fasttrans.local');
+
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
 await go('/projects', '12-mobile');

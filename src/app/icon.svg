@@ -1,5 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#0f766e"/>
-  <text x="16" y="22" font-family="system-ui, sans-serif" font-size="15" font-weight="700"
-        fill="#ffffff" text-anchor="middle">ف</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+  <rect width="40" height="40" rx="9" fill="#242E5B"/>
+  <path d="M11 15.5h13.5M20 10.5l5 5-5 5" stroke="#B9D716" stroke-width="2.6"
+        stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M29 24.5H15.5M20 29.5l-5-5 5-5" stroke="#FFFFFF" stroke-width="2.6"
+        stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 </svg>

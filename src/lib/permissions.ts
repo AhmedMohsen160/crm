@@ -1,5 +1,5 @@
 /**
- * الصلاحيات الثماني عشرة — §٥ من مواصفة فاست ترانس.
+ * صلاحيات النظام — §٥ من مواصفة فاست ترانس وما أُضيف بعدها.
  *
  * قاعدة ملزمة: **الكود يفحص الصلاحية لا اسم الدور.**
  *   ✅  can(user, 'canViewSellPrice')
@@ -29,6 +29,8 @@ export const PERMISSIONS = {
   canManageSettings: 'إدارة الإعدادات',
   canViewCompanyAnalytics: 'تحليلات الشركة',
   canViewTeamAnalytics: 'تحليلات الفريق',
+  canUseEmail: 'بريد النظام',
+  canUseAi: 'المساعد الذكي',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -56,6 +58,8 @@ export const PERMISSION_HINTS: Record<Permission, string> = {
   canManageSettings: 'تعديل الإعدادات والقوائم وقائمة الأسعار',
   canViewCompanyAnalytics: 'تحليلات الشركة كاملة',
   canViewTeamAnalytics: 'تحليلات فريقه',
+  canUseEmail: 'قراءة بريد الصناديق المتاحة له والرد عليها',
+  canUseAi: 'سؤال المساعد الذكي وصياغة الردود — بحدود ما يراه هو',
 };
 
 /** نطاق ما يراه المستخدم من السجلات */
@@ -127,6 +131,7 @@ export const DEFAULT_ROLES: {
       'canViewCostIndicator',
       'canViewCompanyAnalytics',
       'canViewTeamAnalytics',
+      'canUseAi',
     ],
   },
   {
@@ -143,6 +148,8 @@ export const DEFAULT_ROLES: {
       'canApproveDiscount',
       'canRecordCollection',
       'canViewTeamAnalytics',
+      'canUseEmail',
+      'canUseAi',
     ],
   },
   {
@@ -156,6 +163,8 @@ export const DEFAULT_ROLES: {
       'canViewSellPrice',
       'canDiscount',
       'canRecordCollection',
+      'canUseEmail',
+      'canUseAi',
     ],
   },
   {
@@ -170,6 +179,8 @@ export const DEFAULT_ROLES: {
       'canViewCostIndicator',
       'canManageFreelancers',
       'canViewTeamAnalytics',
+      'canUseEmail',
+      'canUseAi',
     ],
   },
   {

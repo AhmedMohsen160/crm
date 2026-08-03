@@ -20,6 +20,21 @@ import {
   saveFreelancerRate,
   payFreelancer,
   importFreelancers,
+  saveMailbox,
+  checkMailbox,
+  syncEmail,
+  analyzeEmail,
+  suggestReply,
+  sendEmailReply,
+  composeEmail,
+  linkEmail,
+  startThread,
+  askAssistant,
+  deleteThread,
+  saveProposal,
+  saveProposalTier,
+  decideProposal,
+  reviseProposal,
   markNotificationsRead,
   runNotifications,
   importLegacySheet,
@@ -126,6 +141,53 @@ export async function POST(request: NextRequest) {
         break;
       case 'freelancer.import':
         destination = await importFreelancers(fd, user);
+        break;
+      // ── البريد والمساعد ───────────────────────────────────
+      case 'mailbox':
+        destination = await saveMailbox(fd, user, id);
+        break;
+      case 'mailbox.check':
+        destination = await checkMailbox(fd, user, id);
+        break;
+      case 'email.sync':
+        destination = await syncEmail(fd, user, id);
+        break;
+      case 'email.analyze':
+        destination = await analyzeEmail(fd, user, id);
+        break;
+      case 'email.suggest':
+        destination = await suggestReply(fd, user, id);
+        break;
+      case 'email.reply':
+        destination = await sendEmailReply(fd, user, id);
+        break;
+      case 'email.compose':
+        destination = await composeEmail(fd, user);
+        break;
+      case 'email.link':
+        destination = await linkEmail(fd, user, id);
+        break;
+      case 'assistant.start':
+        destination = await startThread(fd, user);
+        break;
+      case 'assistant.ask':
+        destination = await askAssistant(fd, user, id);
+        break;
+      case 'assistant.delete':
+        destination = await deleteThread(fd, user, id);
+        break;
+
+      case 'proposal':
+        destination = await saveProposal(fd, user, id);
+        break;
+      case 'proposalTier':
+        destination = await saveProposalTier(fd, user, id);
+        break;
+      case 'proposal.decide':
+        destination = await decideProposal(fd, user, id);
+        break;
+      case 'proposal.revise':
+        destination = await reviseProposal(fd, user, id);
         break;
       case 'notifications.read':
         destination = await markNotificationsRead(fd, user, id);

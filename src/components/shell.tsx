@@ -14,9 +14,12 @@ import {
   Languages,
   ListChecks,
   FileText,
+  FileSignature,
   Percent,
   Calculator,
   BarChart3,
+  Mail,
+  Sparkles,
   Bell,
   Settings,
   Menu,
@@ -26,6 +29,7 @@ import {
 import { hasAnyPermission, hasPermission } from '@/lib/permissions';
 import type { SessionUser } from '@/lib/auth';
 import { Avatar } from '@/components/ui';
+import { FastTransLogo, FastTransMark } from '@/components/brand';
 import { cn } from '@/lib/utils';
 
 const COMPANY_AR = process.env.NEXT_PUBLIC_COMPANY_NAME_AR || 'نظام إدارة العملاء';
@@ -50,9 +54,27 @@ const NAV = [
     permission: 'canViewFreelancerCost' as const,
   },
   { href: '/quotes', label: 'عروض الأسعار', icon: FileText },
+  {
+    href: '/proposals',
+    label: 'العروض الاحترافية',
+    icon: FileSignature,
+    permission: 'canViewSellPrice' as const,
+  },
   { href: '/tasks', label: 'المهام', icon: ListChecks },
   // «نسبي» بلا صلاحية: كل موظف يرى استحقاقه هو. الترشيح في الخادم.
   { href: '/commissions', label: 'نسبي', icon: Percent },
+  {
+    href: '/email',
+    label: 'البريد',
+    icon: Mail,
+    permission: 'canUseEmail' as const,
+  },
+  {
+    href: '/assistant',
+    label: 'المساعد',
+    icon: Sparkles,
+    permission: 'canUseAi' as const,
+  },
   {
     href: '/analytics',
     label: 'التحليلات',
@@ -186,11 +208,9 @@ export default function Shell({
     <div className="min-h-screen lg:flex">
       {/* الشريط الجانبي — سطح المكتب */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-l border-slate-200 bg-white lg:flex">
-        <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-xs font-bold text-white">
-            CRM
-          </div>
-          <span className="truncate text-sm font-bold text-slate-800">{COMPANY_AR}</span>
+        <div className="border-b border-slate-200 px-4 py-4">
+          <FastTransLogo />
+          <span className="mt-2 block truncate text-xs text-slate-400">{COMPANY_AR}</span>
         </div>
         {nav}
         {footer}
@@ -199,10 +219,8 @@ export default function Shell({
       {/* الشريط العلوي — الجوال */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-[10px] font-bold text-white">
-            CRM
-          </div>
-          <span className="truncate text-sm font-bold text-slate-800">{COMPANY_AR}</span>
+          <FastTransMark className="h-8 w-8" />
+          <span className="truncate text-sm font-bold text-brand-600">FAST TRANS</span>
         </div>
         <button
           type="button"
@@ -224,7 +242,7 @@ export default function Shell({
           />
           <div className="absolute inset-y-0 right-0 flex w-72 flex-col bg-white shadow-xl animate-fade-in">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
-              <span className="truncate text-sm font-bold text-slate-800">{COMPANY_AR}</span>
+              <FastTransLogo compact />
               <button
                 type="button"
                 onClick={() => setOpen(false)}

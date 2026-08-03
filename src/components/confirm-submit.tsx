@@ -8,15 +8,18 @@ export default function ConfirmSubmit({
   confirmText,
   children,
   className,
+  action = '/api/mutate',
 }: {
   confirmText: string;
   children: React.ReactNode;
   className?: string;
+  /** الحذف السريع يمرّ بـ/api/mutate، وما يمرّ بمنطق مجاله يمرّ بـ/api/save */
+  action?: string;
 }) {
   return (
     <form
       method="post"
-      action="/api/mutate"
+      action={action}
       className={className}
       onSubmit={(e) => {
         if (!window.confirm(confirmText)) e.preventDefault();

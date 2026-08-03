@@ -11,6 +11,7 @@ import {
   Tag,
   Percent,
   Upload,
+  Mail,
 } from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -85,6 +86,13 @@ export default async function SettingsPage() {
       title: 'تكلفة الموظفين',
       description: 'الرواتب ومعطيات حساب تكلفة الصفحة — لمدير النظام والإدارة فقط',
       permission: 'canViewStaffSalary',
+    },
+    {
+      href: '/settings/mailboxes',
+      icon: Mail,
+      title: 'صناديق البريد',
+      description: 'صندوق مشترك للفريق أو صندوق لكل أدمن — قراءةً وردًّا من داخل النظام',
+      permission: 'canManageSettings',
     },
     {
       href: '/settings/import',

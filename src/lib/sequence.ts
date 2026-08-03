@@ -41,6 +41,13 @@ export async function nextFreelancerCode(): Promise<string> {
   return `FL-${String(value).padStart(4, '0')}`;
 }
 
+/** `FT-2608-021` — مرجع عرض السعر، عدّاده يتجدّد شهريًا */
+export async function nextProposalCode(date = new Date()): Promise<string> {
+  const period = yearMonth(date);
+  const value = await nextValue(`proposal-${period}`);
+  return `FT-${period}-${String(value).padStart(3, '0')}`;
+}
+
 /** `JV-2608-0001` — قيد اليومية، عدّاده يتجدّد مع كل شهر */
 export async function nextJournalCode(date = new Date()): Promise<string> {
   const period = yearMonth(date);

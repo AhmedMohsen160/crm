@@ -154,6 +154,24 @@ async function handle(
       return null;
     }
 
+    // ── حذف شريحة في عرض احترافي ──────────────────────────────
+    // الشريحة سطر في مستند لم يُرسل بعد، لا سجلًّا تشغيليًّا؛ وحذفها من
+    // مسوّدة أنظف من إبقاء سطر ميت في جدول يقرأه العميل.
+    case 'proposalTier.delete': {
+      if (!can(user, 'canViewSellPrice')) throw new Error('لا صلاحية');
+      const tier = await db.proposalTierRow.findUnique({
+        where: { id },
+        include: { proposal: { select: { id: true, status: true } } },
+      });
+      if (!tier) return null;
+      if (tier.proposal.status !== 'draft' && tier.proposal.status !== 'sent') {
+        throw new Error('العرض محسوم — أنشئ مراجعة جديدة بدل تعديله');
+      }
+      await db.proposalTierRow.delete({ where: { id } });
+      await auditEvent(user.id, 'delete', 'ProposalTierRow', id, tier.label);
+      return `/proposals/${tier.proposal.id}`;
+    }
+
     // ── حذف بند سعر فريلانسر ──────────────────────────────────
     case 'freelancerRate.delete': {
       if (!can(user, 'canManageFreelancers')) throw new Error('لا صلاحية');
