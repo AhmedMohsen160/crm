@@ -1,7 +1,15 @@
+import { FileText } from 'lucide-react';
 import { FormField, SelectField, TextAreaField } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
 import { FREELANCER_TIERS, RATE_UNITS } from '@/lib/freelancers';
 import type { Option } from '@/lib/reference';
+import { acceptAttribute, extensionList, formatBytes, MAX_FILE_BYTES } from '@/lib/files';
+
+/** إرشاد خانة البيانات مأخوذ من القائمة نفسها — يتغيّر بتغيّر الطريقة */
+function paymentHint(method: string | null | undefined, options: Option[]): string {
+  const found = options.find((o) => o.value === method);
+  return found?.extra || 'رقم الحساب أو المحفظة أو البريد المرتبط';
+}
 
 type FreelancerValues = {
   id?: string;
@@ -22,6 +30,7 @@ type FreelancerValues = {
   paymentMethod?: string | null;
   paymentRef?: string | null;
   cvUrl?: string | null;
+  cvFile?: { id: string; name: string; size: number } | null;
   notes?: string | null;
   needsReview?: boolean;
 };
@@ -37,12 +46,14 @@ export default function FreelancerForm({
   languages,
   serviceLines,
   currencies,
+  paymentMethods,
   back,
 }: {
   values: FreelancerValues;
   languages: Option[];
   serviceLines: Option[];
   currencies: Option[];
+  paymentMethods: Option[];
   back: string;
 }) {
   const selectedLangs = (values.langs ?? '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -52,7 +63,12 @@ export default function FreelancerForm({
     .filter(Boolean);
 
   return (
-    <form method="post" action="/api/save" className="space-y-6">
+    <form
+      method="post"
+      action="/api/save"
+      encType="multipart/form-data"
+      className="space-y-6"
+    >
       <input type="hidden" name="entity" value="freelancer" />
       <input type="hidden" name="id" value={values.id ?? ''} />
       <input type="hidden" name="back" value={back} />
@@ -199,22 +215,68 @@ export default function FreelancerForm({
       <section className="card card-pad">
         <h2 className="mb-4 section-title">الدفع والملفات</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
+          {/* قائمة لا نصّ حر: «انستا» و«إنستاباي» و«Instapay» تصير ثلاث طرق
+              مختلفة في التقارير وهي واحدة */}
+          <SelectField
             label="طريقة الدفع"
             name="paymentMethod"
             defaultValue={values.paymentMethod}
-            placeholder="تحويل بنكي · محفظة · إنستاباي"
+            options={paymentMethods}
+            placeholder="— اختر طريقة الدفع —"
           />
           <FormField
             label="بيانات الدفع"
             name="paymentRef"
             defaultValue={values.paymentRef}
             dir="ltr"
-            hint="رقم الحساب أو المحفظة"
+            hint={paymentHint(values.paymentMethod, paymentMethods)}
           />
-          <FormField label="رابط السيرة الذاتية" name="cvUrl" defaultValue={values.cvUrl} dir="ltr" />
         </div>
-        <TextAreaField label="ملاحظات" name="notes" defaultValue={values.notes} />
+
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+          <p className="label">السيرة الذاتية</p>
+
+          {values.cvFile ? (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <FileText className="h-4 w-4 shrink-0 text-brand-600" />
+              <a
+                href={`/api/files/${values.cvFile.id}`}
+                className="link min-w-0 flex-1 truncate text-sm font-medium"
+              >
+                {values.cvFile.name}
+              </a>
+              <span className="shrink-0 text-xs text-slate-400">
+                {formatBytes(values.cvFile.size)}
+              </span>
+              <label className="flex shrink-0 items-center gap-1.5 text-xs text-rose-600">
+                <input type="checkbox" name="cvRemove" className="h-4 w-4 rounded border-slate-300" />
+                احذفها
+              </label>
+            </div>
+          ) : null}
+
+          <input
+            type="file"
+            name="cvFile"
+            accept={acceptAttribute()}
+            className="block w-full text-sm text-slate-600 file:ml-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700"
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            {values.cvFile ? 'اختيار ملف جديد يستبدل الحالي. ' : ''}
+            المقبول {extensionList()} — وحتى {formatBytes(MAX_FILE_BYTES)}.
+          </p>
+
+          <FormField
+            label="أو رابط خارجي للسيرة"
+            name="cvUrl"
+            defaultValue={values.cvUrl}
+            dir="ltr"
+            className="mt-4"
+            hint="يُستعمل حين تكون السيرة على درايف أو لينكدإن — والمرفوع أوثق"
+          />
+        </div>
+
+        <TextAreaField label="ملاحظات" name="notes" defaultValue={values.notes} className="mt-4" />
       </section>
 
       <SaveButton>حفظ</SaveButton>

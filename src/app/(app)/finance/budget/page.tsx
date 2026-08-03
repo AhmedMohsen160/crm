@@ -61,6 +61,9 @@ export default async function BudgetPage({
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <PageHeader title="الموازنة السنوية" subtitle={`سنة ${year} — المستهدف مقابل الفعلي`}>
+        <Link href={`/finance/budget/plan?year=${year}`} className="btn-primary">
+          ابنِ الموازنة بالخطوات السبع
+        </Link>
         <Link href="/finance" className="btn-secondary">
           لوحة الماليات
         </Link>

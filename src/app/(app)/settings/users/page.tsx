@@ -33,6 +33,10 @@ export default async function UsersPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="المستخدمون" subtitle="الفريق، فروعه، وتسلسله الإداري">
+        <Link href="/settings/users/new?staff=1" className="btn-secondary">
+          <Plus className="h-4 w-4" />
+          منفِّذ داخلي
+        </Link>
         <Link href="/settings/users/new" className="btn-primary">
           <Plus className="h-4 w-4" />
           مستخدم جديد
@@ -58,6 +62,10 @@ export default async function UsersPage() {
           </li>
           <li>
             <b>الفرع</b> يقيّد الرؤية بسجلات الفرع نفسه لمن لا يملك «رؤية كل الليدز».
+          </li>
+          <li>
+            <b>المنفِّذ الداخلي</b> سجلٌّ بلا دخول: مترجم أو مراجع يُسنَد إليه العمل
+            وتُحسب تكلفته وتُقاس طاقته — بلا بريد ولا كلمة مرور يفتح بهما شاشة.
           </li>
         </ul>
       </div>
@@ -89,8 +97,8 @@ export default async function UsersPage() {
                       <span className="text-xs text-slate-400">(أنت)</span>
                     )}
                   </span>
-                  <span className="block pr-8 text-xs text-slate-400" dir="ltr">
-                    {u.email}
+                  <span className="block pr-8 text-xs text-slate-400" dir={u.email ? 'ltr' : 'rtl'}>
+                    {u.email ?? u.jobTitle ?? 'منفِّذ داخلي'}
                   </span>
                 </td>
                 <td>
@@ -98,10 +106,11 @@ export default async function UsersPage() {
                     <Badge className={roleColor(u.roleRef.sortOrder)}>
                       {u.roleRef.label}
                     </Badge>
+                  ) : u.canLogin ? (
+                    // بلا دور **وهو يدخل النظام** خلل يُصحَّح: يفتح الشاشة بلا صلاحية
+                    <Badge className="border-rose-300 bg-rose-100 text-rose-700">بلا دور</Badge>
                   ) : (
-                    <Badge className="border-rose-300 bg-rose-100 text-rose-700">
-                      بلا دور
-                    </Badge>
+                    <Badge className="border-lime-300 bg-lime-50 text-lime-800">منفِّذ داخلي</Badge>
                   )}
                 </td>
                 <td className="text-sm text-slate-600">

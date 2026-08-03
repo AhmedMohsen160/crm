@@ -20,6 +20,7 @@ import {
   BarChart3,
   Mail,
   Sparkles,
+  UsersRound,
   Bell,
   Settings,
   Menu,
@@ -86,6 +87,12 @@ const NAV = [
     label: 'الماليات',
     icon: Calculator,
     permission: 'canManageAccounting' as const,
+  },
+  {
+    href: '/hr',
+    label: 'الموارد البشرية',
+    icon: UsersRound,
+    permission: 'canManageHr' as const,
   },
 ];
 

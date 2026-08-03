@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import { Trash2, Plus } from 'lucide-react';
-import { SERVICE_TYPES, LANGUAGES, UNITS } from '@/lib/constants';
+import {
+  SERVICE_TYPES,
+  LANGUAGES,
+  UNITS,
+  WORDS_PER_STANDARD_PAGE,
+  WORD_BASED_UNITS,
+} from '@/lib/constants';
 import { formatMoney } from '@/lib/utils';
 
 export type QuoteItemData = {
@@ -22,7 +28,8 @@ const EMPTY: QuoteItemData = {
   serviceType: '',
   sourceLang: '',
   targetLang: '',
-  unit: 'WORD',
+  // الافتراضي هو وحدة المكتب الفعلية: الصفحة القياسية ٢٥٠ كلمة
+  unit: 'WORD_250',
   quantity: 1,
   unitPrice: 0,
 };
@@ -35,18 +42,24 @@ export default function QuoteItemsEditor({
   initialItems,
   currency = 'EGP',
   initialDiscount = 0,
+  initialDiscountMode = 'amount',
+  initialDiscountPct = 0,
   initialTaxRate = 0,
 }: {
   initialItems?: QuoteItemData[];
   currency?: string;
   initialDiscount?: number;
+  initialDiscountMode?: string;
+  initialDiscountPct?: number;
   initialTaxRate?: number;
 }) {
   const [rows, setRows] = useState<Row[]>(
     (initialItems?.length ? initialItems : [EMPTY]).map((it, i) => ({ ...it, key: i }))
   );
   const [nextKey, setNextKey] = useState(rows.length);
+  const [discountMode, setDiscountMode] = useState(initialDiscountMode);
   const [discount, setDiscount] = useState(initialDiscount);
+  const [discountPct, setDiscountPct] = useState(initialDiscountPct);
   const [taxRate, setTaxRate] = useState(initialTaxRate);
   const [cur, setCur] = useState(currency);
 
@@ -64,7 +77,13 @@ export default function QuoteItemsEditor({
   }
 
   const subtotal = rows.reduce((s, r) => s + (r.quantity || 0) * (r.unitPrice || 0), 0);
-  const afterDiscount = Math.max(0, subtotal - (discount || 0));
+  // النسبة تُحسب على المجموع الفرعي وحده — لا على ما بعد الضريبة، وإلا صار
+  // الخصم يتغيّر بتغيّر نسبة الضريبة وهما قراران مستقلّان
+  const discountValue =
+    discountMode === 'percent'
+      ? Math.round(subtotal * ((discountPct || 0) / 100) * 100) / 100
+      : discount || 0;
+  const afterDiscount = Math.max(0, subtotal - discountValue);
   const taxAmount = afterDiscount * ((taxRate || 0) / 100);
   const total = afterDiscount + taxAmount;
 
@@ -183,7 +202,14 @@ export default function QuoteItemsEditor({
                   </div>
 
                   <div>
-                    <label className="label">الكمية</label>
+                    <label className="label">
+                      الكمية
+                      {row.unit === 'WORD_250' && (
+                        <span className="mr-1 text-xs font-normal text-slate-400">
+                          (بالصفحات)
+                        </span>
+                      )}
+                    </label>
                     <input
                       name={`items[${i}][quantity]`}
                       type="number"
@@ -193,6 +219,29 @@ export default function QuoteItemsEditor({
                       onChange={(e) => update(row.key, { quantity: Number(e.target.value) })}
                       className="input"
                     />
+                    {/* المكتب يعدّ الكلمات لا الصفحات، فنحوّل هنا بدل أن
+                        يحسبها الموظف على الورق ويخطئ في القسمة */}
+                    {WORD_BASED_UNITS.includes(row.unit) && (
+                      <p className="mt-1 text-xs text-slate-400">
+                        {row.unit === 'WORD_250' ? (
+                          <>
+                            ≈{' '}
+                            <span className="nums">
+                              {Math.round((row.quantity || 0) * WORDS_PER_STANDARD_PAGE)}
+                            </span>{' '}
+                            كلمة
+                          </>
+                        ) : (
+                          <>
+                            ≈{' '}
+                            <span className="nums">
+                              {((row.quantity || 0) / WORDS_PER_STANDARD_PAGE).toFixed(1)}
+                            </span>{' '}
+                            صفحة قياسية
+                          </>
+                        )}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -224,7 +273,7 @@ export default function QuoteItemsEditor({
       {/* الإجماليات */}
       <section className="card card-pad">
         <h2 className="mb-4 section-title">الإجماليات</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-4">
           <div>
             <label className="label">العملة</label>
             <select value={cur} onChange={(e) => setCur(e.target.value)} className="input">
@@ -236,16 +285,50 @@ export default function QuoteItemsEditor({
             </select>
           </div>
           <div>
-            <label className="label">خصم (مبلغ ثابت)</label>
-            <input
-              name="discount"
-              type="number"
-              step="0.01"
-              min="0"
-              value={discount}
-              onChange={(e) => setDiscount(Number(e.target.value))}
+            <label className="label">نوع الخصم</label>
+            <select
+              name="discountMode"
+              value={discountMode}
+              onChange={(e) => setDiscountMode(e.target.value)}
               className="input"
-            />
+            >
+              <option value="amount">مبلغ ثابت</option>
+              <option value="percent">نسبة مئوية</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">
+              {discountMode === 'percent' ? 'نسبة الخصم %' : 'قيمة الخصم'}
+            </label>
+            {discountMode === 'percent' ? (
+              <input
+                name="discountPct"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={discountPct}
+                onChange={(e) => setDiscountPct(Number(e.target.value))}
+                className="input"
+              />
+            ) : (
+              <input
+                name="discount"
+                type="number"
+                step="0.01"
+                min="0"
+                value={discount}
+                onChange={(e) => setDiscount(Number(e.target.value))}
+                className="input"
+              />
+            )}
+            {/* الحقل المخفيّ يُبقي القيمة الأخرى محفوظة، فالتبديل بين
+                النمطين لا يمحو ما أُدخل في الآخر */}
+            {discountMode === 'percent' ? (
+              <input type="hidden" name="discount" value={discount} />
+            ) : (
+              <input type="hidden" name="discountPct" value={discountPct} />
+            )}
           </div>
           <div>
             <label className="label">نسبة الضريبة %</label>
@@ -266,10 +349,15 @@ export default function QuoteItemsEditor({
             <dt className="text-slate-600">المجموع الفرعي</dt>
             <dd className="font-medium nums">{formatMoney(subtotal, cur)}</dd>
           </div>
-          {discount > 0 && (
+          {discountValue > 0 && (
             <div className="flex justify-between text-rose-700">
-              <dt>الخصم</dt>
-              <dd className="font-medium nums">− {formatMoney(discount, cur)}</dd>
+              <dt>
+                الخصم
+                {discountMode === 'percent' && (
+                  <span className="mr-1 nums text-xs">({discountPct}%)</span>
+                )}
+              </dt>
+              <dd className="font-medium nums">− {formatMoney(discountValue, cur)}</dd>
             </div>
           )}
           {taxRate > 0 && (

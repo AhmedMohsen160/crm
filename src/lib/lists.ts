@@ -190,6 +190,36 @@ export const LIST_DEFINITIONS: ListDefinition[] = [
     ],
   },
 
+  // ── طرق الدفع للفريلانسرز والموظفين ──────────────────────────
+  // قائمة لا نصّ حر: النص الحر لا يُرشَّح ولا يُجمَّع، و«انستا» و«إنستاباي»
+  // و«Instapay» تصير ثلاث طرق مختلفة في التقارير وهي واحدة.
+  {
+    name: 'payment_method',
+    label: 'طرق الدفع',
+    hint: 'ما يُصرف به للفريلانسر أو الموظف. المعامل هو نصّ الإرشاد الذي يظهر تحت خانة البيانات.',
+    hasExtra: true,
+    extraLabel: 'إرشاد خانة البيانات',
+    items: [
+      { value: 'bank_transfer', label: 'تحويل بنكي', extra: 'اسم البنك ورقم الحساب أو الآيبان' },
+      { value: 'instapay', label: 'إنستاباي', extra: 'عنوان إنستاباي أو رقم الهاتف' },
+      { value: 'vodafone_cash', label: 'فودافون كاش', extra: 'رقم المحفظة' },
+      { value: 'etisalat_cash', label: 'اتصالات كاش', extra: 'رقم المحفظة' },
+      { value: 'orange_cash', label: 'أورنج كاش', extra: 'رقم المحفظة' },
+      { value: 'we_pay', label: 'وي باي', extra: 'رقم المحفظة' },
+      { value: 'fawry', label: 'فوري', extra: 'رقم الهاتف أو كود الحساب' },
+      { value: 'meeza', label: 'بطاقة ميزة', extra: 'رقم البطاقة' },
+      { value: 'paypal', label: 'باي بال', extra: 'البريد المرتبط بالحساب' },
+      { value: 'wise', label: 'Wise', extra: 'البريد أو رقم الحساب الدولي' },
+      { value: 'payoneer', label: 'Payoneer', extra: 'البريد المرتبط بالحساب' },
+      { value: 'western_union', label: 'ويسترن يونيون', extra: 'الاسم الرباعي والدولة' },
+      { value: 'stc_pay', label: 'STC Pay', extra: 'رقم الهاتف' },
+      { value: 'bank_sa', label: 'تحويل بنكي — السعودية', extra: 'الآيبان (SA…)' },
+      { value: 'cash', label: 'نقدًا في المكتب', extra: 'الفرع الذي يُصرف منه' },
+      { value: 'cheque', label: 'شيك', extra: 'اسم المستفيد كما يُكتب على الشيك' },
+      { value: 'other', label: 'أخرى', extra: 'اكتب التفاصيل كاملة' },
+    ],
+  },
+
   // ── العملات ──────────────────────────────────────────────────
   {
     name: 'currency',

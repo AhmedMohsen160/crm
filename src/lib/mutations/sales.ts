@@ -550,11 +550,28 @@ function readItems(fd: FormData): ParsedItem[] {
   return items;
 }
 
-function computeTotals(items: ParsedItem[], discount: number, taxRate: number) {
-  const subtotal = Math.round(items.reduce((s, it) => s + it.lineTotal, 0) * 100) / 100;
+/**
+ * الإجماليات.
+ *
+ * الخصم **يُحسب في الخادم** ولو حسبته الشاشة: قيمةٌ تصل من المتصفّح قيمةٌ
+ * يمكن تغييرها قبل الإرسال. والنسبة تُطبَّق على المجموع الفرعي وحده لا على
+ * ما بعد الضريبة — وإلا تغيّر الخصم بتغيّر نسبة الضريبة وهما قراران
+ * مستقلّان.
+ */
+function computeTotals(
+  items: ParsedItem[],
+  input: { discountMode: string; discount: number; discountPct: number; taxRate: number }
+) {
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  const subtotal = round2(items.reduce((s, it) => s + it.lineTotal, 0));
+
+  const pct = Math.min(100, Math.max(0, input.discountPct));
+  const discount =
+    input.discountMode === 'percent' ? round2(subtotal * (pct / 100)) : Math.max(0, input.discount);
+
   const afterDiscount = Math.max(0, subtotal - discount);
-  const taxAmount = Math.round(afterDiscount * (taxRate / 100) * 100) / 100;
-  return { subtotal, taxAmount, total: Math.round((afterDiscount + taxAmount) * 100) / 100 };
+  const taxAmount = round2(afterDiscount * (input.taxRate / 100));
+  return { subtotal, discount, discountPct: pct, taxAmount, total: round2(afterDiscount + taxAmount) };
 }
 
 /** رقم عرض سعر متسلسل — QT-2026-0001 */
@@ -576,9 +593,14 @@ export async function saveQuote(fd: FormData, user: SessionUser, id?: string) {
   const items = readItems(fd);
   if (items.length === 0) throw new MutationError('أضف بندًا واحدًا على الأقل');
 
-  const discount = num(fd, 'discount') ?? 0;
+  const discountMode = str(fd, 'discountMode') === 'percent' ? 'percent' : 'amount';
   const taxRate = num(fd, 'taxRate') ?? 0;
-  const { subtotal, taxAmount, total } = computeTotals(items, discount, taxRate);
+  const { subtotal, discount, discountPct, taxAmount, total } = computeTotals(items, {
+    discountMode,
+    discount: num(fd, 'discount') ?? 0,
+    discountPct: num(fd, 'discountPct') ?? 0,
+    taxRate,
+  });
   const status = str(fd, 'status') ?? 'DRAFT';
 
   const common = {
@@ -587,6 +609,8 @@ export async function saveQuote(fd: FormData, user: SessionUser, id?: string) {
     currency: str(fd, 'currency') ?? 'EGP',
     subtotal,
     discount,
+    discountMode,
+    discountPct,
     taxRate,
     taxAmount,
     total,

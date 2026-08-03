@@ -1620,6 +1620,122 @@ const mailboxScreenBlocked = !(await page.locator('h1:has-text("صناديق ا�
 check(mailboxScreenBlocked, 'ومن لا يملك إدارة الإعدادات لا يصل لصناديق البريد');
 await loginAs('admin@fasttrans.local');
 
+// ── 16. المنفِّذ الداخلي — مترجم بلا حساب دخول ───────────────
+// الغرض المنصوص: مدير المشاريع يكتب أن دعاء راجعت مراجعةً مكثفة، فتُحسب
+// تكلفتها وتُقاس طاقتها — بلا أن تفتح هي النظام أصلًا.
+await go('/settings/users/new?staff=1');
+await page.fill('#name', `مترجم اختبار ${RUN}`);
+await page.fill('#jobTitle', 'مترجم قانوني');
+await page.check('input[name=isProducer]');
+await submit();
+await page.waitForURL(/\/settings\/users$/, { timeout: 20000 });
+check(
+  await waitForText(`مترجم اختبار ${RUN}`),
+  'إنشاء منفِّذ داخلي بلا بريد ولا كلمة مرور (اختبار ١٦)'
+);
+check(await waitForText('منفِّذ داخلي'), 'ويُعلَّم في القائمة أنه لا يدخل النظام');
+
+// وهو يظهر لمدير المشاريع في قوائم الإسناد
+const producerNames = await page.evaluate(async () => {
+  const r = await fetch('/production');
+  return r.status;
+});
+check(producerNames === 200, 'وقائمة الإسناد تفتح');
+
+// ── 17. الدفع المهيكل ورفع السيرة ───────────────────────────
+await go('/freelancers/new');
+const paymentOptions = await page.locator('#paymentMethod option').count();
+check(
+  paymentOptions > 8,
+  `طريقة الدفع صارت قائمة لا نصًّا حرًّا — ${paymentOptions} خيارًا (اختبار ١٧)`
+);
+check(
+  (await page.locator('input[name=cvFile][type=file]').count()) === 1,
+  'والسيرة الذاتية تُرفع ملفًّا لا رابطًا'
+);
+check(
+  (await page.locator('form[enctype="multipart/form-data"]').count()) === 1,
+  'والنموذج يقبل الملفات'
+);
+
+// ── 18. وحدة ٢٥٠ كلمة والخصم النسبي ─────────────────────────
+await go('/quotes/new');
+const unitOptions = await page.locator('select[name="items[0][unit]"] option').allTextContents();
+check(
+  unitOptions.some((o) => o.includes('٢٥٠')),
+  `وحدة الصفحة القياسية ٢٥٠ كلمة موجودة — ${unitOptions.join(' · ')} (اختبار ١٨)`
+);
+check(
+  (await page.locator('select[name=discountMode]').count()) === 1,
+  'ونوع الخصم صار خيارًا: مبلغ ثابت أو نسبة'
+);
+
+await page.selectOption('select[name=discountMode]', 'percent');
+await page.fill('#title', `عرض خصم ${RUN}`);
+await page.fill('input[name="items[0][description]"]', 'ترجمة قانونية');
+await page.fill('input[name="items[0][quantity]"]', '100');
+await page.fill('input[name="items[0][unitPrice]"]', '100');
+await page.fill('input[name=discountPct]', '10');
+await submit();
+await page.waitForURL(/\/quotes\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
+const quoteUrl = page.url();
+check(
+  await waitForText('9,000'),
+  'والنسبة تُحسب في الخادم: ١٠٪ من ١٠٬٠٠٠ ← إجمالي ٩٬٠٠٠'
+);
+check(await waitForText('(10%)'), 'ونسبة الخصم مذكورة بجانب قيمته');
+
+// شاشة التصميم بالذكاء متاحة كطريق ثانٍ
+await go(quoteUrl.replace('http://localhost:3000', '') + '/design', '18-quote-design');
+check(
+  await waitForText('موقع العميل'),
+  'وشاشة التصميم بالذكاء تفتح — طريق ثانٍ إلى جانب القالب القياسي'
+);
+check(await waitForText('توجيهك للمصمّم'), 'وفيها خانة التوجيه ونقاط البدء');
+
+// ── 19. بناء الموازنة بالخطوات السبع ────────────────────────
+const planStatus = await go('/finance/budget/plan', '19-budget-plan');
+check(planStatus === 200, 'شاشة بناء الموازنة تفتح (اختبار ١٩)');
+const planText = await page.locator('body').innerText();
+const stepTitles = [
+  'تحليل البيانات المالية السابقة',
+  'توقّع الإيرادات',
+  'التكاليف الثابتة',
+  'التكاليف المتغيّرة',
+  'التدفق النقدي',
+  'الطوارئ',
+  'المراجعة',
+];
+const missingSteps = stepTitles.filter((s) => !planText.includes(s));
+check(missingSteps.length === 0, `والخطوات السبع كلها معروضة${missingSteps.length ? ': ينقص ' + missingSteps : ''}`);
+check(planText.includes('نقطة التعادل'), 'ونقطة التعادل محسوبة');
+
+// ── 20. الموارد البشرية ─────────────────────────────────────
+const hrStatus = await go('/hr', '20-hr');
+check(hrStatus === 200, 'لوحة الموارد البشرية تفتح (اختبار ٢٠)');
+
+await go('/hr/departments');
+await page.fill('#name', `قسم اختبار ${RUN}`);
+await submit();
+await page.waitForURL(/\/hr\/departments$/, { timeout: 20000 });
+check(await waitForText(`قسم اختبار ${RUN}`), 'وإنشاء قسم في الشجرة التنظيمية');
+
+await go('/hr/employees');
+check(await waitForText('الأساسي'), 'وكشف الموظفين يعرض بنود الأجر');
+
+await go('/hr/performance');
+check(
+  await waitForText('غير مقيس'),
+  'وشاشة الأداء تقول «غير مقيس» صراحةً بدل أن تعرض صفرًا كاذبًا'
+);
+
+// والموارد البشرية محجوبة عمّن لا يملك صلاحيتها
+await loginAs('agent@fasttrans.local');
+await go('/hr');
+const hrBlocked = !(await page.locator('h1:has-text("الموارد البشرية")').count());
+check(hrBlocked, 'ومن لا يملك إدارة الموارد البشرية لا يصل إليها');
+await loginAs('admin@fasttrans.local');
+
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
 await go('/projects', '12-mobile');

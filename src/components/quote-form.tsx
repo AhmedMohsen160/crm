@@ -10,6 +10,8 @@ type QuoteData = {
   status: string;
   currency: string;
   discount: number;
+  discountMode?: string;
+  discountPct?: number;
   taxRate: number;
   validUntil: Date | null;
   notes: string | null;
@@ -108,6 +110,8 @@ export default function QuoteForm({
         initialItems={items}
         currency={quote?.currency ?? 'EGP'}
         initialDiscount={quote?.discount ?? 0}
+        initialDiscountMode={quote?.discountMode ?? 'amount'}
+        initialDiscountPct={quote?.discountPct ?? 0}
         initialTaxRate={quote?.taxRate ?? 0}
       />
 

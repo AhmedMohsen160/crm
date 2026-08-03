@@ -5,6 +5,7 @@ import { can, hashPassword, verifyPassword, type SessionUser } from '@/lib/auth'
 import { str, num, date, fullName } from '@/lib/utils';
 import { logActivity, readEntityLink, linkPath, type EntityLink } from '@/lib/actions/helpers';
 import { auditEvent, auditDiff } from '@/lib/audit';
+import { checkUpload } from '@/lib/files';
 import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
@@ -134,6 +135,7 @@ export async function saveFreelancer(fd: FormData, user: SessionUser, id?: strin
     const created = await db.freelancer.create({
       data: { ...data, code: await nextFreelancerCode() },
     });
+    await storeCv(fd, user, created.id, null);
     await auditEvent(user.id, 'create', 'Freelancer', created.id, name);
     return `/freelancers/${created.id}`;
   }
@@ -141,8 +143,52 @@ export async function saveFreelancer(fd: FormData, user: SessionUser, id?: strin
   const existing = await db.freelancer.findUnique({ where: { id } });
   if (!existing) throw new MutationError('الفريلانسر غير موجود');
   await db.freelancer.update({ where: { id }, data });
+  await storeCv(fd, user, id, existing.cvFileId);
   await auditDiff(user.id, 'Freelancer', id, existing, data);
   return `/freelancers/${id}`;
+}
+
+/**
+ * السيرة الذاتية مرفوعةً على النظام.
+ *
+ * تُخزَّن في القاعدة لا على القرص: النشر بلا قرص دائم، فملفٌ يُكتب على القرص
+ * يختفي مع أول إعادة نشر. والسيرة القديمة تُحذف عند استبدالها — هي نسخة من
+ * مستند عند صاحبه، لا سجلّ تشغيلي يسري عليه «لا شيء يُمحى».
+ */
+async function storeCv(
+  fd: FormData,
+  user: SessionUser,
+  freelancerId: string,
+  previousFileId: string | null
+) {
+  if (fd.get('cvRemove') === 'on' && previousFileId) {
+    await db.freelancer.update({ where: { id: freelancerId }, data: { cvFileId: null } });
+    await db.storedFile.delete({ where: { id: previousFileId } }).catch(() => {});
+    await auditEvent(user.id, 'delete', 'StoredFile', previousFileId, 'حذف السيرة الذاتية');
+    return;
+  }
+
+  const upload = fd.get('cvFile');
+  if (!(upload instanceof File) || upload.size === 0) return;
+
+  const check = checkUpload(upload);
+  if (!check.ok) throw new MutationError(check.error);
+
+  const bytes = Buffer.from(await upload.arrayBuffer());
+  const stored = await db.storedFile.create({
+    data: {
+      name: check.name,
+      mimeType: check.mimeType,
+      size: check.size,
+      data: bytes,
+      purpose: 'freelancer_cv',
+      uploadedById: user.id,
+    },
+  });
+
+  await db.freelancer.update({ where: { id: freelancerId }, data: { cvFileId: stored.id } });
+  if (previousFileId) await db.storedFile.delete({ where: { id: previousFileId } }).catch(() => {});
+  await auditEvent(user.id, 'create', 'StoredFile', stored.id, `سيرة ذاتية: ${check.name}`);
 }
 
 /** بند سعر استثنائي — أدقّ تطابق يفوز عند الحساب */

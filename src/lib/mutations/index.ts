@@ -75,6 +75,9 @@ export {
   saveBudgetLines,
   saveFixedAsset,
   generateDraftEntries,
+  fillBudgetFromHistory,
+  saveAccountBehaviour,
+  saveBudgetPlanSettings,
 } from './accounting';
 
 // البريد: الصناديق · المزامنة · التحليل · الرد
@@ -90,6 +93,18 @@ export {
 } from './email';
 
 export { startThread, askAssistant, deleteThread } from './ai';
+
+// عرض السعر المصمَّم بالذكاء — طريق ثانٍ إلى جانب القالب القياسي
+export { readClientSite, designQuoteDocument, clearQuoteDesign } from './quotes';
+
+// الموارد البشرية: الأقسام · هيكل الأجر · كشف الرواتب
+export {
+  saveDepartment,
+  saveSalaryComponent,
+  endSalaryComponent,
+  runPayroll,
+  decidePayroll,
+} from './hr';
 
 export { importLegacySheet, resolveMigrationRow } from './migration';
 export { markNotificationsRead, runNotifications } from './alerts';

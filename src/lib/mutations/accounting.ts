@@ -5,6 +5,7 @@ import { can, hashPassword, verifyPassword, type SessionUser } from '@/lib/auth'
 import { str, num, date, fullName } from '@/lib/utils';
 import { logActivity, readEntityLink, linkPath, type EntityLink } from '@/lib/actions/helpers';
 import { auditEvent, auditDiff } from '@/lib/audit';
+import { fillFromLastYear } from '@/lib/budget-engine';
 import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
@@ -510,4 +511,80 @@ export async function generateDraftEntries(fd: FormData, user: SessionUser) {
 
   await auditEvent(user.id, 'create', 'JournalEntry', period, `توليد مقترحات: ${created}`);
   return `/finance/journal?period=${period}&generated=${created}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  بناء الموازنة — الخطوات السبع
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * يملأ الموازنة من فعليّ العام الماضي (الخطوتان ١ و٢).
+ *
+ * الملء **يحترم الموسمية** ولا يكتب فوق ما ضُبط يدويًا إلا بطلب صريح: من
+ * قضى ساعةً في ضبط شهور حسابٍ لا يجوز أن يمسحها زرٌّ بضغطة.
+ */
+export async function fillBudgetFromHistory(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');
+
+  const year = Math.round(num(fd, 'year') ?? new Date().getFullYear());
+  const growthPct = num(fd, 'growthPct') ?? 0;
+  if (growthPct < -100) throw new MutationError('نسبة نمو أقل من −١٠٠٪ لا معنى لها');
+
+  const overwrite = fd.get('overwrite') === 'on';
+  const result = await fillFromLastYear({ year, growthPct, overwrite, userId: user.id });
+
+  await auditEvent(
+    user.id,
+    'update',
+    'Budget',
+    String(year),
+    `ملء من ${year - 1} بنمو ${growthPct}% — ${result.filled} حسابًا`
+  );
+  return `/finance/budget/plan?year=${year}&filled=${result.filled}&skipped=${result.skipped}`;
+}
+
+/** تصنيف الحساب ثابتًا أو متغيّرًا (الخطوتان ٣ و٤) */
+export async function saveAccountBehaviour(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');
+
+  const year = Math.round(num(fd, 'year') ?? new Date().getFullYear());
+  let changed = 0;
+
+  for (const [key, value] of fd.entries()) {
+    const match = key.match(/^behaviour\[(.+)\]$/);
+    if (!match) continue;
+    const raw = String(value);
+    // الفراغ تصنيفٌ صالح: يعني «لم يُحسم بعد» ويظهر سؤالًا في الشاشة
+    const behaviour = raw === 'fixed' || raw === 'variable' ? raw : null;
+    await db.account.update({ where: { id: match[1] }, data: { costBehavior: behaviour } });
+    changed += 1;
+  }
+
+  await auditEvent(user.id, 'update', 'Account', 'behaviour', `تصنيف ${changed} حسابًا`);
+  return `/finance/budget/plan?year=${year}&classified=${changed}`;
+}
+
+/** نسبة الطوارئ وملاحظات المنهج (الخطوة ٦) */
+export async function saveBudgetPlanSettings(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');
+
+  const year = Math.round(num(fd, 'year') ?? new Date().getFullYear());
+  const contingencyPct = num(fd, 'contingencyPct') ?? 0;
+  if (contingencyPct < 0 || contingencyPct > 100) {
+    throw new MutationError('نسبة الطوارئ بين صفر ومئة');
+  }
+
+  const data = {
+    contingencyPct,
+    method: str(fd, 'method'),
+    planNotes: str(fd, 'planNotes'),
+  };
+
+  await db.budget.upsert({
+    where: { year },
+    update: data,
+    create: { year, name: `موازنة ${year}`, status: 'draft', ...data },
+  });
+  await auditEvent(user.id, 'update', 'Budget', String(year), `طوارئ ${contingencyPct}%`);
+  return `/finance/budget/plan?year=${year}&saved=1`;
 }

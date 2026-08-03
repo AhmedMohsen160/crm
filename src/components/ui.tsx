@@ -218,6 +218,7 @@ export function SelectField({
   options,
   defaultValue,
   required,
+  disabled,
   placeholder = '— اختر —',
   hint,
   className,
@@ -227,6 +228,7 @@ export function SelectField({
   options: { value: string; label: string }[];
   defaultValue?: string | null;
   required?: boolean;
+  disabled?: boolean;
   placeholder?: string;
   hint?: string;
   className?: string;
@@ -240,8 +242,9 @@ export function SelectField({
         id={name}
         name={name}
         required={required}
+        disabled={disabled}
         defaultValue={defaultValue ?? ''}
-        className="input"
+        className="input disabled:bg-slate-100 disabled:text-slate-400"
       >
         <option value="">{placeholder}</option>
         {options.map((o) => (

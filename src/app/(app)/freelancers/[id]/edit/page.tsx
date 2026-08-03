@@ -21,8 +21,11 @@ export default async function EditFreelancerPage({
   await requirePermission('canManageFreelancers');
 
   const [freelancer, lists] = await Promise.all([
-    db.freelancer.findUnique({ where: { id } }),
-    listOptionsMany('language', 'service_line', 'currency'),
+    db.freelancer.findUnique({
+      where: { id },
+      include: { cvFile: { select: { id: true, name: true, size: true } } },
+    }),
+    listOptionsMany('language', 'service_line', 'currency', 'payment_method'),
   ]);
   if (!freelancer) notFound();
 
@@ -46,6 +49,7 @@ export default async function EditFreelancerPage({
         languages={lists.language}
         serviceLines={lists.service_line}
         currencies={lists.currency}
+        paymentMethods={lists.payment_method}
         back={`/freelancers/${id}/edit`}
       />
     </div>

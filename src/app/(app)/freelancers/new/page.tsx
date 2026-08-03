@@ -14,7 +14,7 @@ export default async function NewFreelancerPage({
 }) {
   const { error } = await searchParams;
   await requirePermission('canManageFreelancers');
-  const lists = await listOptionsMany('language', 'service_line', 'currency');
+  const lists = await listOptionsMany('language', 'service_line', 'currency', 'payment_method');
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -33,6 +33,7 @@ export default async function NewFreelancerPage({
         languages={lists.language}
         serviceLines={lists.service_line}
         currencies={lists.currency}
+        paymentMethods={lists.payment_method}
         back="/freelancers/new"
       />
     </div>

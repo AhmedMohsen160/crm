@@ -1,11 +1,12 @@
 import Link from '@/components/link';
 import { notFound } from 'next/navigation';
-import { Pencil, Plus, AlertTriangle } from 'lucide-react';
+import { Pencil, Plus, AlertTriangle, FileText } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requireUser, can } from '@/lib/auth';
 import { listOptionsMany, listLabel } from '@/lib/reference';
 import { FREELANCER_TIERS, RATE_UNITS, PAYMENT_STATUSES } from '@/lib/freelancers';
 import { formatMoney, formatDate } from '@/lib/utils';
+import { formatBytes } from '@/lib/files';
 import { PageHeader, Badge, Field, FormField, SelectField } from '@/components/ui';
 import { SaveButton, ConfirmMutateButton } from '@/components/forms';
 
@@ -24,6 +25,7 @@ export default async function FreelancerPage({
   const freelancer = await db.freelancer.findUnique({
     where: { id },
     include: {
+      cvFile: { select: { id: true, name: true, size: true, mimeType: true } },
       rates: { orderBy: { rate: 'asc' } },
       payments: {
         include: { project: { select: { id: true, code: true, title: true } } },
@@ -35,6 +37,9 @@ export default async function FreelancerPage({
   if (!freelancer) notFound();
 
   const lists = await listOptionsMany('language', 'service_line', 'step_type', 'currency');
+  const paymentLabel = freelancer.paymentMethod
+    ? await listLabel('payment_method', freelancer.paymentMethod)
+    : null;
 
   const langNames = await Promise.all(
     (freelancer.langs ?? '')
@@ -135,7 +140,7 @@ export default async function FreelancerPage({
           </Field>
           {seesCost && (
             <Field label="طريقة الدفع">
-              {freelancer.paymentMethod ?? '—'}
+              {paymentLabel ?? '—'}
               {freelancer.paymentRef && (
                 <span className="block text-xs text-slate-400" dir="ltr">
                   {freelancer.paymentRef}
@@ -143,6 +148,24 @@ export default async function FreelancerPage({
               )}
             </Field>
           )}
+          <Field label="السيرة الذاتية">
+            {freelancer.cvFile ? (
+              <a
+                href={`/api/files/${freelancer.cvFile.id}`}
+                className="link inline-flex items-center gap-1.5"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                {freelancer.cvFile.name}
+                <span className="text-xs text-slate-400">
+                  ({formatBytes(freelancer.cvFile.size)})
+                </span>
+              </a>
+            ) : freelancer.cvUrl ? (
+              <a href={freelancer.cvUrl} target="_blank" rel="noreferrer" className="link" dir="ltr">
+                رابط خارجي
+              </a>
+            ) : null}
+          </Field>
         </dl>
         {freelancer.notes && (
           <p className="mt-4 whitespace-pre-line rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">

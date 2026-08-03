@@ -31,6 +31,7 @@ export const PERMISSIONS = {
   canViewTeamAnalytics: 'تحليلات الفريق',
   canUseEmail: 'بريد النظام',
   canUseAi: 'المساعد الذكي',
+  canManageHr: 'إدارة الموارد البشرية',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -60,6 +61,7 @@ export const PERMISSION_HINTS: Record<Permission, string> = {
   canViewTeamAnalytics: 'تحليلات فريقه',
   canUseEmail: 'قراءة بريد الصناديق المتاحة له والرد عليها',
   canUseAi: 'سؤال المساعد الذكي وصياغة الردود — بحدود ما يراه هو',
+  canManageHr: 'الأقسام وهياكل الأجر وكشوف الرواتب وتقارير الأداء',
 };
 
 /** نطاق ما يراه المستخدم من السجلات */
@@ -132,6 +134,7 @@ export const DEFAULT_ROLES: {
       'canViewCompanyAnalytics',
       'canViewTeamAnalytics',
       'canUseAi',
+      'canManageHr',
     ],
   },
   {
@@ -194,6 +197,7 @@ export const DEFAULT_ROLES: {
       'canPayFreelancers',
       'canManageAccounting',
       'canViewCompanyAnalytics',
+      'canManageHr',
     ],
   },
   {

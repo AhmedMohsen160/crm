@@ -20,7 +20,12 @@ import {
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 
-export type AiPurpose = 'email.analyze' | 'email.reply' | 'assistant' | 'proposal.draft';
+export type AiPurpose =
+  | 'email.analyze'
+  | 'email.reply'
+  | 'assistant'
+  | 'proposal.draft'
+  | 'quote.design';
 
 export type AiResult =
   | { ok: true; text: string; inTokens: number; outTokens: number; costUsd: number; model: string }

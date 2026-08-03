@@ -109,17 +109,39 @@ export async function saveUser(fd: FormData, admin: SessionUser, id?: string) {
   const reportsToId = str(fd, 'reportsToId');
   const isProducer = fd.get('isProducer') === 'on';
 
-  if (!roleId) throw new MutationError('الدور مطلوب');
-  const role = await db.role.findUnique({ where: { id: roleId } });
-  if (!role) throw new MutationError('الدور المختار غير موجود');
+  /**
+   * **المنفِّذ الداخلي** — مترجم أو مراجع يُسنَد إليه العمل ولا يدخل النظام.
+   *
+   * مدير المشاريع يكتب أنّ دعاء راجعت مراجعةً مكثفة، فتُحسب تكلفتها وتُقاس
+   * طاقتها ويظهر أداؤها في التحليلات — بلا بريد ولا كلمة مرور ولا دور.
+   * إلزامه بحساب دخول يعني إمّا حسابًا وهميًا لا يُستعمل، وإمّا ألّا يُسجَّل
+   * عمله أصلًا. وكلاهما أسوأ.
+   */
+  const canLogin = fd.get('canLogin') !== 'off';
+
+  if (canLogin && !roleId) throw new MutationError('الدور مطلوب لمن يدخل النظام');
+  const role = roleId ? await db.role.findUnique({ where: { id: roleId } }) : null;
+  if (roleId && !role) throw new MutationError('الدور المختار غير موجود');
+
+  const hrData = {
+    departmentId: str(fd, 'departmentId'),
+    hireDate: date(fd, 'hireDate'),
+    employmentType: str(fd, 'employmentType') ?? 'full_time',
+    nationalId: str(fd, 'nationalId'),
+    payMethod: str(fd, 'payMethod'),
+    bankAccount: str(fd, 'bankAccount'),
+  };
 
   if (!id) {
-    const email = str(fd, 'email')?.toLowerCase();
-    if (!name || !email || !password) {
-      throw new MutationError('الاسم والبريد وكلمة المرور مطلوبة');
+    const email = str(fd, 'email')?.toLowerCase() ?? null;
+
+    if (!name) throw new MutationError('الاسم مطلوب');
+    if (canLogin) {
+      if (!email || !password) throw new MutationError('البريد وكلمة المرور مطلوبان لمن يدخل النظام');
+      if (password.length < 8) throw new MutationError('كلمة المرور يجب ألا تقل عن 8 أحرف');
     }
-    if (password.length < 8) throw new MutationError('كلمة المرور يجب ألا تقل عن 8 أحرف');
-    if (await db.user.findUnique({ where: { email } })) {
+    // البريد اختياري للمنفِّذ، وإن كُتب فلا يتكرّر — قد يُمنح دخولًا لاحقًا
+    if (email && (await db.user.findUnique({ where: { email } }))) {
       throw new MutationError('هذا البريد الإلكتروني مستخدم بالفعل');
     }
 
@@ -127,16 +149,25 @@ export async function saveUser(fd: FormData, admin: SessionUser, id?: string) {
       data: {
         name,
         email,
-        passwordHash: await hashPassword(password),
-        roleId,
+        canLogin,
+        passwordHash: canLogin && password ? await hashPassword(password) : null,
+        roleId: roleId ?? null,
         branch,
         reportsToId,
-        isProducer,
+        // المنفِّذ الداخلي منتِج بطبعه — وإلا لما سُجِّل أصلًا
+        isProducer: canLogin ? isProducer : true,
         phone: str(fd, 'phone'),
         jobTitle: str(fd, 'jobTitle'),
+        ...hrData,
       },
     });
-    await auditEvent(admin.id, 'create', 'User', created.id, `${created.name} — ${role.label}`);
+    await auditEvent(
+      admin.id,
+      'create',
+      'User',
+      created.id,
+      `${created.name} — ${role?.label ?? 'منفِّذ داخلي'}`
+    );
     return '/settings/users';
   }
 
@@ -149,6 +180,9 @@ export async function saveUser(fd: FormData, admin: SessionUser, id?: string) {
   if (admin.id === id && roleId !== existing.roleId) {
     throw new MutationError('لا يمكنك تغيير دورك بنفسك');
   }
+  if (admin.id === id && !canLogin) {
+    throw new MutationError('لا يمكنك إلغاء دخولك أنت — لن تعود تفتح الشاشة');
+  }
   if (reportsToId === id) throw new MutationError('لا يمكن أن يتبع المستخدم نفسه');
   if (reportsToId && (await reportsToCreatesCycle(id, reportsToId))) {
     throw new MutationError('هذا الاختيار يُنشئ حلقة في التسلسل الإداري');
@@ -159,7 +193,8 @@ export async function saveUser(fd: FormData, admin: SessionUser, id?: string) {
       where: { id: existing.roleId },
       select: { canManageUsers: true },
     });
-    if (wasAdmin?.canManageUsers && (!role.canManageUsers || !active)) {
+    // نزع الدور أو الدخول أو التنشيط — كلّها تُخرجه من مديري المستخدمين
+    if (wasAdmin?.canManageUsers && (!role?.canManageUsers || !active || !canLogin)) {
       await assertAdminSurvives(id);
     }
   }
@@ -167,15 +202,29 @@ export async function saveUser(fd: FormData, admin: SessionUser, id?: string) {
     throw new MutationError('كلمة المرور يجب ألا تقل عن 8 أحرف');
   }
 
+  const email = str(fd, 'email')?.toLowerCase() ?? null;
+  if (email && email !== existing.email) {
+    const taken = await db.user.findUnique({ where: { email } });
+    if (taken) throw new MutationError('هذا البريد الإلكتروني مستخدم بالفعل');
+  }
+  // من يدخل النظام لا يُترك بلا كلمة مرور: منحُ الدخول لمنفِّذ يلزمه واحدة
+  if (canLogin && !existing.passwordHash && !password) {
+    throw new MutationError('امنحه كلمة مرور ليدخل النظام');
+  }
+  if (canLogin && !email) throw new MutationError('البريد مطلوب لمن يدخل النظام');
+
   const after = {
     name: name ?? existing.name,
+    email,
+    canLogin,
     phone: str(fd, 'phone'),
     jobTitle: str(fd, 'jobTitle'),
-    roleId,
+    roleId: roleId ?? null,
     branch,
     reportsToId,
-    isProducer,
+    isProducer: canLogin ? isProducer : true,
     active,
+    ...hrData,
   };
 
   await db.user.update({
@@ -422,7 +471,7 @@ export async function changeOwnPassword(fd: FormData, user: SessionUser) {
   if (next !== confirm) throw new MutationError('كلمتا المرور الجديدتان غير متطابقتين');
 
   const record = await db.user.findUnique({ where: { id: user.id } });
-  if (!record || !(await verifyPassword(current, record.passwordHash))) {
+  if (!record?.passwordHash || !(await verifyPassword(current, record.passwordHash))) {
     throw new MutationError('كلمة المرور الحالية غير صحيحة');
   }
 

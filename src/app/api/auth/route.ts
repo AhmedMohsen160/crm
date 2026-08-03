@@ -28,7 +28,12 @@ export async function POST(request: NextRequest) {
   if (!email || !password) return fail('من فضلك أدخل البريد الإلكتروني وكلمة المرور.');
 
   const user = await db.user.findUnique({ where: { email } });
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+  // المنفِّذ الداخلي سجلٌّ للإسناد لا حساب دخول: بلا كلمة مرور وبلا إذن دخول.
+  // نردّ عليه نفس رسالة الخطأ العامة، فلا يكشف الردُّ من يملك حسابًا ومن لا.
+  if (!user || !user.canLogin || !user.passwordHash) {
+    return fail('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
+  }
+  if (!(await verifyPassword(password, user.passwordHash))) {
     return fail('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
   }
   if (!user.active) return fail('هذا الحساب موقوف. تواصل مع مدير النظام.');

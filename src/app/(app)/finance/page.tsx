@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import {
   BookOpen, Scale, TrendingUp, Target, Building2, Landmark,
-  FileStack, Lock, Wallet, AlertTriangle, Sparkles,
+  FileStack, Lock, Wallet, AlertTriangle, Sparkles, ClipboardList,
 } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/auth';
@@ -57,7 +57,8 @@ export default async function FinancePage({
     { href: '/finance/reports/pl', icon: TrendingUp, title: 'قائمة الدخل', desc: 'بالفروع وبالشهور — البنود الثلاثة' },
     { href: '/finance/reports/trial', icon: Scale, title: 'ميزان المراجعة', desc: 'أرصدة كل حساب ومجموعا العمودين' },
     { href: '/finance/reports/branches', icon: Building2, title: 'كشف الفروع', desc: 'مبيعات ومصاريف وعمولات كل فرع' },
-    { href: '/finance/budget', icon: Target, title: 'الموازنة السنوية', desc: 'المستهدف الشهري وانحرافه عن الفعلي' },
+    { href: '/finance/budget/plan', icon: ClipboardList, title: 'بناء الموازنة', desc: 'سبع خطوات: التاريخ · التوقّع · الثابت · المتغيّر · الهامش · الطوارئ · المراجعة' },
+    { href: '/finance/budget', icon: Target, title: 'جدول الموازنة', desc: 'المستهدف الشهري وانحرافه عن الفعلي' },
     { href: '/finance/assets', icon: Landmark, title: 'الأصول الثابتة', desc: 'التكلفة والإهلاك والقيمة الدفترية' },
     { href: '/finance/periods', icon: Lock, title: 'إقفال الشهور', desc: 'الشهر المقفل لا يُعدَّل' },
   ];

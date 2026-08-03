@@ -1,6 +1,6 @@
 import Link from '@/components/link';
 import { notFound } from 'next/navigation';
-import { Pencil } from 'lucide-react';
+import { Pencil, Sparkles } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requireUser, can, ownerFilter } from '@/lib/auth';
 import {
@@ -55,6 +55,17 @@ export default async function QuoteDetailPage({
       <div className="no-print">
         <PageHeader title={`عرض سعر ${quote.number}`} subtitle={quote.title}>
           <PrintButton />
+          {/* الطريق الثاني: مستند مصمَّم بالذكاء يستوحي من موقع العميل — إلى
+              جانب القالب القياسي لا بدلًا منه */}
+          {can(user, 'canViewSellPrice') && (
+            <Link
+              href={quote.designHtml ? `/quotes/${id}/designed` : `/quotes/${id}/design`}
+              className="btn-secondary"
+            >
+              <Sparkles className="h-4 w-4" />
+              {quote.designHtml ? 'العرض المصمَّم' : 'صمّمه بالذكاء'}
+            </Link>
+          )}
           <Link href={`/quotes/${id}/edit`} className="btn-secondary">
             <Pencil className="h-4 w-4" />
             تعديل
@@ -237,7 +248,12 @@ export default async function QuoteDetailPage({
             </div>
             {quote.discount > 0 && (
               <div className="flex justify-between text-rose-700">
-                <dt>الخصم</dt>
+                <dt>
+                  الخصم
+                  {quote.discountMode === 'percent' && (
+                    <span className="mr-1 nums text-xs">({quote.discountPct}%)</span>
+                  )}
+                </dt>
                 <dd className="nums font-medium">
                   − {formatMoney(quote.discount, quote.currency)}
                 </dd>

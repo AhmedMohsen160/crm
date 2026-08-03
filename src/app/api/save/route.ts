@@ -31,6 +31,14 @@ import {
   startThread,
   askAssistant,
   deleteThread,
+  saveDepartment,
+  saveSalaryComponent,
+  endSalaryComponent,
+  runPayroll,
+  decidePayroll,
+  readClientSite,
+  designQuoteDocument,
+  clearQuoteDesign,
   saveProposal,
   saveProposalTier,
   decideProposal,
@@ -48,6 +56,9 @@ import {
   saveBudgetLines,
   saveFixedAsset,
   generateDraftEntries,
+  fillBudgetFromHistory,
+  saveAccountBehaviour,
+  saveBudgetPlanSettings,
   saveCommissionScheme,
   saveCommissionTier,
   saveCommissionAssignment,
@@ -176,6 +187,32 @@ export async function POST(request: NextRequest) {
       case 'assistant.delete':
         destination = await deleteThread(fd, user, id);
         break;
+      // ── الموارد البشرية ──────────────────────────────────
+      case 'department':
+        destination = await saveDepartment(fd, user, id);
+        break;
+      case 'salaryComponent':
+        destination = await saveSalaryComponent(fd, user, id);
+        break;
+      case 'salaryComponent.end':
+        destination = await endSalaryComponent(fd, user, id);
+        break;
+      case 'payroll.run':
+        destination = await runPayroll(fd, user);
+        break;
+      case 'payroll.decide':
+        destination = await decidePayroll(fd, user, id);
+        break;
+
+      case 'quote.readSite':
+        destination = await readClientSite(fd, user, id);
+        break;
+      case 'quote.design':
+        destination = await designQuoteDocument(fd, user, id);
+        break;
+      case 'quote.clearDesign':
+        destination = await clearQuoteDesign(fd, user, id);
+        break;
 
       case 'proposal':
         destination = await saveProposal(fd, user, id);
@@ -224,6 +261,15 @@ export async function POST(request: NextRequest) {
         break;
       case 'fixedAsset':
         destination = await saveFixedAsset(fd, user, id);
+        break;
+      case 'budget.fill':
+        destination = await fillBudgetFromHistory(fd, user);
+        break;
+      case 'budget.behaviour':
+        destination = await saveAccountBehaviour(fd, user);
+        break;
+      case 'budget.plan':
+        destination = await saveBudgetPlanSettings(fd, user);
         break;
       case 'journal.generate':
         destination = await generateDraftEntries(fd, user);

@@ -150,12 +150,27 @@ export const LANGUAGES = [
   'الهندية',
 ] as const;
 
+/**
+ * وحدات التسعير في بنود عرض السعر.
+ *
+ * `WORD_250` هي **وحدة المكتب الفعلية**: الصفحة القياسية ٢٥٠ كلمة مصدر
+ * (§١ من المواصفة). التسعير بالكلمة يعطي رقمًا صغيرًا يربك العميل، والتسعير
+ * بـ«صفحة» بلا تعريف يفتح خلافًا على ما هي الصفحة — فالوحدة تحمل تعريفها.
+ */
 export const UNITS = {
+  WORD_250: 'صفحة (٢٥٠ كلمة)',
   WORD: 'كلمة',
   PAGE: 'صفحة',
   HOUR: 'ساعة',
+  MINUTE: 'دقيقة',
   PROJECT: 'مشروع',
 } as const;
+
+/** عدد الكلمات في الصفحة القياسية — واحدٌ عبر النظام كلّه */
+export const WORDS_PER_STANDARD_PAGE = 250;
+
+/** الوحدات التي تُقاس بالكلمات — تُعرض معها أداة التحويل */
+export const WORD_BASED_UNITS: string[] = ['WORD', 'WORD_250'];
 export type Unit = keyof typeof UNITS;
 
 export const CURRENCIES = ['EGP', 'USD', 'EUR', 'SAR', 'AED', 'GBP'] as const;

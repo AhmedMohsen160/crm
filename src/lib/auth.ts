@@ -28,7 +28,8 @@ function secretKey(): Uint8Array {
 export type SessionUser = {
   id: string;
   name: string;
-  email: string;
+  /** فارغ للمنفِّذ الداخلي الذي لا يدخل النظام */
+  email: string | null;
   /** مفتاح الدور — للعرض فقط. **لا تبنِ عليه شرطًا**، استخدم can() */
   roleName: string;
   roleLabel: string;
@@ -98,7 +99,8 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
       where: { id: userId },
       include: { roleRef: true },
     });
-    if (!user || !user.active) return null;
+    // سجلّ المنفِّذ الداخلي لا يصلح جلسةً ولو حمل رمزًا بطريقة ما
+    if (!user || !user.active || !user.canLogin) return null;
 
     const permissions = noPermissions();
     if (user.roleRef) {

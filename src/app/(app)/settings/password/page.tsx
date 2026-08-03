@@ -14,7 +14,7 @@ export default async function PasswordPage({
 
   return (
     <div className="mx-auto max-w-md">
-      <PageHeader title="تغيير كلمة المرور" subtitle={user.email} />
+      <PageHeader title="تغيير كلمة المرور" subtitle={user.email ?? undefined} />
 
       <div className="card card-pad">
         <form method="post" action="/api/save" className="space-y-4">

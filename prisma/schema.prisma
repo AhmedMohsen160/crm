@@ -17,16 +17,23 @@ datasource db {
 // ───────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(cuid())
-  name         String
-  email        String    @unique
-  passwordHash String
-  phone        String?
-  jobTitle     String?
-  active       Boolean   @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id   String @id @default(cuid())
+  name String
+
+  /// البريد وكلمة المرور **اختياريان**: المنفِّذ الداخلي (مترجم أو مراجع)
+  /// يُسجَّل ليُسنَد إليه العمل ولا يدخل النظام أصلًا. مدير المشاريع يكتب
+  /// من نفّذ ومن راجع، فتُحسب التكلفة وتُقاس الطاقة بلا حساب دخول له.
+  email        String? @unique
+  passwordHash String?
+  /// هل يدخل النظام؟ فارغها = سجلّ موظف للإسناد والتكلفة فقط
+  canLogin     Boolean @default(true)
+
+  phone       String?
+  jobTitle    String?
+  active      Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // الدور مرجع إلى جدول الأدوار — الصلاحيات بيانات لا كود
   roleId  String?
@@ -42,6 +49,18 @@ model User {
 
   /// هل ينتج فعليًا (يترجم/يراجع)؟ مستقل تمامًا عن الدور
   isProducer Boolean @default(false)
+
+  // ── الموارد البشرية ──────────────────────────────
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  /// تاريخ التعيين — أساس مدة الخدمة والاستحقاقات
+  hireDate       DateTime?
+  endDate        DateTime?
+  /// full_time | part_time | contract | intern
+  employmentType String?     @default("full_time")
+  nationalId     String?
+  bankAccount    String?
+  payMethod      String?
 
   // العلاقات
   ownedCompanies   Company[]     @relation("CompanyOwner")
@@ -78,6 +97,11 @@ model User {
   resolvedReviews MigrationReview[] @relation("ReviewResolver")
   notifications   Notification[]
   proposals       Proposal[]        @relation("ProposalOwner")
+
+  salaryComponents SalaryComponent[]
+  payrollLines     PayrollLine[]
+  uploadedFiles    StoredFile[]      @relation("FileUploader")
+  managedDepts     Department[]      @relation("DepartmentManager")
 
   mailboxes     Mailbox[]      @relation("MailboxOwner")
   handledEmails EmailMessage[] @relation("EmailHandler")
@@ -124,6 +148,7 @@ model Role {
   canViewTeamAnalytics    Boolean @default(false)
   canUseEmail             Boolean @default(false)
   canUseAi                Boolean @default(false)
+  canManageHr             Boolean @default(false)
 
   /// أقصى نسبة خصم يمنحها صاحب هذا الدور بلا اعتماد (٠٫١ تعني ١٠٪).
   /// عمود في الدور لا مفتاح إعدادات باسم دور، لأن الأدوار تُنشأ من الشاشة.
@@ -426,9 +451,14 @@ model Freelancer {
   projectsCount Int       @default(0)
   lastUsedAt    DateTime?
 
+  /// مفتاح من قائمة `payment_method` — لا نصّ حر: النص الحر لا يُرشَّح ولا يُجمَّع
   paymentMethod String?
   paymentRef    String?
+  /// رابط خارجي للسيرة — يبقى للسجلات القديمة
   cvUrl         String?
+  /// السيرة مرفوعة على النظام — أوثق من رابط قد يُحذف من عند صاحبه
+  cvFileId      String?     @unique
+  cvFile        StoredFile? @relation("FreelancerCv", fields: [cvFileId], references: [id], onDelete: SetNull)
   notes         String?
 
   /// صفٌّ لم يُحسم عند الاستيراد ويحتاج مراجعة بشرية (§١٤)
@@ -926,22 +956,39 @@ model Note {
 // ───────────────────────────────────────────────
 
 model Quote {
-  id         String    @id @default(cuid())
-  number     String    @unique // QT-2026-0001
-  title      String
-  status     String    @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED
-  currency   String    @default("EGP")
-  subtotal   Float     @default(0)
-  discount   Float     @default(0)
-  taxRate    Float     @default(0)
-  taxAmount  Float     @default(0)
-  total      Float     @default(0)
-  validUntil DateTime?
-  notes      String?
-  terms      String?
-  sentAt     DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  number       String    @unique // QT-2026-0001
+  title        String
+  status       String    @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED
+  currency     String    @default("EGP")
+  subtotal     Float     @default(0)
+  /// قيمة الخصم بالعملة — تُشتقّ حين يكون النمط نسبيًا ولا تُدخَل مباشرةً
+  discount     Float     @default(0)
+  /// amount = مبلغ ثابت · percent = نسبة من المجموع الفرعي
+  discountMode String    @default("amount")
+  /// النسبة المئوية حين يكون النمط نسبيًا (١٠ تعني ١٠٪)
+  discountPct  Float     @default(0)
+  taxRate      Float     @default(0)
+  taxAmount    Float     @default(0)
+  total        Float     @default(0)
+  validUntil   DateTime?
+  notes        String?
+  terms        String?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // ── العرض المصمَّم بالذكاء الاصطناعي ─────────────
+  /// موقع العميل — يُقرأ ليُستوحى منه أسلوب العرض ومحتواه
+  clientWebsite String?
+  /// ملخّص ما قُرئ من موقع العميل — يُعرض للموظف قبل التوليد
+  clientBrief   String?
+  /// توجيه الموظف للنموذج
+  designPrompt  String?
+  /// المستند المولَّد — HTML مُعقَّم يُعرض ويُطبع
+  designHtml    String?
+  designedAt    DateTime?
+  designModel   String?
 
   items QuoteItem[]
 
@@ -1087,6 +1134,10 @@ model Account {
   lines       JournalLine[]
   budgetLines BudgetLine[]
 
+  /// fixed = ثابتة لا تتغيّر بحجم الإنتاج · variable = مرتبطة بالحجم
+  /// خطوتا ٣ و٤ من بناء الموازنة: الثابت يُحصر، والمتغيّر يُقدَّر بالحجم
+  costBehavior String?
+
   @@index([type])
   @@index([parentId])
   @@index([isPostable, active])
@@ -1103,6 +1154,8 @@ model CostCenter {
   updatedAt DateTime @updatedAt
 
   lines JournalLine[]
+
+  departments Department[]
 
   @@unique([name, project])
 }
@@ -1214,6 +1267,14 @@ model Budget {
   updatedAt DateTime @updatedAt
 
   lines BudgetLine[]
+
+  /// نسبة صندوق الطوارئ (خطوة ٦) — تُضاف فوق مجموع المصروفات المخطَّطة
+  contingencyPct Float   @default(0)
+  /// last_year_plus | zero_based | manual — كيف بُنيت هذه الموازنة
+  method         String?
+  /// نسبة النمو المفترضة حين تُبنى من العام الماضي
+  growthPct      Float   @default(0)
+  planNotes      String?
 }
 
 model BudgetLine {
@@ -1568,4 +1629,159 @@ model AiRun {
   createdAt DateTime @default(now())
 
   @@index([purpose, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  الملفات المرفوعة
+// ═══════════════════════════════════════════════════════════════
+
+/// ملف مرفوع على النظام.
+///
+/// يُخزَّن **داخل قاعدة البيانات** لا على قرص الخادم: النشر على Vercel بلا
+/// قرص دائم، فملفٌ يُكتب اليوم يختفي مع أول إعادة نشر. والسير الذاتية صغيرة
+/// (سقفها ٥ ميجابايت)، فكلفة تخزينها في القاعدة أرخص من خدمة تخزين كاملة.
+model StoredFile {
+  id       String @id @default(cuid())
+  /// اسم الملف كما رفعه صاحبه — يُعاد به عند التنزيل
+  name     String
+  mimeType String
+  /// بالبايت — يُفحص قبل الحفظ لا بعده
+  size     Int
+  data     Bytes
+
+  /// ما الذي يخصّه هذا الملف: freelancer_cv | quote_attachment | …
+  purpose      String  @default("attachment")
+  uploadedById String?
+  uploadedBy   User?   @relation("FileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  freelancerCv Freelancer? @relation("FreelancerCv")
+
+  createdAt DateTime @default(now())
+
+  @@index([purpose])
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  الموارد البشرية
+// ═══════════════════════════════════════════════════════════════
+
+/// الإدارة أو القسم — **شجرة**: القسم يتبع إدارة، والإدارة تتبع الشركة.
+///
+/// التشجير هنا مستقل عن `reportsToId` عمدًا: التبعية الإدارية للشخص قد
+/// تخالف موقعه التنظيمي (مترجم في قسم الإنتاج يتبع مدير مشاريع في قسم آخر)،
+/// وخلطهما يُفسد تقارير القسمين معًا.
+model Department {
+  id       String       @id @default(cuid())
+  name     String
+  code     String?      @unique
+  parentId String?
+  parent   Department?  @relation("DeptTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Department[] @relation("DeptTree")
+
+  managerId String?
+  manager   User?   @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
+
+  branch       String?
+  /// مركز التكلفة المحاسبي المقابل — يربط الرواتب بالدفتر
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members User[]
+
+  @@index([parentId])
+}
+
+/// بند في هيكل أجر الموظف: أساسي · بدل · حافز · استقطاع.
+///
+/// **بتاريخ سريان** كالأسعار: زيادة راتب هذا الشهر لا تُعيد كتابة كشوف
+/// الشهور الماضية، ولا تُغيّر تكلفة مشروع سُلّم وجُمّدت تكلفته.
+model SalaryComponent {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// basic | allowance | incentive | bonus | deduction
+  kind      String
+  label     String
+  /// مبلغ ثابت، أو نسبة من الأساسي حين `isPercent`
+  amount    Float   @default(0)
+  isPercent Boolean @default(false)
+
+  /// monthly = يتكرر كل شهر · once = مرة واحدة في شهر بعينه
+  frequency String  @default("monthly")
+  /// الشهر `YYYY-MM` حين تكون لمرة واحدة
+  period    String?
+
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  active        Boolean   @default(true)
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, kind])
+  @@index([effectiveFrom])
+}
+
+/// كشف رواتب شهر.
+///
+/// يُبنى مسوّدةً من بنود الأجر السارية، ويُعتمد، ثم يولّد **قيد مسوّدة** في
+/// الدفتر — لا يُرحَّل من ظهر المحاسب (§٤).
+model PayrollRun {
+  id     String @id @default(cuid())
+  /// `YYYY-MM`
+  period String @unique
+  /// draft | approved | paid
+  status String @default("draft")
+
+  branch String?
+
+  totalBasic      Float @default(0)
+  totalAllowances Float @default(0)
+  totalIncentives Float @default(0)
+  totalDeductions Float @default(0)
+  totalNet        Float @default(0)
+
+  approvedAt     DateTime?
+  approvedById   String?
+  paidAt         DateTime?
+  /// القيد المولَّد — لا يُولَّد مرتين
+  journalEntryId String?
+  notes          String?
+
+  lines PayrollLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model PayrollLine {
+  id    String     @id @default(cuid())
+  runId String
+  run   PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  basic      Float @default(0)
+  allowances Float @default(0)
+  incentives Float @default(0)
+  deductions Float @default(0)
+  net        Float @default(0)
+
+  /// تفصيل البنود وقت البناء — لقطة لا تتغيّر بتعديل لاحق على هيكل الأجر
+  breakdown String?
+  notes     String?
+
+  @@unique([runId, userId])
+  @@index([userId])
 }
