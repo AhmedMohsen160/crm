@@ -51,8 +51,11 @@ export async function lookupUnitPrice(params: {
       active: true,
       effectiveFrom: { lte: asOf },
     },
-    // الأحدث بين ما سرى **قبل** هذا التاريخ — لا الأحدث مطلقًا
-    orderBy: { effectiveFrom: 'desc' },
+    // الأحدث بين ما سرى **قبل** هذا التاريخ — لا الأحدث مطلقًا.
+    // وعند تساوي تاريخ السريان (بندان أُضيفا في اليوم نفسه) يفوز الأحدث
+    // إضافةً: بلا هذا الترجيح تختار القاعدة أحدهما اعتباطًا، فيتغيّر سعر
+    // المشروع بين استعلامين متطابقين.
+    orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
   });
   if (!item) return null;
 

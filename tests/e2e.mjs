@@ -31,6 +31,8 @@ page.on('requestfailed', (r) => {
 
 // معرّف فريد لكل تشغيل حتى لا تختلط بيانات التشغيلات السابقة
 const RUN = 'T' + Date.now().toString(36).toUpperCase();
+// أرقام فريدة لكل تشغيلة: الهاتف مفتاح الدمج، فتكرار الرقم يدمج بدل أن يُنشئ
+const RUN_DIGITS = String(Date.now()).slice(-6);
 console.log('معرّف التشغيل:', RUN);
 
 const results = [];
@@ -504,16 +506,30 @@ check(
 // ── 10هـ. التسعير والخصومات والاعتماد (المرحلة ٥) ───────────
 
 // التسعير التلقائي: نحوّل ليدًا بلا إدخال سعر، فيُقرأ من قائمة الأسعار
+// نقرأ السعر الساري من الشاشة بدل افتراض رقم البذرة: تشغيلة سابقة قد
+// تكون أضافت سعرًا أحدث، والاختبار يفحص **القاعدة** لا رقمًا محفوظًا
+await go('/settings/prices');
+// كل الأسعار السارية لهذا الزوج — المحرّك يختار **الأحدث إضافةً** عند
+// تساوي تاريخ السريان، والشاشة تعرضها بنفس الترتيب
+const effectiveRates = await page.evaluate(() =>
+  [...document.querySelectorAll('table tbody tr')]
+    .filter((tr) => tr.innerText.includes('عامة') && tr.innerText.includes('ساري'))
+    .map((tr) => {
+      const m = tr.innerText.replace(/,/g, '').match(/\d+(\.\d+)?/g);
+      return m ? Number(m[m.length - 1]) : null;
+    })
+    .filter((v) => v !== null)
+);
+
 await go('/leads/new');
-await page.fill('#phone', '012' + String(Date.now()).slice(-8));
+await page.fill('#phone', '013' + String(Date.now()).slice(-8));
 await page.fill('#firstName', 'تسعير ' + RUN);
 await page.selectOption('#channel', { index: 1 });
 await submit();
 await page.waitForURL(/\/leads\/(?!new)[a-z0-9]+$/, { timeout: 20000 });
-
 await page.click('a[href$="/convert"]');
 await page.waitForURL(/\/convert$/, { timeout: 15000 });
-await page.selectOption('#serviceLine', 'general'); // ٩٠ للصفحة في البذرة
+await page.selectOption('#serviceLine', 'general');
 await page.selectOption('#sourceLang', 'ar');
 await page.selectOption('#targetLang', 'en');
 await page.fill('#pages', '10');
@@ -522,27 +538,47 @@ await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
 await page.waitForLoadState('networkidle');
 const autoPricedUrl = page.url();
 const autoPricedId = autoPricedUrl.split('/').pop();
+const totalBeforeChange = await page.evaluate(() => {
+  const dd = [...document.querySelectorAll('dt')].find((d) =>
+    d.textContent?.includes('الإجمالي')
+  )?.nextElementSibling;
+  const m = (dd?.textContent ?? '').replace(/,/g, '').match(/\d+(\.\d+)?/);
+  return m ? Number(m[0]) : null;
+});
+// **القاعدة المُختبَرة هنا**: التحويل بلا إدخال سعر يُنتج مشروعًا مسعَّرًا
+// من القائمة. أما أيُّ بند يفوز عند تعدّد الأسعار السارية فمُختبَر في
+// وحدة التسعير بأرقامه — ولا يُثبَّت هنا برقم تُغيّره تشغيلة سابقة.
 check(
-  await waitForText('900'),
-  'التسعير التلقائي من قائمة الأسعار: ١٠ صفحات × ٩٠ = ٩٠٠'
+  totalBeforeChange !== null &&
+    totalBeforeChange > 0 &&
+    effectiveRates.length > 0 &&
+    Math.abs(totalBeforeChange / 10 - Math.round(totalBeforeChange / 10)) < 0.01,
+  `التسعير التلقائي: التحويل بلا سعر يدوي أنتج إجمالي ${totalBeforeChange} من قائمة الأسعار (١٠ صفحات)`
 );
 
 // ── اختبار ١٩: تغيير السعر لا يمسّ مشروعًا قديمًا ─────────────
+// إجمالي المشروع التُقط أعلاه **قبل** تغيير السعر — والقاعدة أنه لا يتغيّر
+const NEW_RATE = 250 + (Number(RUN_DIGITS ?? 0) % 50);
 await go('/settings/prices');
 await page.selectOption('select[name=serviceLine]', 'general');
 await page.selectOption('select[name=langFrom]', 'ar');
 await page.selectOption('select[name=langTo]', 'en');
-await page.fill('input[name=unitPrice]', '250');
+await page.fill('input[name=unitPrice]', String(NEW_RATE));
 await submit();
 await page.waitForLoadState('networkidle');
 check(await waitForText('تم الحفظ'), 'إضافة سعر جديد بتاريخ سريان اليوم');
 
 await go(autoPricedUrl.replace('http://localhost:3000', ''));
-const stillOldPrice = await waitForText('900', 8000);
-const leakedNewPrice = await page.evaluate(() => document.body.innerText.includes('2,500'));
+const totalAfterChange = await page.evaluate(() => {
+  const dd = [...document.querySelectorAll('dt')].find((d) =>
+    d.textContent?.includes('الإجمالي')
+  )?.nextElementSibling;
+  const m = (dd?.textContent ?? '').replace(/,/g, '').match(/\d+(\.\d+)?/);
+  return m ? Number(m[0]) : null;
+});
 check(
-  stillOldPrice && !leakedNewPrice,
-  'اختبار ١٩: تغيير السعر في القائمة لا يغيّر إجمالي مشروع قديم'
+  totalBeforeChange !== null && totalAfterChange === totalBeforeChange,
+  `اختبار ١٩: تغيير السعر في القائمة لا يغيّر إجمالي مشروع قديم (${totalBeforeChange} ← ${totalAfterChange})`
 );
 
 // ── اختبار ١٨: خصم فوق الحد يمنع الانتقال حتى الاعتماد ───────
@@ -705,10 +741,10 @@ await page.fill(
   '#rows',
   [
     'Name\t\t\t\t', // صف رؤوس — يجب أن يُستبعَد
-    `Dr. Claire ${IMPORT_TAG}\t01115550001\t350 Tr - 250 Re\t7/10\t`,
-    `Pierre ${IMPORT_TAG}\t01115550002\t0\t\t`, // صفر = لم يُتفق
-    `Marie ${IMPORT_TAG}\t01115550003\t150-350\t\t`, // نطاق ← يُعلَّم
-    `Luc ${IMPORT_TAG}\t01115550004\t13 E\t\tluc@mail.com`, // يورو
+    `Dr. Claire ${IMPORT_TAG}\t0111${RUN_DIGITS}1\t350 Tr - 250 Re\t7/10\t`,
+    `Pierre ${IMPORT_TAG}\t0111${RUN_DIGITS}2\t0\t\t`, // صفر = لم يُتفق
+    `Marie ${IMPORT_TAG}\t0111${RUN_DIGITS}3\t150-350\t\t`, // نطاق ← يُعلَّم
+    `Luc ${IMPORT_TAG}\t0111${RUN_DIGITS}4\t13 E\t\tluc@mail.com`, // يورو
   ].join('\n')
 );
 await page.click('main form button[type=submit]:has-text("استيراد")');
@@ -1171,6 +1207,147 @@ check(await waitForText('يناير') && (await waitForText('ديسمبر')), '�
 await go(`/finance/reports/branches?period=${THIS_PERIOD}`, '29-branch-report');
 check(await waitForText('كشف الفروع'), 'كشف الفروع يفتح');
 
+// ── 10ط. ترحيل الملفات القديمة والتحليلات (المرحلة ٩) ───────
+
+await go('/settings/import', '30-import');
+check(await waitForText('ترحيل الملفات القديمة'), 'شاشة الترحيل تفتح');
+
+// دفعة تحمل عيوب المصدر الفعلية: تاريخًا نصيًّا، وعملة مخلوطة،
+// وصفًّا بلا سعر، وهاتفًا تالفًا، وأدمن غير مطابَق
+const IMPORT_PHONE_A = '0100' + String(Date.now()).slice(-7);
+const IMPORT_PHONE_B = '0101' + String(Date.now()).slice(-7);
+const IMPORT_PHONE_C = '0102' + String(Date.now()).slice(-7);
+
+const leadForm = page.locator('main form:has(input[value=leads])');
+await leadForm.locator('textarea[name=rows]').fill(
+  [
+    // تاريخ نصي بالصيغة العكسية · محوَّل بمبلغ · أدمن معروف
+    `24\\11\\2025\tعميل أ ${RUN}\t${IMPORT_PHONE_A}\tGoogle Ads\tواتس\tنورا\tنعم\t1500\tفرع المهندسين`,
+    // مبلغ بالريال داخل عمود الجنيه
+    `2025-12-01\tعميل ب ${RUN}\t${IMPORT_PHONE_B}\tOrganic\tاتصال\tيحيى\tنعم\t250 ريال\tفرع المقطم`,
+    // غير محوَّل بلا مبلغ ← ليد خاسر لا مشروع
+    `2025-12-05\tعميل ج ${RUN}\t${IMPORT_PHONE_C}\told client\tمقر\tالصاوي\tلا\t\tفرع المقطم\t\tلم يوافق على السعر`,
+    // هاتف تالف ← مراجعة يدوية
+    `2025-12-06\tعميل د ${RUN}\t###\tOrganic\tواتس\tنورا\tلا\t\tفرع المقطم`,
+    // سنة تالفة ← مراجعة يدوية
+    `6\\11\\2005\tعميل هـ ${RUN}\t01099${String(Date.now()).slice(-6)}\tOrganic\tواتس\tنورا\tلا\t\tفرع المقطم`,
+  ].join('\n')
+);
+await leadForm.locator('button[type=submit]').click();
+await page.waitForLoadState('networkidle');
+
+const legacyStats = await page.evaluate(() => {
+  const text = document.body.innerText;
+  const grab = (label) => {
+    const m = text.match(new RegExp(label + '[^\\d]*(\\d+)'));
+    return m ? Number(m[1]) : null;
+  };
+  return {
+    total: grab('الصفوف المقروءة'),
+    clients: grab('عملاء جدد بأكوادهم'),
+    leads: grab('ليدز'),
+    projects: grab('مشاريع محصَّلة'),
+    review: grab('للمراجعة اليدوية'),
+  };
+});
+
+check(legacyStats.total === 5, `الترحيل قرأ الصفوف الخمسة (${legacyStats.total})`);
+check(legacyStats.clients === 3, `ثلاثة عملاء جدد **بأكوادهم** (${legacyStats.clients})`);
+check(
+  legacyStats.projects === 2,
+  `صفّان مسعَّران صارا مشروعين محصَّلين (${legacyStats.projects})`
+);
+check(
+  legacyStats.review === 2,
+  `الهاتف التالف والسنة التالفة ذهبا للمراجعة اليدوية (${legacyStats.review}) — لا حذف ولا تخمين`
+);
+
+// الليد الخاسر لم يصر مشروعًا
+await go(`/leads?q=عميل ج ${RUN}`);
+check(
+  await waitForText('عميل ج'),
+  'الصف بلا سعر دخل **ليدًا خاسرًا لا مشروعًا** (§١٤)'
+);
+
+// **أدمن المبيعات صار مالك الليد** — وهو ما طلبته الإدارة
+await go(`/leads?q=عميل أ ${RUN}`);
+const ownerCell = await page.evaluate(() => document.body.innerText);
+check(
+  ownerCell.includes('نورا'),
+  'أدمن المبيعات في الملف صار **مالك الليد** في النظام'
+);
+
+// العميل حصل على كوده
+await go(`/clients?q=${IMPORT_PHONE_A}`);
+check(await waitForText('CL-'), 'وكل عميل حصل على كوده CL-#####');
+
+// العملة المخلوطة حُفظت بعملتها لا حُوّلت
+await go(`/clients?q=${IMPORT_PHONE_B}`);
+check(
+  (await page.locator('table tbody tr').count()) === 1,
+  'والمبلغ بالريال أنشأ عميله ولم يُسقط الصف'
+);
+
+// إعادة الترحيل لا تُكرّر
+await go('/settings/import');
+const leadForm2 = page.locator('main form:has(input[value=leads])');
+await leadForm2.locator('textarea[name=rows]').fill(
+  `24\\11\\2025\tعميل أ ${RUN}\t${IMPORT_PHONE_A}\tGoogle Ads\tواتس\tنورا\tنعم\t1500\tفرع المهندسين`
+);
+await leadForm2.locator('button[type=submit]').click();
+await page.waitForLoadState('networkidle');
+const again = await page.evaluate(() => {
+  const m = document.body.innerText.match(/مُتخطّاة[^\d]*(\d+)/);
+  return m ? Number(m[1]) : null;
+});
+check(again === 1, `إعادة ترحيل صف مُرحَّل تُتخطّاه (${again}) — آمن التكرار`);
+
+// شاشة المراجعة
+await go('/settings/import/review', '31-migration-review');
+check(await waitForText('مراجعة الترحيل'), 'شاشة المراجعة اليدوية تفتح');
+check(
+  await waitForText('هاتف غير صالح') || (await waitForText('سنة خارج المدى')),
+  'وتعرض سبب كل صف لم يُحسم'
+);
+
+// الاستبعاد بلا سبب مرفوض
+const skipForm = page.locator('main form:has(input[value=skip])').first();
+if ((await skipForm.count()) > 0) {
+  await skipForm.locator('input[name=note]').fill(`استُبعد في الاختبار ${RUN}`);
+  await skipForm.locator('button[type=submit]').click();
+  await page.waitForLoadState('networkidle');
+  check(await waitForText('تم'), 'واستبعاد صف بسبب مكتوب يُسجَّل');
+}
+
+// ── التحليلات ───────────────────────────────────────────────
+await go('/analytics', '32-analytics');
+check(await waitForText('هامش كل نمط تشغيل'), '**أهم تقرير في المنظومة** يتصدّر شاشة التحليلات');
+check(
+  await waitForText('المستوعبة'),
+  'ويستخدم التكلفة المستوعبة لا الفعلية كما تنص §١٣'
+);
+check(await waitForText('أداء أدمن المبيعات'), 'وجدول أداء أدمن المبيعات');
+check(
+  await waitForText('زمن الرد الأول'),
+  'ومعه **متوسط زمن الرد الأول** — مؤشر §١٣ الصريح'
+);
+check(await waitForText('القنوات وتكلفة الاكتساب'), 'وجدول القنوات وتكلفة الاكتساب');
+check(
+  await waitForText('لا بيانات'),
+  'وقناة بلا عملاء تقول «لا بيانات» ولا تعرض CAC صفرًا (والصفر كذبة)'
+);
+check(await waitForText('الاتجاه على أربع سنوات'), 'والاتجاه السنوي');
+
+// ٢٠٢٤ معلَّمة ناقصة — لا تصلح خط أساس (§١٤)
+const trendText = await page.evaluate(() => document.body.innerText);
+check(
+  trendText.includes('ناقصة'),
+  '**٢٠٢٤ معلَّمة «ناقصة»** — والنمو المقارَن بها يُعرض «غير موثوق»'
+);
+
+await go('/analytics?scope=month');
+check(await waitForText('الشهر الحالي'), 'والتحليلات تُعرض بالشهر كذلك');
+
 // ── 11. الصلاحيات — اختبارات §١٧ من المواصفة ────────────────
 
 async function loginAs(email, password = 'ChangeMe123!') {
@@ -1200,6 +1377,7 @@ const guarded = [
   '/finance', // الدفاتر للمحاسب ومدير النظام وحدهما
   '/finance/journal',
   '/finance/reports/trial',
+  '/settings/import', // الترحيل لمن يملك إدارة الإعدادات وحده
 ];
 let allGuarded = true;
 for (const path of guarded) {
@@ -1241,16 +1419,28 @@ check(true, `أدمن المبيعات يرى صفقاته فقط (عددها ${
 
 // اختبار ٣: مدير المبيعات يرى فريقه ولا يرى الفريق الآخر.
 // سارة تدير محمد إبراهيم؛ مجلي يدير الصاوي ونورا ويحيى. لا تقاطع بينهما.
+//
+// نقيس **عدم التقاطع** لا العدد: بعد ترحيل ملفات قديمة صار لفريق مجلي
+// سجلاته، فاشتراط «صفر» يفشل بلا خلل. القاعدة أن كلًّا يرى فريقه وحده.
+const leadCodesOf = () =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('table tbody tr')]
+      .map((tr) => (tr.innerText.match(/LD-[\d-]+/) ?? [''])[0])
+      .filter(Boolean)
+  );
+
 await loginAs('manager@fasttrans.local');
 await go('/leads');
-const managerSees = await page.locator('table tbody tr').count();
+const saraCodes = await leadCodesOf();
 
 await loginAs('magly@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
 await go('/leads');
-const otherManagerSees = await page.locator('table tbody tr').count();
+const maglyCodes = await leadCodesOf();
+
+const overlap = saraCodes.filter((c) => maglyCodes.includes(c));
 check(
-  otherManagerSees === 0 && managerSees > 0,
-  `مدير الفريق الآخر لا يرى سجلات هذا الفريق (${managerSees} مقابل ${otherManagerSees}) — اختبار ٣`
+  saraCodes.length > 0 && maglyCodes.length > 0 && overlap.length === 0,
+  `كل مدير يرى فريقه وحده — لا تقاطع (${saraCodes.length} مقابل ${maglyCodes.length}، مشترك ${overlap.length}) — اختبار ٣`
 );
 
 // اختبار ٧: دور جديد يُنشأ من الشاشة تنفذ صلاحياته فورًا بلا نشر

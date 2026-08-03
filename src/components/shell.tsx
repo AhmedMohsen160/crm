@@ -16,6 +16,7 @@ import {
   FileText,
   Percent,
   Calculator,
+  BarChart3,
   Settings,
   Menu,
   X,
@@ -51,6 +52,12 @@ const NAV = [
   { href: '/tasks', label: 'المهام', icon: ListChecks },
   // «نسبي» بلا صلاحية: كل موظف يرى استحقاقه هو. الترشيح في الخادم.
   { href: '/commissions', label: 'نسبي', icon: Percent },
+  {
+    href: '/analytics',
+    label: 'التحليلات',
+    icon: BarChart3,
+    permission: 'canViewTeamAnalytics' as const,
+  },
   {
     href: '/finance',
     label: 'الماليات',

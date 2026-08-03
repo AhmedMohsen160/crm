@@ -20,10 +20,11 @@
     "bootstrap": "node scripts/db-provider.mjs && prisma generate && tsx scripts/bootstrap.ts",
     "test:phone": "tsx tests/phone.mjs",
     "test:costing": "tsx tests/costing.mjs",
-    "test:unit": "npm run test:phone && npm run test:costing && npm run test:commission && npm run test:freelancers && npm run test:accounting",
+    "test:unit": "npm run test:phone && npm run test:costing && npm run test:commission && npm run test:freelancers && npm run test:accounting && npm run test:migration",
     "test:commission": "tsx tests/commission.mjs",
     "test:freelancers": "tsx tests/freelancers.mjs",
-    "test:accounting": "tsx tests/accounting.mjs"
+    "test:accounting": "tsx tests/accounting.mjs",
+    "test:migration": "tsx tests/migration.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",

@@ -70,11 +70,12 @@ model User {
 
   confirmedPayments FreelancerPayment[] @relation("PaymentConfirmer")
 
-  authoredEntries JournalEntry[] @relation("EntryAuthor")
-  postedEntries   JournalEntry[] @relation("EntryPoster")
-  ledgerLines     JournalLine[]  @relation("LineSalesAdmin")
-  closedFiscal    FiscalPeriod[] @relation("PeriodCloser")
-  approvedBudgets Budget[]       @relation("BudgetApprover")
+  authoredEntries JournalEntry[]    @relation("EntryAuthor")
+  postedEntries   JournalEntry[]    @relation("EntryPoster")
+  ledgerLines     JournalLine[]     @relation("LineSalesAdmin")
+  closedFiscal    FiscalPeriod[]    @relation("PeriodCloser")
+  approvedBudgets Budget[]          @relation("BudgetApprover")
+  resolvedReviews MigrationReview[] @relation("ReviewResolver")
 
   @@index([email])
   @@index([reportsToId])
@@ -676,6 +677,9 @@ model Lead {
   /// إلزامي عند الخسارة — بلا سبب لا نتعلّم شيئًا
   lossReason   String?
 
+  /// مفتاح الصف في الملف القديم — يمنع تكرار الترحيل (§١٤)
+  legacyKey String? @unique
+
   clientId String?
   client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
@@ -801,6 +805,9 @@ model Project {
   branch       String?
 
   expectedCloseDate DateTime?
+
+  /// مفتاح الصف في الملف القديم — يمنع تكرار الترحيل (§١٤)
+  legacyKey String? @unique
 
   leadId String?
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
@@ -1244,4 +1251,30 @@ model FixedAsset {
 
   @@index([category])
   @@index([active])
+}
+
+/// صفٌّ من ملف قديم تعذّر حسمه — «لا تحذف ولا تخمّن» (§١٤).
+/// يُعرض في شاشة مراجعة، ويُصحَّح يدويًا أو يُستبعد بقرار صريح.
+model MigrationReview {
+  id     String @id @default(cuid())
+  /// leads | sales
+  source String
+  /// رقم الصف في الملف — ليجده المراجع
+  rowNo  Int?
+
+  /// الصف كما ورد حرفيًا (مفصولًا بتبويب)
+  raw    String
+  /// لماذا لم يُحسم
+  reason String
+
+  /// resolved = صُحّح ورُحّل · skipped = استُبعد بقرار · pending
+  status       String    @default("pending")
+  resolvedAt   DateTime?
+  resolvedById String?
+  resolvedBy   User?     @relation("ReviewResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  note         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([source, status])
 }

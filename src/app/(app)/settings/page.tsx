@@ -10,6 +10,7 @@ import {
   Lock,
   Tag,
   Percent,
+  Upload,
 } from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -84,6 +85,13 @@ export default async function SettingsPage() {
       title: 'تكلفة الموظفين',
       description: 'الرواتب ومعطيات حساب تكلفة الصفحة — لمدير النظام والإدارة فقط',
       permission: 'canViewStaffSalary',
+    },
+    {
+      href: '/settings/import',
+      icon: Upload,
+      title: 'ترحيل الملفات القديمة',
+      description: 'سجل الليدز وملف المبيعات — لا يُحذف صف ولا يُخمَّن',
+      permission: 'canManageSettings',
     },
     {
       href: '/settings/system',
