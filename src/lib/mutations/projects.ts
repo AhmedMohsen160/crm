@@ -1,5 +1,5 @@
 import 'server-only';
-import { MutationError, requireOwn, readDeadline } from './base';
+import { MutationError, requireOwn, readDeadline, readDiscount } from './base';
 import { db } from '@/lib/db';
 import { can, hashPassword, verifyPassword, type SessionUser } from '@/lib/auth';
 import { str, num, date, fullName } from '@/lib/utils';
@@ -111,9 +111,11 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
     delete (data as Partial<typeof data>).deposit;
   }
 
-  // الخصم: يُقبل ممّن يملك صلاحيته، ويُوقف المشروع إن تجاوز حدّ دوره
-  const discountType = can(user, 'canDiscount') ? str(fd, 'discountType') : null;
-  const discountValue = can(user, 'canDiscount') ? num(fd, 'discountValue') : null;
+  // الخصم: يُقبل ممّن يملك صلاحيته، ويُوقف المشروع إن تجاوز حدّ دوره.
+  // والنسبة تُكتب مئويّة في الشاشة وتُخزَّن عشريّة — انظر `readDiscount`.
+  const discount = can(user, 'canDiscount') ? readDiscount(fd) : { type: null, value: null };
+  const discountType = discount.type;
+  const discountValue = discount.value;
   let approvalPatch: Record<string, unknown> = {};
 
   if (discountType && discountType !== 'none' && discountValue) {

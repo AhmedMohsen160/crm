@@ -1,4 +1,5 @@
 import Link from '@/components/link';
+import BackButton from '@/components/back-button';
 import { cn, initials, colorFromString } from '@/lib/utils';
 
 // ── أفاتار المستخدم ────────────────────────────────────────────
@@ -56,9 +57,15 @@ export function PageHeader({
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+      <div className="flex items-start gap-3">
+        {/* الرجوع خطوةً للوراء — في كل شاشة بلا أن تُضيفه كل شاشة */}
+        <span className="mt-0.5">
+          <BackButton />
+        </span>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{title}</h1>
+          {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+        </div>
       </div>
       {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
     </div>
@@ -174,6 +181,7 @@ export function FormField({
   max,
   dir,
   className,
+  onChange,
 }: {
   label: string;
   name: string;
@@ -187,6 +195,8 @@ export function FormField({
   max?: string;
   dir?: 'rtl' | 'ltr';
   className?: string;
+  /** يُمرَّر من مكوّنات العميل وحدها — الحقل يبقى غير مضبوط فيعمل بلا جافاسكربت */
+  onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
     <div className={className}>
@@ -204,6 +214,7 @@ export function FormField({
         required={required}
         placeholder={placeholder}
         defaultValue={defaultValue ?? undefined}
+        onChange={onChange}
         className="input"
       />
       {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
@@ -222,6 +233,7 @@ export function SelectField({
   placeholder = '— اختر —',
   hint,
   className,
+  onChange,
 }: {
   label: string;
   name: string;
@@ -232,6 +244,7 @@ export function SelectField({
   placeholder?: string;
   hint?: string;
   className?: string;
+  onChange?: (event: React.ChangeEvent<HTMLSelectElement>) => void;
 }) {
   return (
     <div className={className}>
@@ -244,6 +257,7 @@ export function SelectField({
         required={required}
         disabled={disabled}
         defaultValue={defaultValue ?? ''}
+        onChange={onChange}
         className="input disabled:bg-slate-100 disabled:text-slate-400"
       >
         <option value="">{placeholder}</option>

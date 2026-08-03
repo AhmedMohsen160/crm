@@ -604,8 +604,19 @@ await page.selectOption('#serviceLine', 'general');
 await page.selectOption('#sourceLang', 'ar');
 await page.selectOption('#targetLang', 'en');
 await page.fill('#pages', '10');
+await page.fill('#unitPrice', '100');
 await page.selectOption('#discountType', 'percent');
-await page.fill('#discountValue', '0.30'); // ٣٠٪ فوق حدّ ٥٪
+// **النسبة تُكتب مئويّة**: ٣٠ تعني ٣٠٪ — وكانت تُطلب `0.30` في هذه الشاشة
+// وحدها بينما تُطلب `30` في شاشة عرض السعر
+await page.fill('#discountPercent', '30'); // ٣٠٪ فوق حدّ ٥٪
+check(
+  (await page.locator('#discountValue').count()) === 0,
+  'خانة «قيمة الخصم» العشرية استُبدلت بخانة نسبة مئويّة صريحة'
+);
+check(
+  await waitForText('الصافي التقديري', 4000),
+  'والإجمالي والخصم يظهران أثناء الكتابة لا بعد الحفظ'
+);
 await submit();
 await page.waitForURL(/\/projects\/(?!new)[a-z0-9]+$/, { timeout: 25000 });
 await page.waitForLoadState('networkidle');

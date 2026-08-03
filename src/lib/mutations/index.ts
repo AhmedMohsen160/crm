@@ -118,5 +118,5 @@ export {
   decidePayroll,
 } from './hr';
 
-export { importLegacySheet, resolveMigrationRow } from './migration';
+export { importLegacySheet, importAccountingLedger, resolveMigrationRow } from './migration';
 export { markNotificationsRead, runNotifications } from './alerts';

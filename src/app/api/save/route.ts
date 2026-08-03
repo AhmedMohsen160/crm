@@ -54,6 +54,7 @@ import {
   markNotificationsRead,
   runNotifications,
   importLegacySheet,
+  importAccountingLedger,
   resolveMigrationRow,
   saveAccount,
   saveCostCenter,
@@ -236,6 +237,10 @@ export async function POST(request: NextRequest) {
         break;
       case 'payroll.decide':
         destination = await decidePayroll(fd, user, id);
+        break;
+
+      case 'import.accounting':
+        destination = await importAccountingLedger(fd, user);
         break;
 
       case 'quote.readSite':

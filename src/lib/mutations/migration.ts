@@ -38,6 +38,8 @@ import {
 } from '@/lib/freelancers';
 import { syncStepPayment, recordFreelancerUse, resolveFreelancerRate } from '@/lib/freelancer-engine';
 import { importLeadSheet, importSalesSheet } from '@/lib/import-legacy';
+import { importAccountingSheet, summaryLine } from '@/lib/import-accounting-engine';
+import { isBlankLine } from '@/lib/import-accounting';
 import { runAllEvents } from '@/lib/notification-engine';
 import { freezeProjectCost, stepWeightedPages } from '@/lib/project-costing';
 import { priceForProject, discountLimitOf, discountRatio } from '@/lib/pricing';
@@ -127,6 +129,59 @@ export async function importLegacySheet(fd: FormData, user: SessionUser) {
     source,
     ...Object.fromEntries(Object.entries(summary).map(([k, v]) => [k, String(v)])),
   });
+  return `/settings/import?${params.toString()}`;
+}
+
+/**
+ * يُرحّل دفتر المحاسب — ورقة «Journal Entry» كما هي.
+ *
+ * **صلاحيته `canManageAccounting` لا `canManageSettings`:** هذه قيودٌ تدخل
+ * الدفتر، ومن يملك الدفتر هو من يُدخلها.
+ *
+ * وقيود الدفعة تُكتب **مسوّدات** افتراضيًّا: الدفتر لا يُكتب من ظهر
+ * المحاسب (§٤)، والترحيل الفوري خيارٌ يُطلب صراحةً.
+ */
+export async function importAccountingLedger(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageAccounting')) {
+    throw new MutationError('ترحيل الدفتر لمن يملك إدارة الدفاتر المحاسبية');
+  }
+
+  const raw = str(fd, 'rows');
+  if (!raw) throw new MutationError('ألصق صفوف ورقة القيود أولًا');
+
+  /**
+   * ورقة المحاسب تمتدّ آلاف الصفوف تحت البيانات، وفيها **مسلسل بلا محتوى**
+   * (صيغة تملأ العمود الأول). فالحدّ يُقاس بصفوف البيانات وحدها، وإلا رُدّت
+   * ورقةٌ فيها خمسة آلاف قيد لأنّ تحتها ثلاثة آلاف صفٍّ فارغ.
+   */
+  const lineCount = raw
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && !isBlankLine(line.split('\t'))).length;
+  if (lineCount > 8000) {
+    throw new MutationError('الدفعة أكبر من ٨٠٠٠ سطر بيانات — ألصقها شهرًا شهرًا');
+  }
+
+  const summary = await importAccountingSheet(raw, {
+    actorId: user.id,
+    post: fd.get('post') !== null,
+  });
+
+  await auditEvent(user.id, 'create', 'JournalEntry', 'import', `ترحيل الدفتر: ${summaryLine(summary)}`);
+
+  const params = new URLSearchParams({
+    source: 'accounting',
+    rows: String(summary.rows),
+    accounts: String(summary.accounts),
+    costCenters: String(summary.costCenters),
+    entries: String(summary.entries),
+    lines: String(summary.lines),
+    skipped: String(summary.skipped),
+    stopped: String(summary.unbalancedLines),
+    batches: String(summary.unbalancedBatches),
+    failed: String(summary.errors.length),
+  });
+  if (summary.unknownBranches.length) params.set('branches', summary.unknownBranches.join('، '));
+  if (summary.unknownAdmins.length) params.set('admins', summary.unknownAdmins.join('، '));
   return `/settings/import?${params.toString()}`;
 }
 

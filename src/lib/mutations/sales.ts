@@ -1,5 +1,5 @@
 import 'server-only';
-import { MutationError, requireOwn, readDeadline } from './base';
+import { MutationError, requireOwn, readDeadline, readDiscount } from './base';
 import { db } from '@/lib/db';
 import { can, hashPassword, verifyPassword, type SessionUser } from '@/lib/auth';
 import { str, num, date, fullName } from '@/lib/utils';
@@ -295,8 +295,9 @@ export async function convertLead(fd: FormData, user: SessionUser, id: string) {
     isRush,
     clientId,
     manualUnitPrice,
-    manualDiscountType: can(user, 'canDiscount') ? str(fd, 'discountType') : null,
-    manualDiscountValue: can(user, 'canDiscount') ? num(fd, 'discountValue') : null,
+    // النسبة تُكتب مئويّة في الشاشة وتُخزَّن عشريّة — انظر `readDiscount`
+    manualDiscountType: can(user, 'canDiscount') ? readDiscount(fd).type : null,
+    manualDiscountValue: can(user, 'canDiscount') ? readDiscount(fd).value : null,
     user,
   });
 

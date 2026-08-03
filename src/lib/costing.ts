@@ -156,6 +156,34 @@ export function priceProject(params: {
 }
 
 /**
+ * يقرأ خانات الخصم كما تصل من الشاشة — **والنسبة تُكتب مئويّة**.
+ *
+ * كانت خانة النسبة في شاشة المشروع تطلب `0.1` لتعني ١٠٪، وشاشة عرض السعر
+ * تطلب `10` لنفس المعنى. شاشتان بوحدتين: من كتب `10` في الأولى منح خصم
+ * **ألف بالمئة**. فصارت مئويّةً في الشاشتين، وتُحوَّل هنا إلى النسبة
+ * العشرية التي يخزّنها النظام — فلا تتغيّر دلالة رقمٍ محفوظ ولا حساب خصمٍ
+ * ماضٍ، والتغيير عند حدّ النموذج وحده.
+ *
+ * ويُقبل `value` (الاسم القديم) حين لا تصل `percent` — فلا ينكسر نموذج لم
+ * يُحدَّث بعد.
+ */
+export function readDiscountFields(input: {
+  type?: string | null;
+  /** نسبة مئويّة: ١٠ تعني ١٠٪ */
+  percent?: number | null;
+  /** مبلغ ثابت، أو نسبة عشرية من النماذج القديمة */
+  value?: number | null;
+}): { type: string | null; value: number | null } {
+  const type = input.type && input.type !== 'none' ? input.type : null;
+  if (!type) return { type: null, value: null };
+
+  if (type === 'percent' && input.percent !== null && input.percent !== undefined) {
+    return { type, value: input.percent / 100 };
+  }
+  return { type, value: input.value ?? null };
+}
+
+/**
  * الخصم كنسبة من الإجمالي قبل الخصم — لمقارنته بحدّ الدور (§١٠ بند ٤).
  *
  * **الخصم بمبلغ ثابت يُحوَّل إلى نسبة**، وإلا أفلت من الحد بمجرد كتابته

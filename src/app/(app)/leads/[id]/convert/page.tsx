@@ -9,6 +9,7 @@ import { fullName } from '@/lib/utils';
 import { PageHeader, FormField, SelectField, ErrorAlert } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
 import ExpressDeadline from '@/components/express-deadline';
+import LiveTotal from '@/components/live-total';
 
 export const metadata = { title: 'تحويل إلى مشروع' };
 export const dynamic = 'force-dynamic';
@@ -96,35 +97,19 @@ export default async function ConvertLeadPage({
               defaultValue={lead.targetLang}
               options={lists.language.map((l) => ({ value: l.value, label: l.label }))}
             />
-            <FormField
-              label="عدد الصفحات"
-              name="pages"
-              type="number"
-              step="0.5"
-              min="0"
-              required
-              defaultValue={lead.estPages}
+            {/* الصفحات والسعر والخصم — والإجمالي يظهر أثناء الكتابة */}
+            <LiveTotal
+              defaultPages={lead.estPages}
+              defaultNetTotal={estimated || null}
+              discountTypes={Object.entries(DISCOUNT_TYPES)
+                .filter(([v]) => v === 'percent' || v === 'amount')
+                .map(([value, label]) => ({ value, label }))}
+              discountHint={`حدّك ${(limit * 100).toFixed(0)}٪ — ما فوقه يوقف المشروع للاعتماد`}
+              showPrice={can(user, 'canViewSellPrice')}
+              canDiscount={can(user, 'canDiscount')}
             />
             {can(user, 'canViewSellPrice') && (
               <>
-                <FormField
-                  label="سعر الصفحة"
-                  name="unitPrice"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  dir="ltr"
-                  hint="اتركه فارغًا ليُقرأ من قائمة الأسعار تلقائيًا"
-                />
-                <FormField
-                  label="إجمالي المشروع"
-                  name="netTotal"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  defaultValue={estimated || undefined}
-                  hint="اتركه فارغًا ليُحسب من السعر والصفحات"
-                />
                 <FormField
                   label="المقدم المقبوض"
                   name="deposit"
@@ -140,27 +125,6 @@ export default async function ConvertLeadPage({
                   defaultValue="EGP"
                   placeholder="جنيه مصري"
                   options={lists.currency.map((c) => ({ value: c.value, label: c.label }))}
-                />
-              </>
-            )}
-            {can(user, 'canDiscount') && (
-              <>
-                <SelectField
-                  label="نوع الخصم"
-                  name="discountType"
-                  placeholder="بلا خصم"
-                  options={Object.entries(DISCOUNT_TYPES)
-                    .filter(([v]) => v === 'percent' || v === 'amount')
-                    .map(([value, label]) => ({ value, label }))}
-                />
-                <FormField
-                  label="قيمة الخصم"
-                  name="discountValue"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  dir="ltr"
-                  hint={`نسبة عشرية أو مبلغ · حدّك ${(limit * 100).toFixed(0)}٪ — ما فوقه يوقف المشروع للاعتماد`}
                 />
               </>
             )}

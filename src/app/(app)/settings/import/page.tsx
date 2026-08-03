@@ -68,7 +68,57 @@ export default async function ImportPage({
       </PageHeader>
       <ErrorAlert message={error} />
 
-      {done && (
+      {source === 'accounting' && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <p className="mb-2 flex items-center gap-2 font-semibold">
+            <CheckCircle2 className="h-4 w-4" />
+            تم ترحيل دفتر المحاسب
+          </p>
+          <ul className="grid gap-1 text-xs sm:grid-cols-2">
+            <li>
+              الأسطر المقروءة: <b className="nums">{n('rows')}</b>
+            </li>
+            <li>
+              قيود كُتبت: <b className="nums">{n('entries')}</b> بـ
+              <b className="nums"> {n('lines')}</b> سطرًا
+            </li>
+            <li>
+              حسابات أُنشئت في الشجرة: <b className="nums">{n('accounts')}</b>
+            </li>
+            <li>
+              مراكز تكلفة أُنشئت: <b className="nums">{n('costCenters')}</b>
+            </li>
+            <li>
+              مُتخطّاة (مُرحَّلة سابقًا أو بلا مبلغ): <b className="nums">{n('skipped')}</b>
+            </li>
+            <li>
+              أسطر موقوفة لعدم الاتزان: <b className="nums">{n('stopped')}</b>
+              {n('stopped') > 0 && (
+                <>
+                  {' '}
+                  في <b className="nums">{n('batches')}</b> دفعة —{' '}
+                  <Link href="/settings/import/review" className="link">
+                    راجعها
+                  </Link>
+                </>
+              )}
+            </li>
+          </ul>
+          {params.branches && (
+            <p className="mt-2 text-xs text-amber-800">
+              أسماء فروع لم تُطابَق بقائمة الفروع: <b>{params.branches}</b> — أسطرها دخلت
+              <b> بلا فرع</b> ولم يُخمَّن لها فرع. أضِف الفرع من «القوائم المرجعية» ثم أعِد الإلصاق.
+            </p>
+          )}
+          {params.admins && (
+            <p className="mt-1 text-xs text-amber-800">
+              أسماء أدمنز لم تُطابَق بمستخدم: <b>{params.admins}</b> — أسطرها دخلت بلا أدمن.
+            </p>
+          )}
+        </div>
+      )}
+
+      {done && source !== 'accounting' && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           <p className="mb-2 flex items-center gap-2 font-semibold">
             <CheckCircle2 className="h-4 w-4" />
@@ -170,6 +220,67 @@ export default async function ImportPage({
           </form>
         </section>
       ))}
+
+      {/* ── دفتر المحاسب ─────────────────────────────────────── */}
+      <section className="card card-pad border-brand-200">
+        <h2 className="mb-1 font-semibold text-slate-800">دفتر المحاسب — ورقة القيود</h2>
+        <p className="mb-3 text-xs text-slate-500">
+          الملف: <span dir="ltr">Accounting of Fast Trans › Journal Entry</span>
+        </p>
+
+        <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600" dir="ltr">
+          N ⇥ Date ⇥ Month ⇥ Document type ⇥ Document Number ⇥ Description ⇥ Debt ⇥ Debt $ ⇥ Credit ⇥
+          Credit $ ⇥ Sub balance ⇥ Sub balance $ ⇥ Branch ⇥ Sales Admin ⇥ Traffic Source ⇥ Units sold ⇥
+          Translation type ⇥ Account ⇥ Project ⇥ Main Account ⇥ 1nd Sub Account ⇥ 2nd Sub Account ⇥ 3rd
+          Sub Account
+        </p>
+        <p className="mb-4 text-xs leading-relaxed text-slate-600">
+          <b>ألصق الورقة كما هي بترويستها.</b> شجرة الحسابات تُبنى من القيود نفسها — فالمسار
+          الرباعي موجود على كل سطر، ولا حاجة لإلصاق الشجرة على حدة. ومراكز التكلفة
+          والفروع وأدمن المبيعات تُلتقط من أعمدتها.
+          <span className="mt-1 block">
+            <b>ورقتك ليس فيها أرقام قيود</b>، والقيد يُكوَّن من الأسطر المتتالية حتى يتوازن
+            المدين والدائن. وما لا يتوازن <b>لا يدخل الدفتر ولا يُجبَر</b> — يذهب لقائمة
+            المراجعة بفارقه مكتوبًا.
+          </span>
+        </p>
+
+        <form method="post" action="/api/save" className="space-y-3">
+          <input type="hidden" name="entity" value="import.accounting" />
+          <input type="hidden" name="back" value="/settings/import" />
+
+          <textarea
+            name="rows"
+            required
+            rows={8}
+            dir="ltr"
+            placeholder={
+              '01\t2026-01-01\t1\tUnspecified\t\tOpening balances\t232157.30\t\t\t\t\t\tUnspecified\t\t\t\tUnspecified\tUnspecified\tUnspecified\tCurrent Assets\tCash and Cash Equivalents\tTreasury\tTreasury - Egyptian Pound'
+            }
+            className="input font-mono text-xs"
+          />
+
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="post"
+                className="h-4 w-4 rounded border-slate-300 text-brand-600"
+              />
+              <span>
+                رحّل القيود فورًا
+                <span className="mr-2 text-xs text-slate-400">
+                  (بلا هذا تدخل مسوّدات يراجعها المحاسب ويرحّلها — والدفتر لا يُكتب من ظهره)
+                </span>
+              </span>
+            </label>
+            <SaveButton>
+              <Upload className="h-4 w-4" />
+              ترحيل الدفتر
+            </SaveButton>
+          </div>
+        </form>
+      </section>
 
       <section className="card card-pad bg-slate-50/60 text-sm text-slate-600">
         <p className="mb-2 font-semibold text-slate-800">ما يفعله الترحيل بلا أن تطلبه</p>

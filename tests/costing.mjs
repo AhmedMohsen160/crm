@@ -22,6 +22,7 @@ import {
   roiLoaded,
   onTimeRate,
   discountRatio,
+  readDiscountFields,
 } from '../src/lib/costing.ts';
 
 const results = [];
@@ -203,6 +204,31 @@ near(
   'خصم ٥٠٠ على ألف = ٥٠٪ — المبلغ الثابت يُحوَّل لنسبة فلا يفلت من الحد'
 );
 near(discountRatio({ type: 'none', value: 0 }, 1000), 0, 'بلا خصم ← صفر');
+
+// ── وحدة النسبة: مئويّة في الشاشة، عشريّة في التخزين ──────────
+near(
+  readDiscountFields({ type: 'percent', percent: 10 }).value,
+  0.1,
+  '**١٠ في الشاشة تعني ١٠٪** — لا ألفًا بالمئة'
+);
+near(
+  readDiscountFields({ type: 'percent', percent: 2.5 }).value,
+  0.025,
+  'والنصف بالمئة يُقرأ كسرًا'
+);
+near(readDiscountFields({ type: 'amount', value: 500 }).value, 500, 'ومبلغ الخصم يبقى مبلغًا');
+check(readDiscountFields({ type: 'none', percent: 10 }).type === null, '«بلا خصم» يُسقط القيمة');
+check(readDiscountFields({ type: null }).value === null, 'وبلا نوعٍ لا قيمة');
+near(
+  readDiscountFields({ type: 'percent', value: 0.1 }).value,
+  0.1,
+  'والنموذج القديم بقيمته العشرية ما زال يعمل'
+);
+near(
+  discountRatio(readDiscountFields({ type: 'percent', percent: 10 }), 10000) * 10000,
+  1000,
+  'فخصم ١٠٪ على ١٠٬٠٠٠ ألفٌ لا أكثر'
+);
 near(discountRatio({ type: 'amount', value: 500 }, 0), 0, 'إجمالي صفر ← صفر لا لا نهاية');
 
 // ── الهامش ───────────────────────────────────────────────────
