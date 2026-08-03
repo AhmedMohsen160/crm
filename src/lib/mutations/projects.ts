@@ -614,9 +614,33 @@ export async function deliverProject(fd: FormData, user: SessionUser, id: string
   const qaIssues = num(fd, 'qaIssues') ?? 0;
   const folderUrl = str(fd, 'folderUrl');
 
+  /**
+   * **بوابة الرصد** (§١٢٫١ من مواصفة الفروع): لا يُقفل طلب دون وحداته.
+   *
+   * والوحدتان منفصلتان لأن الطاقة تتوقّف عند ما تستوعبه المراجعة لا عند سرعة
+   * الترجمة. وتُملآن من الصفحات تلقائيًا فلا يُبطأ عمل الكاونتر — والرصد
+   * اللاحق يتسرّب دائمًا، فمكانه لحظة التسليم لا متابعة المدير.
+   */
+  const existing = await db.project.findUnique({
+    where: { id },
+    select: { pages: true, reviewerId: true, reviewerFreelancerId: true },
+  });
+  const pages = existing?.pages ?? null;
+  const translated = num(fd, 'unitsTranslated') ?? pages;
+  if (translated === null) {
+    throw new MutationError('عدد الوحدات المترجَمة مطلوب قبل التسليم — الرصد اللاحق يتسرّب');
+  }
+  const hasReviewer = Boolean(existing?.reviewerId || existing?.reviewerFreelancerId);
+  const reviewed = num(fd, 'unitsReviewed') ?? (hasReviewer ? translated : 0);
+
   await db.project.update({
     where: { id },
-    data: { qaIssues: Math.max(0, Math.round(qaIssues)), folderUrl },
+    data: {
+      qaIssues: Math.max(0, Math.round(qaIssues)),
+      folderUrl,
+      unitsTranslated: Math.max(0, translated),
+      unitsReviewed: Math.max(0, reviewed),
+    },
   });
 
   const move = new FormData();

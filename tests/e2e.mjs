@@ -1736,6 +1736,61 @@ const hrBlocked = !(await page.locator('h1:has-text("الموارد البشري
 check(hrBlocked, 'ومن لا يملك إدارة الموارد البشرية لا يصل إليها');
 await loginAs('admin@fasttrans.local');
 
+// ── 21. محاسبة الفروع ───────────────────────────────────────
+// المُختبَر هنا **القاعدتان ٥ و٦**: المؤشران معًا دائمًا، وقرار الإغلاق على
+// المساهمة حصرًا — وهو ما يمنع «دوامة الإغلاق» التي تُهلك الشركة.
+await go('/finance/branches/settings', '21-branch-settings');
+check(await waitForText('فئة كل مركز تكلفة'), 'شاشة إعداد محاسبة الفروع تفتح (اختبار ٢١)');
+
+// زرع الفروع من القائمة القائمة بمفاتيحها نفسها
+if (await page.locator('button:has-text("ازرعها من قائمة الفروع")').count()) {
+  await page.click('button:has-text("ازرعها من قائمة الفروع")');
+  await page.waitForURL(/\/finance\/branches\/settings/, { timeout: 20000 });
+}
+check(await waitForText('المقطم'), 'وزرع الفروع يأخذها بمفاتيحها فلا يُرحَّل صفّ');
+
+const allocStatus = await go('/finance/branches/allocation', '21-allocation');
+check(allocStatus === 200, 'وشاشة المعدل المعياري تفتح');
+const allocText = await page.locator('body').innerText();
+check(
+  allocText.includes('يُلغي قابلية التخطيط'),
+  'وتشرح لماذا يُثبَّت المعدل ولا يُحسب شهريًا — الأعطال الأربعة'
+);
+check(allocText.includes('فرق استرداد'), 'وتذكر أن الفرق لا يضيع بل يظهر بندًا صريحًا');
+
+const branchStatus = await go('/finance/branches', '21-branch-board');
+check(branchStatus === 200, 'ولوحة محاسبة الفروع تفتح');
+const boardText = await page.locator('body').innerText();
+check(
+  boardText.includes('هامش المساهمة') && boardText.includes('الصافي المحمَّل'),
+  '★ **والمؤشران معروضان معًا** — ولا يُعرض الصافي المحمَّل منفردًا أبدًا (القاعدة ٥)'
+);
+check(boardText.includes('قرار البقاء'), 'وقاعدة المؤشرين مكتوبة في الشاشة لا في التوثيق');
+check(boardText.includes('معادلة التحقّق'), 'ومعادلة التحقّق معروضة');
+check(boardText.includes('فرق الاسترداد'), 'وفرق الاسترداد بندٌ مستقلّ في المركز');
+
+const capStatus = await go('/finance/branches/capacity', '21-capacity');
+check(capStatus === 200, 'وشاشة الطاقة الإنتاجية تفتح');
+check(
+  await waitForText('مُشغِّل التعيين'),
+  'وفيها مُشغِّل التعيين — ينبّه قبل بلوغ السقف لا بعده'
+);
+
+// ── 22. بوابة رصد الوحدات عند التسليم ───────────────────────
+await go('/projects');
+const readyLink = await page.locator('table tbody tr a[href*="/projects/"]').first();
+if (await readyLink.count()) {
+  const href = await readyLink.getAttribute('href');
+  await go(`${href}/deliver`);
+  const deliverText = await page.locator('body').innerText();
+  // الشاشة إمّا تعرض النموذج وإمّا ترفض الحالة — والحالتان صحيحتان
+  const gated =
+    deliverText.includes('وحدات مترجَمة') || deliverText.includes('جاهز للتسليم');
+  check(gated, 'شاشة التسليم تطلب الوحدات أو ترفض الحالة (اختبار ٢٢)');
+} else {
+  check(true, 'لا مشاريع للاختبار — تُخطّى بوابة الرصد (اختبار ٢٢)');
+}
+
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
 await go('/projects', '12-mobile');

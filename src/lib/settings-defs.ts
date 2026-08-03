@@ -201,6 +201,103 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     group: 'نسب المبيعات',
     hint: 'قرار الإدارة: نعم. يُنشأ قيد عكسي ولا يُحذف الأصلي.',
   },
+
+  // ── محاسبة الفروع وتوزيع التكلفة المركزية ────────────────────
+  {
+    key: 'maturity_factor_foundation',
+    label: 'معامل تحميل — مرحلة التأسيس',
+    value: '0',
+    kind: 'percent',
+    group: 'محاسبة الفروع',
+    hint: 'الفرع في تأسيسه لا يُحمَّل: طلباته تُنفَّذ بطاقة مدفوعة سلفًا فتكلفتها الحدّية تقارب الصفر',
+  },
+  {
+    key: 'maturity_factor_launch',
+    label: 'معامل تحميل — مرحلة الإطلاق',
+    value: '0.35',
+    kind: 'percent',
+    group: 'محاسبة الفروع',
+  },
+  {
+    key: 'maturity_factor_growth',
+    label: 'معامل تحميل — مرحلة النمو',
+    value: '0.70',
+    kind: 'percent',
+    group: 'محاسبة الفروع',
+  },
+  {
+    key: 'maturity_factor_mature',
+    label: 'معامل تحميل — مرحلة النضج',
+    value: '1.00',
+    kind: 'percent',
+    group: 'محاسبة الفروع',
+    hint: 'الناضج يُحمَّل بالمعدل المعياري كاملًا',
+  },
+  {
+    key: 'target_factor',
+    label: 'معامل المستهدف',
+    value: '1.25',
+    kind: 'number',
+    group: 'محاسبة الفروع',
+    hint: 'التارجت = التعادل المحمَّل × هذا المعامل — والتارجت يُشتقّ ولا يُخترع',
+  },
+  {
+    key: 'stretch_factor',
+    label: 'معامل الطموح',
+    value: '1.60',
+    kind: 'number',
+    group: 'محاسبة الفروع',
+    hint: 'يفتح شريحة عمولة أعلى',
+  },
+  {
+    key: 'collection_deadline_days',
+    label: 'مهلة التحصيل لاستحقاق العمولة (يومًا)',
+    value: '60',
+    kind: 'number',
+    group: 'محاسبة الفروع',
+    hint: 'ما لم يُحصَّل خلالها يسقط استحقاق عمولته',
+  },
+
+  // ── الطاقة الإنتاجية ─────────────────────────────────────────
+  {
+    key: 'capacity_translation_units',
+    label: 'طاقة الترجمة الشهرية (وحدة)',
+    value: '0',
+    kind: 'number',
+    group: 'الطاقة الإنتاجية',
+    hint: 'الوحدة صفحة قياسية — والطاقة أرضية لا سقف',
+  },
+  {
+    key: 'capacity_review_units',
+    label: 'طاقة المراجعة الشهرية (وحدة)',
+    value: '0',
+    kind: 'number',
+    group: 'الطاقة الإنتاجية',
+    hint: 'القيد يقع عند الأصغر — والمراجعة هي القيد غالبًا لا الترجمة',
+  },
+  {
+    key: 'capacity_utilization_alert',
+    label: 'حدّ الإنذار لنسبة الاستغلال',
+    value: '0.85',
+    kind: 'percent',
+    group: 'الطاقة الإنتاجية',
+    hint: 'ينبّه قبل بلوغ ١٠٠٪ — المنتِج الجديد يحتاج أسابيع ليبلغ إنتاجيته',
+  },
+  {
+    key: 'capacity_late_alert',
+    label: 'حدّ الإنذار لنسبة التأخير',
+    value: '0.15',
+    kind: 'percent',
+    group: 'الطاقة الإنتاجية',
+    hint: 'مؤشر إنذار مبكر — يسبق أي حساب وحدات',
+  },
+  {
+    key: 'capacity_turnaround_alert',
+    label: 'حدّ الإنذار لزمن التسليم (يومًا)',
+    value: '5',
+    kind: 'number',
+    group: 'الطاقة الإنتاجية',
+  },
 ];
 
 export const SETTING_KEYS = SETTING_DEFINITIONS.map((s) => s.key);

@@ -97,6 +97,17 @@ export { startThread, askAssistant, deleteThread } from './ai';
 // عرض السعر المصمَّم بالذكاء — طريق ثانٍ إلى جانب القالب القياسي
 export { readClientSite, designQuoteDocument, clearQuoteDesign } from './quotes';
 
+// محاسبة الفروع: الفروع · تصنيف المراكز · المعدل المعياري · الإقفال
+export {
+  saveBranch,
+  seedBranches,
+  saveCostCenterKinds,
+  saveAccountCashFlags,
+  saveAllocationRate,
+  deriveAllocationRate,
+  closeBranchPeriod,
+} from './branches';
+
 // الموارد البشرية: الأقسام · هيكل الأجر · كشف الرواتب
 export {
   saveDepartment,

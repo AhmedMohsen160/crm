@@ -549,8 +549,12 @@ model CommissionScheme {
   name     String
   /// collected = المحصَّل فعلًا · net = إجمالي المبيعات
   basis    String @default("collected")
-  /// progressive = كل شريحة على جزئها · whole = الشريحة تبتلع الكل
+  /// progressive = كل شريحة على جزئها · whole = الشريحة تبتلع الكل («قافزة»)
   tierMode String @default("progressive")
+  /// user = على مبيعات الشخص (§٦) · branch = على إيراد الفرع (مواصفة الفروع §٩)
+  /// خطتان مستقلّتان تعملان معًا: الأولى تُحاسب البائع، والثانية تدخل في
+  /// اشتقاق تعادل الفرع وتارجته.
+  scope    String @default("user")
 
   effectiveFrom DateTime @default(now())
   active        Boolean  @default(true)
@@ -808,8 +812,14 @@ model Project {
   reviewerId        String?
   reviewer          User?   @relation("ProjectReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
   qaIssues          Int     @default(0)
-  isRework          Boolean @default(false)
-  folderUrl         String?
+
+  /// **وحدتان منفصلتان لا واحدة** (§١٢): دمجهما يُخفي القيد الحقيقي —
+  /// الطاقة تتوقّف عند ما تستوعبه المراجعة البشرية لا عند سرعة الترجمة.
+  /// تُملآن من الصفحات عند التسليم فلا تُبطئ عمل الكاونتر.
+  unitsTranslated Float?
+  unitsReviewed   Float?
+  isRework        Boolean @default(false)
+  folderUrl       String?
 
   /// أجر الفريلانسر للصفحة حين يكون التشغيل خارجيًا بلا خطوات صريحة
   externalRate         Float?
@@ -1138,6 +1148,11 @@ model Account {
   /// خطوتا ٣ و٤ من بناء الموازنة: الثابت يُحصر، والمتغيّر يُقدَّر بالحجم
   costBehavior String?
 
+  /// هل يمثّل خروج نقد فعليًّا؟ الإهلاك مصروف غير نقدي، ويُستبعد من
+  /// **التعادل النقدي** (§١٠٫٢). ويُشتقّ من الحساب لا يُملأ في كل سطر:
+  /// حقلٌ يُملأ يدويًا آلاف المرات يُملأ خطأً مرة على الأقل.
+  isCash Boolean @default(true)
+
   @@index([type])
   @@index([parentId])
   @@index([isPostable, active])
@@ -1156,6 +1171,13 @@ model CostCenter {
   lines JournalLine[]
 
   departments Department[]
+
+  /// **الفئة المحاسبية** — هي ما يحدّد أين يقع الجنيه (§٣ من مواصفة الفروع):
+  ///   production        الإنتاج والتشغيل — كتلة مشتركة ثابتة
+  ///   central_marketing التسويق المؤسسي — كتلة مشتركة
+  ///   general_admin     الإدارة العامة — كتلة مشتركة
+  ///   branch_direct     مصاريف فرع بعينه — لا تدخل الكتلة أبدًا
+  kind String @default("branch_direct")
 
   @@unique([name, project])
 }
@@ -1784,4 +1806,134 @@ model PayrollLine {
 
   @@unique([runId, userId])
   @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  محاسبة الفروع وتوزيع التكلفة المركزية
+//  (مواصفة «Branch Profitability & Cost Allocation»)
+// ═══════════════════════════════════════════════════════════════
+
+/// الفرع ككيان لا كنصّ في قائمة.
+///
+/// **`code` هو نفس مفتاح قائمة `branch` القائمة** (mokattam · riyadh …)،
+/// فكل ما هو مخزَّن في `Project.branch` و`JournalLine.branch` يبقى صالحًا
+/// ولا يُرحَّل صفٌّ واحد.
+///
+/// وملاحظة معمارية من §٢٫١: **الفرع المركزي يؤدي أكثر من دور**، فيُمثَّل
+/// هنا فرعَ بيعٍ له إيراده ومصاريفه الذاتية، بينما تقع كتلته المركزية في
+/// **مراكز تكلفة** بأنواع مشتركة لا في الفرع. دمجهما هو أصل الخلل الذي
+/// يعالجه هذا الموديول.
+model Branch {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  country  String?
+  currency String  @default("EGP")
+
+  /// retail | corporate | production_hub
+  type          String @default("retail")
+  /// planning | ramp_up | active | downsized | closed
+  status        String @default("active")
+  /// foundation | launch | growth | mature — يحدّد معامل التحميل المطبَّق
+  maturityStage String @default("mature")
+
+  openedAt DateTime?
+  closedAt DateTime?
+
+  // ── قيود ما قبل الفتح (§١١٫٢) ─────────────────
+  /// تجهيز + تأمين — يدخل في الاستنزاف النقدي التراكمي
+  setupCost         Float @default(0)
+  /// شهور متوقَّعة للوصول إلى التعادل
+  monthsToBreakEven Int   @default(0)
+
+  // ── بوابة القرار (§١١٫١) ──────────────────────
+  /// معيار النجاح مكتوبًا **قبل** الافتتاح لا بعده
+  gateCriteria String?
+  gateAt       DateTime?
+  /// hold | extend | downsize — ويبقى فارغًا حتى تُتّخذ
+  gateDecision String?
+  gateNote     String?
+
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+/// المعدل المعياري لتحميل الكتلة المشتركة — **مثبَّت لسنة كاملة**.
+///
+/// لماذا يُثبَّت ولا يُحسب شهريًا (§٤٫٢): الحساب الشهري صحيح رياضيًا لكنه
+/// يُلغي قابلية التخطيط (التارجت لا يُعرف إلا بعد انتهاء الشهر)، ويعاقب
+/// الفرع على أداء غيره، ويُخفي الرفع التشغيلي وتكلفة الطاقة العاطلة.
+model AllocationRate {
+  id   String @id @default(cuid())
+  year Int    @unique
+
+  /// المعدل المثبَّت (٠٫٤٥ = ٤٥٪ من إيراد الفرع)
+  standardRate Float  @default(0)
+  /// revenue | units | orders — والمعتمد حاليًا `revenue`
+  basis        String @default("revenue")
+
+  /// عدد الشهور التي اشتُقّ منها (٣ إلى ١٢)
+  derivedFromMonths Int       @default(12)
+  /// ما نتج عن الاشتقاق وقت إجرائه — للمقارنة بما ثُبِّت فعلًا
+  derivedRate       Float?
+  derivedAt         DateTime?
+  /// إيراد الشركة والكتلة المشتركة في فترة الاشتقاق — سند الرقم
+  derivedRevenue    Float?
+  derivedMass       Float?
+
+  /// المثبَّت لا يُعدَّل بعد القفل إلا بقيد صريح — سنةٌ بمعدَّلين لا تُقارَن
+  lockedAt DateTime?
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// إقفال شهري لمحاسبة الفروع.
+///
+/// يُخزَّن **مجمَّدًا**: الفعليّ يتغيّر بقيد يُرحَّل لاحقًا، وتقريرٌ صدر في
+/// حينه يجب أن يبقى كما قُرئ. ولا يُقفَل الشهر ما لم تساوِ معادلة التحقّق
+/// صفرًا (§٨).
+model BranchPeriodResult {
+  id         String  @id @default(cuid())
+  /// YYYY-MM
+  period     String
+  /// فارغ = سطر الشركة الإجمالي
+  branchCode String?
+
+  revenue        Float @default(0)
+  directExpenses Float @default(0)
+  /// الإهلاك ضمن المصاريف الذاتية — يُستبعد من التعادل النقدي
+  depreciation   Float @default(0)
+  commissions    Float @default(0)
+  /// الإيراد − الذاتية − العمولات
+  contribution   Float @default(0)
+  /// الإيراد × نسبة التحميل المطبَّقة
+  allocated      Float @default(0)
+  /// المساهمة − التحميل
+  loadedNet      Float @default(0)
+
+  appliedRate   Float   @default(0)
+  maturityStage String?
+  orders        Int     @default(0)
+  adSpend       Float   @default(0)
+
+  /// على سطر الشركة وحده
+  sharedMass       Float?
+  recoveryVariance Float?
+  companyNet       Float?
+
+  closedAt   DateTime?
+  closedById String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([period, branchCode])
+  @@index([period])
 }

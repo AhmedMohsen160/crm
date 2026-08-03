@@ -6,6 +6,7 @@ import { str, num, date, fullName } from '@/lib/utils';
 import { logActivity, readEntityLink, linkPath, type EntityLink } from '@/lib/actions/helpers';
 import { auditEvent, auditDiff } from '@/lib/audit';
 import { fillFromLastYear } from '@/lib/budget-engine';
+import { checkClassification } from '@/lib/branch-economics';
 import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
@@ -220,6 +221,12 @@ export async function saveJournalEntry(fd: FormData, user: SessionUser, id?: str
   if (!balance.balanced || balance.problems.length > 0) {
     throw new MutationError(balance.problems.join(' · '));
   }
+
+  // ── قواعد تصنيف الفروع ١ و٢ و٣ — تُفرض عند الحفظ ────────────
+  // كل جنيه مصروف يقع في **واحدة** من ثلاث فئات ولا يقع في اثنتين.
+  // وبندٌ يخالف يُرفض هنا لا يُصحَّح لاحقًا: تصحيحه بعد الترحيل يحتاج قيدًا
+  // عكسيًا، وتركه يُفسد التحميل وقائمة كل فرع.
+  await assertBranchClassification(lines);
 
   const header = {
     date: entryDate,
@@ -587,4 +594,49 @@ export async function saveBudgetPlanSettings(fd: FormData, user: SessionUser) {
   });
   await auditEvent(user.id, 'update', 'Budget', String(year), `طوارئ ${contingencyPct}%`);
   return `/finance/budget/plan?year=${year}&saved=1`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  تصنيف الفروع — القواعد ١ و٢ و٣
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * يمنع حفظ قيد فيه بند مصروف بتصنيف مختلّ.
+ *
+ * الرفض هنا **مقصود ولو أبطأ الإدخال**: بندٌ مشترك يحمل فرعًا يجعل الكتلة
+ * تخصّ فرعًا بعينه، وبندٌ ذاتيّ بلا فرع يدخل الكتلة فتتحمّله الفروع كلها.
+ * وكلاهما يُفسد قائمة كل فرع لا قائمة واحد.
+ *
+ * ولا يُفرض إلا حين تكون مراكز التكلفة مصنَّفة أصلًا: مكتبٌ لم يُعدّ الموديول
+ * بعد لا تُقفل عليه شاشة القيود.
+ */
+async function assertBranchClassification(
+  lines: { accountId: string; costCenterId: string | null; branch: string | null }[]
+) {
+  const configured = await db.costCenter.count({ where: { kind: { not: 'branch_direct' } } });
+  if (configured === 0) return;
+
+  const accounts = await db.account.findMany({
+    where: { id: { in: [...new Set(lines.map((l) => l.accountId))] } },
+    select: { id: true, type: true, name: true },
+  });
+  const typeOf = new Map(accounts.map((a) => [a.id, a.type]));
+  const nameOf = new Map(accounts.map((a) => [a.id, a.name]));
+
+  const centres = await db.costCenter.findMany({
+    where: { id: { in: lines.map((l) => l.costCenterId).filter(Boolean) as string[] } },
+    select: { id: true, kind: true },
+  });
+  const kindOf = new Map(centres.map((c) => [c.id, c.kind]));
+
+  for (const line of lines) {
+    const check = checkClassification({
+      kind: line.costCenterId ? kindOf.get(line.costCenterId) : null,
+      branch: line.branch,
+      isExpense: typeOf.get(line.accountId) === 'expense',
+    });
+    if (!check.ok) {
+      throw new MutationError(`«${nameOf.get(line.accountId) ?? 'بند'}»: ${check.error}`);
+    }
+  }
 }

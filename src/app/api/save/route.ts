@@ -31,6 +31,13 @@ import {
   startThread,
   askAssistant,
   deleteThread,
+  saveBranch,
+  seedBranches,
+  saveCostCenterKinds,
+  saveAccountCashFlags,
+  saveAllocationRate,
+  deriveAllocationRate,
+  closeBranchPeriod,
   saveDepartment,
   saveSalaryComponent,
   endSalaryComponent,
@@ -187,6 +194,29 @@ export async function POST(request: NextRequest) {
       case 'assistant.delete':
         destination = await deleteThread(fd, user, id);
         break;
+      // ── محاسبة الفروع ────────────────────────────────────
+      case 'branch':
+        destination = await saveBranch(fd, user, id);
+        break;
+      case 'branch.seed':
+        destination = await seedBranches(fd, user);
+        break;
+      case 'costCenter.kinds':
+        destination = await saveCostCenterKinds(fd, user);
+        break;
+      case 'account.cash':
+        destination = await saveAccountCashFlags(fd, user);
+        break;
+      case 'allocation.rate':
+        destination = await saveAllocationRate(fd, user);
+        break;
+      case 'allocation.derive':
+        destination = await deriveAllocationRate(fd, user);
+        break;
+      case 'branch.close':
+        destination = await closeBranchPeriod(fd, user);
+        break;
+
       // ── الموارد البشرية ──────────────────────────────────
       case 'department':
         destination = await saveDepartment(fd, user, id);

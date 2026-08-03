@@ -37,6 +37,10 @@ export default async function DeliverPage({
       qaIssues: true,
       folderUrl: true,
       deadline: true,
+      unitsTranslated: true,
+      unitsReviewed: true,
+      reviewerId: true,
+      reviewerFreelancerId: true,
     },
   });
   if (!project) notFound();
@@ -68,6 +72,41 @@ export default async function DeliverPage({
         <input type="hidden" name="entity" value="project.deliver" />
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="back" value={`/projects/${id}/deliver`} />
+
+        {/* بوابة الرصد: لا يُقفل طلب دون وحداته — والرصد اللاحق يتسرّب دائمًا */}
+        <section className="card card-pad space-y-4">
+          <h2 className="section-title">وحدات الإنتاج</h2>
+          <p className="-mt-2 text-xs leading-relaxed text-slate-500">
+            الوحدتان منفصلتان لأن <b>الطاقة تتوقّف عند ما تستوعبه المراجعة</b> لا عند سرعة
+            الترجمة. مملوءتان من عدد الصفحات — عدّلهما إن اختلفتا.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              label="وحدات مترجَمة"
+              name="unitsTranslated"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+              dir="ltr"
+              defaultValue={project.unitsTranslated ?? project.pages ?? ''}
+              hint="بالصفحة القياسية"
+            />
+            <FormField
+              label="وحدات مُراجَعة"
+              name="unitsReviewed"
+              type="number"
+              step="0.01"
+              min="0"
+              dir="ltr"
+              defaultValue={
+                project.unitsReviewed ??
+                (project.reviewerId || project.reviewerFreelancerId ? (project.pages ?? '') : 0)
+              }
+              hint="صفر إن لم تُراجَع"
+            />
+          </div>
+        </section>
 
         <section className="card card-pad space-y-4">
           <FormField
