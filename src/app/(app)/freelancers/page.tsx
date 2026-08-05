@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, Users, Upload, Wallet, AlertTriangle } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, can } from '@/lib/auth';
+import { can, requireAnyPermission, requireUser } from '@/lib/auth';
 import { listOptions } from '@/lib/reference';
 import { FREELANCER_TIERS, RATE_UNITS, type FreelancerTier } from '@/lib/freelancers';
 import { formatMoney } from '@/lib/utils';
@@ -31,7 +31,7 @@ export default async function FreelancersPage({
   searchParams: Promise<{ q?: string; tier?: string; lang?: string; line?: string; review?: string }>;
 }) {
   const { q, tier, lang, line, review } = await searchParams;
-  const user = await requireUser();
+  const user = await requireAnyPermission('canViewFreelancerCost', 'canManageFreelancers');
   const seesCost = can(user, 'canViewFreelancerCost');
   const manages = can(user, 'canManageFreelancers');
 

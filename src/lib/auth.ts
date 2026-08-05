@@ -154,6 +154,23 @@ export function canAny(user: SessionUser, ...permissions: Permission[]): boolean
   return hasAnyPermission(user, ...permissions);
 }
 
+/**
+ * يفرض **أيًّا** من صلاحيات — يحوّل للوحة التحكم إن لم يملك واحدةً منها.
+ *
+ * لازمة للشاشات التي يبلغها أكثر من دور بطرق مختلفة: سجل الليدز يبلغه من
+ * يراها كلها ومن يرى ليدز فريقه ومن ينشئ ليدًا — وثلاثتها صلاحيات مستقلّة.
+ *
+ * **وإخفاء الرابط من القائمة ليس حجبًا**: من يعرف المسار يكتبه. الحجب يقع
+ * في الصفحة نفسها.
+ */
+export async function requireAnyPermission(
+  ...permissions: Permission[]
+): Promise<SessionUser> {
+  const user = await requireUser();
+  if (!hasAnyPermission(user, ...permissions)) redirect('/');
+  return user;
+}
+
 /** يفرض صلاحية — يحوّل للوحة التحكم إن لم يملكها */
 export async function requirePermission(permission: Permission): Promise<SessionUser> {
   const user = await requireUser();

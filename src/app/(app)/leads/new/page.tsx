@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { requireUser, can } from '@/lib/auth';
+import { can, requireAnyPermission, requireUser } from '@/lib/auth';
 import { listOptionsMany } from '@/lib/reference';
 import { PageHeader, ErrorAlert } from '@/components/ui';
 import LeadForm, { type LeadFormLists } from '@/components/lead-form';
@@ -13,7 +13,7 @@ export default async function NewLeadPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const user = await requireUser();
+  const user = await requireAnyPermission('canViewAllLeads', 'canViewTeamLeads', 'canCreateLead');
   const seeAll = can(user, 'canViewAllLeads');
 
   const [lists, users] = await Promise.all([

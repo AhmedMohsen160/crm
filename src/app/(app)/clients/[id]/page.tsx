@@ -2,7 +2,7 @@ import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { Phone, MessageCircle, Mail, Pencil, Plus } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser } from '@/lib/auth';
+import { can, requireUser } from '@/lib/auth';
 import { clientTotals } from '@/lib/clients';
 import { formatPhone, normalizePhone, whatsappLink } from '@/lib/phone';
 import { listLabel } from '@/lib/reference';
@@ -27,7 +27,17 @@ export const dynamic = 'force-dynamic';
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await requireUser();
+  const user = await requireUser();
+
+  /**
+   * **سعر البيع لا يُرسل لمن لا يملكه** (§٣ بند ٢).
+   *
+   * كانت بطاقة العميل تعرض «إجمالي مشترياته» وقيمة كل مشروع لأي مستخدم
+   * يدخل — والمترجم من هؤلاء، وهو ممنوعٌ من الأسعار بنصّ الاتفاق. والحجب
+   * هنا **في الاستعلام**: الحقل لا يُقرأ من القاعدة أصلًا، فلا يُخفى بأنماط
+   * ولا يظهر في حمولة الصفحة.
+   */
+  const showPrice = can(user, 'canViewSellPrice');
 
   const client = await db.client.findUnique({
     where: { id },
@@ -42,7 +52,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           code: true,
           title: true,
           status: true,
-          netTotal: true,
+          netTotal: showPrice,
           currency: true,
           createdAt: true,
           deadline: true,
@@ -62,8 +72,12 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
 
   const stats = [
     { label: 'مشروع', value: String(totals.dealCount) },
-    { label: 'إجمالي مشترياته', value: formatMoney(totals.totalValue) },
-    { label: 'متوسط قيمة الطلب', value: formatMoney(average) },
+    ...(showPrice
+      ? [
+          { label: 'إجمالي مشترياته', value: formatMoney(totals.totalValue) },
+          { label: 'متوسط قيمة الطلب', value: formatMoney(average) },
+        ]
+      : []),
     {
       label: 'آخر تعامل',
       value: totals.lastDealAt ? formatDate(totals.lastDealAt) : 'لا تعامل بعد',
@@ -154,7 +168,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                 <tr>
                   <th>المشروع</th>
                   <th>المرحلة</th>
-                  <th>القيمة</th>
+                  {showPrice && <th>القيمة</th>}
                   <th>التاريخ</th>
                 </tr>
               </thead>
@@ -171,7 +185,9 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                         {PROJECT_STATUSES[d.status as ProjectStatus] ?? d.status}
                       </Badge>
                     </td>
-                    <td className="nums">{formatMoney(d.netTotal, d.currency)}</td>
+                    {showPrice && (
+                      <td className="nums">{formatMoney(d.netTotal, d.currency)}</td>
+                    )}
                     <td className="whitespace-nowrap text-xs text-slate-500">
                       {formatDate(d.createdAt)}
                     </td>

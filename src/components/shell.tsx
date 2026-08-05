@@ -63,9 +63,14 @@ const NAV = [
     href: '/freelancers',
     label: 'الفريلانسرز',
     icon: Languages,
-    permission: 'canViewFreelancerCost' as const,
+    anyOf: ['canViewFreelancerCost', 'canManageFreelancers'] as const,
   },
-  { href: '/quotes', label: 'عروض الأسعار', icon: FileText },
+  {
+    href: '/quotes',
+    label: 'عروض الأسعار',
+    icon: FileText,
+    permission: 'canViewSellPrice' as const,
+  },
   {
     href: '/proposals',
     label: 'العروض الاحترافية',

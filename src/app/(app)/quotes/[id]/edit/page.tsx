@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
-import { requireUser, can, ownerFilter } from '@/lib/auth';
+import { can, ownerFilter, requirePermission, requireUser } from '@/lib/auth';
 import { PageHeader } from '@/components/ui';
 import QuoteForm from '@/components/quote-form';
 
@@ -12,7 +12,7 @@ export default async function EditQuotePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await requireUser();
+  const user = await requirePermission('canViewSellPrice');
   const seeAll = can(user, 'canViewAllLeads');
 
   const quote = await db.quote.findUnique({

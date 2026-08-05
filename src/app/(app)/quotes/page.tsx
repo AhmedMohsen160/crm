@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, FileText } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, can, ownerFilter } from '@/lib/auth';
+import { can, ownerFilter, requirePermission, requireUser } from '@/lib/auth';
 import { QUOTE_STATUSES, QUOTE_STATUS_COLORS, type QuoteStatus } from '@/lib/constants';
 import { formatMoney, formatDate, isOverdue, cn, search } from '@/lib/utils';
 import { PageHeader, Badge, Avatar, EmptyState, StatCard } from '@/components/ui';
@@ -15,7 +15,7 @@ export default async function QuotesPage({
 }: {
   searchParams: Promise<{ q?: string; status?: string; owner?: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requirePermission('canViewSellPrice');
   const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 

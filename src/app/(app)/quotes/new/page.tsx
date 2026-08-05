@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { requireUser } from '@/lib/auth';
+import { requirePermission, requireUser } from '@/lib/auth';
 import { PageHeader } from '@/components/ui';
 import QuoteForm from '@/components/quote-form';
 import type { QuoteItemData } from '@/components/quote-items-editor';
@@ -11,7 +11,7 @@ export default async function NewQuotePage({
 }: {
   searchParams: Promise<{ projectId?: string; companyId?: string; contactId?: string }>;
 }) {
-  await requireUser();
+  await requirePermission('canViewSellPrice');
   const params = await searchParams;
 
   const [deals, companies, contacts] = await Promise.all([

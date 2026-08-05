@@ -2,7 +2,7 @@ import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { Pencil, Sparkles } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, can, ownerFilter } from '@/lib/auth';
+import { can, ownerFilter, requirePermission, requireUser } from '@/lib/auth';
 import {
   QUOTE_STATUSES,
   QUOTE_STATUS_COLORS,
@@ -32,7 +32,7 @@ export default async function QuoteDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await requireUser();
+  const user = await requirePermission('canViewSellPrice');
   const seeAll = can(user, 'canViewAllLeads');
 
   const quote = await db.quote.findUnique({

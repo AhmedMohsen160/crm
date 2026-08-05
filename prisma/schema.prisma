@@ -752,6 +752,15 @@ model Lead {
   ownerId String?
   owner   User?   @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
+  /// **متقاعد** — كان «المالك الفرعي» في الملكية المزدوجة، وأُلغيت في المرحلة
+  /// ١٦ («مالكٌ واحد للصفقة: من أدخلها»). لا يقرأه كود ولا يكتبه.
+  ///
+  /// **ويبقى العمود ولا يُحذف**: بناء النشر يُحدِّث القاعدة **قبل** أن يبني
+  /// الكود، فحذفُ عمودٍ يُسقِط النسخة العاملة في اللحظة التي تُحدَّث فيها
+  /// القاعدة وقبل أن يصل الكود الجديد. العمود المتقاعد لا يكلّف شيئًا،
+  /// وحذفُه يكلّف تعطّلًا (§٩ خطر ٢).
+  coOwnerId String?
+
   tasks      Task[]
   noteItems  Note[]
   activities Activity[]
@@ -898,6 +907,10 @@ model Project {
 
   ownerId String?
   owner   User?   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// **متقاعد** — «المالك الفرعي» الملغى في المرحلة ١٦. يبقى ولا يُحذف
+  /// لنفس سبب نظيره في `Lead`.
+  coOwnerId String?
 
   tasks              Task[]
   noteItems          Note[]

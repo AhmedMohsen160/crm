@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, UserPlus, Clock } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, can, ownerFilter, branchFilter } from '@/lib/auth';
+import { branchFilter, can, ownerFilter, requireAnyPermission, requireUser } from '@/lib/auth';
 import { listOptionsMany, settingNumber } from '@/lib/reference';
 import { normalizePhone, formatPhone } from '@/lib/phone';
 import {
@@ -29,7 +29,7 @@ export default async function LeadsPage({
     unanswered?: string;
   }>;
 }) {
-  const user = await requireUser();
+  const user = await requireAnyPermission('canViewAllLeads', 'canViewTeamLeads', 'canCreateLead');
   const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 

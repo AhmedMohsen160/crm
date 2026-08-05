@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { notFound, redirect } from 'next/navigation';
 import { db } from '@/lib/db';
-import { requireUser, can } from '@/lib/auth';
+import { can, requireAnyPermission, requireUser } from '@/lib/auth';
 import { listOptionsMany, settingNumber } from '@/lib/reference';
 import { discountLimitOf } from '@/lib/pricing';
 import { DISCOUNT_TYPES } from '@/lib/projects';
@@ -30,7 +30,7 @@ export default async function ConvertLeadPage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const user = await requireUser();
+  const user = await requireAnyPermission('canViewAllLeads', 'canViewTeamLeads', 'canCreateLead');
   const seeAll = can(user, 'canViewAllLeads');
   if (!can(user, 'canConvertProject')) redirect(`/leads/${id}`);
 

@@ -1939,6 +1939,61 @@ if (draftButtons > 0) {
   check(true, 'لا مسوَّدات في الشهر — يُتخطّى فحص زر الاعتماد');
 }
 
+// ── 25. مصفوفة الوصول: كل دور وما يبلغه فعلًا ───────────────
+//
+// **إخفاء الرابط من القائمة ليس حجبًا.** هذا الاختبار يكتب المسار مباشرةً
+// بحساب كل دور، ويتحقّق أنه بلغ أو حُوِّل. وكل صفٍّ هنا قرارٌ إداري متّفق
+// عليه، فكسرُه يسقط هنا لا في وجه موظف.
+const ACCESS = [
+  // [البريد, كلمة المرور, الدور, [مسارات يبلغها], [مسارات محجوبة عنه]]
+  [
+    'accountant@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!', 'المحاسب',
+    ['/finance', '/finance/journal', '/hr', '/settings/staff-costs', '/analytics'],
+    ['/leads', '/settings/roles', '/settings/users', '/settings/system'],
+  ],
+  [
+    'tarek@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!', 'مدير المشاريع',
+    ['/production', '/freelancers', '/analytics'],
+    ['/quotes', '/finance', '/hr', '/settings/users'],
+  ],
+  [
+    'doaa@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!', 'المترجمة',
+    ['/me', '/commissions'],
+    ['/leads', '/freelancers', '/quotes', '/finance', '/hr', '/analytics', '/settings/users'],
+  ],
+];
+
+for (const [email, password, role, allowed, denied] of ACCESS) {
+  await loginAs(email, password);
+  const reachedAll = [];
+  for (const path of allowed) {
+    await page.goto('http://localhost:3000' + path, { waitUntil: 'networkidle' });
+    if (!page.url().includes(path)) reachedAll.push(path);
+  }
+  check(reachedAll.length === 0, `${role} يبلغ ما يخصّه (اختبار ٢٥)`, reachedAll.join('، '));
+
+  const leaked = [];
+  for (const path of denied) {
+    await page.goto('http://localhost:3000' + path, { waitUntil: 'networkidle' });
+    if (page.url().includes(path)) leaked.push(path);
+  }
+  check(leaked.length === 0, `★ و${role} محجوب عمّا لا يخصّه`, leaked.join('، '));
+}
+
+// **سعر البيع لا يصل بطاقة العميل** لمن لا يملكه
+await loginAs('doaa@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/projects');
+const anyProject = await page.locator('a[href^="/projects/"]').first();
+if (await anyProject.count()) {
+  await go((await anyProject.getAttribute('href')) ?? '/projects');
+  const html = await page.content();
+  check(!html.includes('إجمالي المشروع'), '★ والمترجمة لا يصلها سعر بيع في حمولة الصفحة');
+} else {
+  check(true, 'لا مشاريع في نطاق المترجمة — وهو المتوقَّع');
+}
+
+await loginAs('admin@fasttrans.local');
+
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
 await go('/projects', '12-mobile');

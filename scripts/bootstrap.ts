@@ -32,6 +32,8 @@ const FOUNDING_TEAM: {
   branch: string | null;
   reportsTo: string | null;
   jobTitle: string;
+  /** يظهر في قائمة الإسناد منفِّذًا أو مراجعًا */
+  isProducer?: boolean;
 }[] = [
   {
     key: 'magly',
@@ -80,6 +82,54 @@ const FOUNDING_TEAM: {
     branch: 'nasr_city',
     reportsTo: null,
     jobTitle: 'مدير مبيعات — مدينة نصر',
+  },
+
+  /**
+   * **أدوارٌ بلا شاغل لا تُجرَّب.**
+   *
+   * كانت الأدوار العشرة موجودة ولا يشغل منها أحدٌ إلا المبيعات، فمن أراد أن
+   * يرى ما يراه المحاسب أو مدير المشاريع أو المترجم لم يجد حسابًا يدخل به.
+   * وهؤلاء أسماؤهم ومسمياتهم من كشف رواتب المكتب نفسه لا مخترَعة.
+   *
+   * وكغيرهم: يُنشَؤون **مرة واحدة** بكلمة مرور مؤقّتة، ولا يُلمسون بعدها.
+   */
+  {
+    key: 'owner',
+    name: 'أحمد محسن',
+    email: 'owner@fasttrans.local',
+    role: 'owner',
+    branch: null,
+    reportsTo: null,
+    jobTitle: 'المالك الرئيسي',
+  },
+  {
+    key: 'accountant',
+    name: 'عبد الرحمن ممدوح',
+    email: 'accountant@fasttrans.local',
+    role: 'finance',
+    branch: null,
+    reportsTo: null,
+    jobTitle: 'محاسب',
+  },
+  {
+    key: 'tarek',
+    name: 'طارق يوسف',
+    email: 'tarek@fasttrans.local',
+    role: 'project_manager',
+    branch: 'mokattam',
+    reportsTo: null,
+    jobTitle: 'مدير المشاريع',
+  },
+  {
+    // المترجم يدخل ليرى أداءه هو — ودورُه بلا صلاحية واحدة عن قصد
+    key: 'doaa',
+    name: 'دعاء محمد',
+    email: 'doaa@fasttrans.local',
+    role: 'translator',
+    branch: 'mokattam',
+    reportsTo: 'tarek',
+    jobTitle: 'مترجمة',
+    isProducer: true,
   },
 ];
 
@@ -227,6 +277,7 @@ async function seedFoundingTeam() {
         roleId,
         branch: member.branch,
         jobTitle: member.jobTitle,
+        isProducer: member.isProducer ?? false,
       },
     });
     ids.set(member.key, user.id);

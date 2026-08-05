@@ -3,7 +3,7 @@ import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { Pencil, ArrowRightLeft, Mail, Phone, ArrowRight } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, can } from '@/lib/auth';
+import { can, requireAnyPermission, requireUser } from '@/lib/auth';
 import { listLabel } from '@/lib/reference';
 import { formatPhone, normalizePhone, whatsappLink } from '@/lib/phone';
 import {
@@ -31,7 +31,7 @@ export default async function LeadDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await requireUser();
+  const user = await requireAnyPermission('canViewAllLeads', 'canViewTeamLeads', 'canCreateLead');
   const seeAll = can(user, 'canViewAllLeads');
 
   const lead = await db.lead.findUnique({
