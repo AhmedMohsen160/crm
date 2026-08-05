@@ -4,6 +4,7 @@ import { normalizePhone } from './phone';
 import { nextClientCode } from './sequence';
 import { search } from './utils';
 import { REVENUE_FILTER } from './projects';
+import { clientSegment, sortClients, type ClientSegment } from './client-segments';
 import type { SessionUser } from './auth';
 
 /**
@@ -118,6 +119,186 @@ export async function searchClients(
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
+}
+
+// ── سجل عملاء الفريق ───────────────────────────────────────────
+
+export type TeamClientRow = {
+  id: string;
+  code: string | null;
+  name: string;
+  phone: string;
+  type: string;
+  companyName: string | null;
+  city: string | null;
+  /** أدمن المبيعات صاحب آخر مشروع لهذا العميل */
+  adminName: string | null;
+  dealCount: number;
+  /** صفر لمن لا يملك صلاحية رؤية السعر — ولا يُقرأ من القاعدة أصلًا */
+  totalValue: number;
+  lastDealAt: Date | null;
+  segment: ClientSegment;
+};
+
+/**
+ * عملاء الفريق — **بمن باع لهم لا بمن أنشأ سجلّهم**.
+ *
+ * كان سجل العملاء يُرشَّح بـ`Client.ownerId`، وهو **مَن كتب البطاقة**. وبيانات
+ * المكتب استُوردت دفعةً واحدة فحملت البطاقات كلها اسم المستورد — فكان مدير
+ * المبيعات يفتح الشاشة فلا يجد أحدًا، وفريقه قد باع لستّةٍ وستين عميلًا.
+ *
+ * والقاعدة الصحيحة: **العميل يتبع من أتمّ معه بيعًا.** فالنطاق هنا اتحاد
+ * مجموعتين — من له مشروع يملكه أحد الفريق، ومن أنشأ الفريق بطاقته ولم يشترِ
+ * بعد (فلا يختفي العميل الجديد في اليوم الذي أُضيف فيه).
+ *
+ * **والترشيح كلّه في الخادم** (§٣ بند ٢): من لا يملك رؤية السعر لا يُجمَع له
+ * مبلغ ولا يُرسَل إليه.
+ */
+export async function teamClients(opts: {
+  /** المستخدمون الذين تدخل سجلاتهم في نطاق الرؤية — null يعني كل الشركة */
+  ownerIds: string[] | null;
+  /** ترشيح على أدمن بعينه من داخل النطاق */
+  adminId?: string | null;
+  from?: Date | null;
+  to?: Date | null;
+  branch?: string | null;
+  type?: string | null;
+  segment?: string | null;
+  term?: string | null;
+  sort?: string | null;
+  showValue: boolean;
+  limit?: number;
+  now?: Date;
+}): Promise<{ rows: TeamClientRow[]; total: number }> {
+  const now = opts.now ?? new Date();
+  const limit = opts.limit ?? 200;
+
+  // الأدمن المختار لا يُوسّع النطاق أبدًا — يضيّقه داخله
+  const scoped =
+    opts.adminId && (opts.ownerIds === null || opts.ownerIds.includes(opts.adminId))
+      ? [opts.adminId]
+      : opts.ownerIds;
+
+  const dateFilter =
+    opts.from || opts.to
+      ? { createdAt: { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lt: opts.to } : {}) } }
+      : {};
+
+  const projectWhere = {
+    clientId: { not: null },
+    ...(scoped ? { ownerId: { in: scoped } } : {}),
+    ...(opts.branch ? { branch: opts.branch } : {}),
+    ...dateFilter,
+  };
+
+  const [all, earned, owned] = await Promise.all([
+    db.project.groupBy({
+      by: ['clientId'],
+      where: projectWhere,
+      _count: { _all: true },
+      _max: { createdAt: true },
+    }),
+    opts.showValue
+      ? db.project.groupBy({
+          by: ['clientId'],
+          where: { ...projectWhere, ...REVENUE_FILTER },
+          _sum: { netTotal: true },
+        })
+      : Promise.resolve([] as { clientId: string | null; _sum: { netTotal: number | null } }[]),
+    // من أنشأ الفريق بطاقته ولم يشترِ بعد
+    db.client.findMany({
+      where: { ...(scoped ? { ownerId: { in: scoped } } : {}), ...dateFilter },
+      select: { id: true },
+      take: 2000,
+    }),
+  ]);
+
+  const counts = new Map<string, { deals: number; last: Date | null }>();
+  for (const row of all) {
+    if (row.clientId) counts.set(row.clientId, { deals: row._count._all, last: row._max.createdAt });
+  }
+  const values = new Map<string, number>();
+  for (const row of earned) {
+    if (row.clientId) values.set(row.clientId, row._sum.netTotal ?? 0);
+  }
+
+  const ids = [...new Set([...counts.keys(), ...owned.map((o) => o.id)])];
+  if (ids.length === 0) return { rows: [], total: 0 };
+
+  const conditions: Record<string, unknown>[] = [];
+  const term = (opts.term ?? '').trim();
+  if (term) {
+    const { value, ok } = normalizePhone(term);
+    if (ok) conditions.push({ phoneNormalized: value }, { phoneAltNormalized: value });
+    conditions.push(
+      { name: search(term) },
+      { code: search(term) },
+      { companyName: search(term) }
+    );
+  }
+
+  const clients = await db.client.findMany({
+    where: {
+      id: { in: ids },
+      ...(opts.type ? { type: opts.type } : {}),
+      ...(conditions.length ? { OR: conditions } : {}),
+    },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      phone: true,
+      type: true,
+      companyName: true,
+      city: true,
+    },
+    take: 2000,
+  });
+
+  const enriched = clients.map((c) => {
+    const stat = counts.get(c.id);
+    const lastDealAt = stat?.last ?? null;
+    const dealCount = stat?.deals ?? 0;
+    return {
+      ...c,
+      adminName: null as string | null,
+      dealCount,
+      totalValue: values.get(c.id) ?? 0,
+      lastDealAt,
+      segment: clientSegment({ dealCount, lastDealAt }, now),
+    };
+  });
+
+  const filtered = opts.segment
+    ? enriched.filter((c) => c.segment === opts.segment)
+    : enriched;
+
+  const sorted = sortClients(filtered, opts.sort ?? undefined);
+  const page = sorted.slice(0, limit);
+
+  // أدمن المبيعات = مالك آخر مشروع. يُقرأ للصفحة المعروضة وحدها
+  if (page.length > 0) {
+    const recent = await db.project.findMany({
+      where: { ...projectWhere, clientId: { in: page.map((c) => c.id) } },
+      select: { clientId: true, ownerId: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    const latest = new Map<string, string>();
+    for (const p of recent) {
+      if (p.clientId && p.ownerId && !latest.has(p.clientId)) latest.set(p.clientId, p.ownerId);
+    }
+    const owners = await db.user.findMany({
+      where: { id: { in: [...new Set(latest.values())] } },
+      select: { id: true, name: true },
+    });
+    const nameOf = new Map(owners.map((u) => [u.id, u.name]));
+    for (const row of page) {
+      const ownerId = latest.get(row.id);
+      row.adminName = ownerId ? (nameOf.get(ownerId) ?? null) : null;
+    }
+  }
+
+  return { rows: page, total: sorted.length };
 }
 
 export class DuplicateClientError extends Error {

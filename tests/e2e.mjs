@@ -2021,6 +2021,98 @@ if (await anyProject.count()) {
   check(true, 'لا مشاريع في نطاق المترجمة — وهو المتوقَّع');
 }
 
+// ── 26. سجل العملاء: العميل يتبع من باع له ──────────────────
+//
+// **الاختبار الذي يفحص الشكوى نفسها.** مدير المبيعات كان يفتح الشاشة فلا
+// يجد أحدًا، وفريقه قد باع لعشرات — لأن الترشيح كان على من كتب البطاقة لا
+// على من أتمّ البيع. فهنا نُسجّل الدخول بحسابه ونعدّ ما يراه فعلًا.
+
+await loginAs('magly@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/clients', '26-clients-team');
+
+const clientsText = await page.locator('body').innerText();
+check(
+  clientsText.includes('عملاء فريقك'),
+  'سجل العملاء يقول لمدير المبيعات إن النطاق نطاق فريقه (اختبار ٢٦)'
+);
+
+const teamRows = await page.locator('table tbody tr').count();
+check(
+  teamRows > 0,
+  `★ **ويجد عملاء فريقه فعلًا** — ${teamRows} صفًّا، وكان يجد صفرًا حين كان الترشيح على من كتب البطاقة`
+);
+
+check(
+  clientsText.includes('التصنيف') && clientsText.includes('أدمن المبيعات'),
+  'والصف يحمل التصنيف وأدمن المبيعات — بلا فتح بطاقة'
+);
+check(
+  clientsText.includes('متكرّر') || clientsText.includes('متوقّف') || clientsText.includes('عميل جديد'),
+  'والتصنيف مكتوب بالعربية في الصفوف'
+);
+
+// الفلترة بالأدمن — كانت محجوبة عن مدير الفريق
+const adminOptions = await page.evaluate(() =>
+  [...document.querySelectorAll('select[name=admin] option')].map((o) => o.textContent?.trim())
+);
+check(
+  adminOptions.length > 1,
+  `★ **ويستطيع الفلترة حسب الأدمن** — ${adminOptions.length - 1} من فريقه في القائمة`
+);
+check(
+  await page.locator('select[name=period]').count() === 1 &&
+    await page.locator('select[name=segment]').count() === 1,
+  'وفلترة بالفترة وبالتصنيف'
+);
+
+// الفلترة تضيّق النطاق ولا توسّعه — ولا تُفرغه
+const adminIds = await page.evaluate(() =>
+  [...document.querySelectorAll('select[name=admin] option')].map((o) => o.value).filter(Boolean)
+);
+let perAdmin = 0;
+let bestAdmin = 0;
+for (const adminId of adminIds) {
+  await go(`/clients?admin=${adminId}`);
+  const n = await page.locator('table tbody tr').count();
+  perAdmin += n;
+  bestAdmin = Math.max(bestAdmin, n);
+  check(n <= teamRows, `واختيار أدمن بعينه يضيّق لا يوسّع (${n} من ${teamRows})`);
+}
+check(
+  bestAdmin > 0,
+  `★ **وأحد أفراد فريقه على الأقل له عملاؤه** — أكبرهم ${bestAdmin} عميلًا`
+);
+check(
+  perAdmin <= teamRows,
+  `ومجموع ما تحت الأفراد لا يتجاوز مجموع الفريق (${perAdmin} من ${teamRows})`
+);
+
+// ومن خارج فريقه لا يوسّع النطاق ولو كتب معرّفه في العنوان
+await go('/clients?admin=%D9%84%D8%A7-%D8%A3%D8%AD%D8%AF');
+check(
+  (await page.locator('table tbody tr').count()) <= teamRows,
+  '★ ومعرّفٌ من خارج فريقه في العنوان لا يفتح له شيئًا — الترشيح في الخادم'
+);
+
+// البحث الفوري: يكتب فيتغيّر الجدول بلا ضغط «إدخال» وبلا إعادة بناء الصفحة
+await go('/clients');
+await page.evaluate(() => {
+  window.__clientsMark = 'alive';
+});
+await page.fill('input[name=q]', 'ا');
+await page.waitForTimeout(1200);
+check(
+  (await page.evaluate(() => window.__clientsMark)) === 'alive',
+  'والبحث فوريّ بلا ضغط «إدخال» وبلا إعادة بناء الصفحة'
+);
+
+// وفلترة المشاريع بالأدمن صارت متاحة لمدير الفريق كذلك
+await go('/projects?view=list');
+check(
+  (await page.locator('select[name=owner]').count()) === 1,
+  '★ وفلترة المشاريع حسب الموظف صارت حقًّا لمدير الفريق لا لصاحب رؤية الشركة وحده'
+);
+
 await loginAs('admin@fasttrans.local');
 
 // ── 12. عرض الجوال ──────────────────────────────────────────

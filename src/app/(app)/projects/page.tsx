@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, LayoutGrid, List, Briefcase, AlertTriangle } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, can, ownerFilter, branchFilter } from '@/lib/auth';
+import { requireUser, can, ownerFilter, branchFilter, visibleUserIds } from '@/lib/auth';
 import { listOptionsMany } from '@/lib/reference';
 import {
   PROJECT_STATUSES,
@@ -42,14 +42,25 @@ export default async function ProjectsPage({
   const params = await searchParams;
   const view = params.view === 'list' ? 'list' : 'board';
 
-  const [scope, branchScope, lists] = await Promise.all([
+  const [scope, branchScope, lists, visibleIds] = await Promise.all([
     ownerFilter(user),
     branchFilter(user),
     listOptionsMany('service_line', 'branch'),
+    visibleUserIds(user),
   ]);
 
+  /**
+   * **الفلترة بالموظف حقُّ كل من يرى أكثر من شخص**، لا صاحب رؤية الشركة وحده.
+   * كان الشرط `seeAll` فيُحرم مديرُ المبيعات من أن يسأل «ماذا فعل هذا الأدمن
+   * بالذات؟» وهو أول أسئلته. والقائمة لا تحمل إلا من يراهم فعلًا، والاختيار
+   * يُتحقَّق منه في الخادم فلا يُوسّع النطاق أحدٌ بتحرير العنوان.
+   */
+  const canFilterByOwner = visibleIds === null || visibleIds.length > 1;
+
   const where: Record<string, unknown> = { ...scope, ...branchScope };
-  if (seeAll && params.owner) where.ownerId = params.owner;
+  if (params.owner && (visibleIds === null || visibleIds.includes(params.owner))) {
+    where.ownerId = params.owner;
+  }
   if (params.status) where.status = params.status;
   if (params.service) where.serviceLine = params.service;
   if (params.branch) where.branch = params.branch;
@@ -73,9 +84,9 @@ export default async function ProjectsPage({
       orderBy: [{ deadline: 'asc' }, { updatedAt: 'desc' }],
       take: 500,
     }),
-    seeAll
+    canFilterByOwner
       ? db.user.findMany({
-          where: { active: true },
+          where: { active: true, ...(visibleIds ? { id: { in: visibleIds } } : {}) },
           select: { id: true, name: true },
           orderBy: { name: 'asc' },
         })
@@ -224,20 +235,20 @@ export default async function ProjectsPage({
             options={lists.service_line.map((s) => ({ value: s.value, label: s.label }))}
           />
           {seeAll && (
-            <>
-              <FilterSelect
-                name="branch"
-                defaultValue={params.branch}
-                placeholder="كل الفروع"
-                options={lists.branch.map((b) => ({ value: b.value, label: b.label }))}
-              />
-              <FilterSelect
-                name="owner"
-                defaultValue={params.owner}
-                placeholder="كل الموظفين"
-                options={users.map((u) => ({ value: u.id, label: u.name }))}
-              />
-            </>
+            <FilterSelect
+              name="branch"
+              defaultValue={params.branch}
+              placeholder="كل الفروع"
+              options={lists.branch.map((b) => ({ value: b.value, label: b.label }))}
+            />
+          )}
+          {canFilterByOwner && (
+            <FilterSelect
+              name="owner"
+              defaultValue={params.owner}
+              placeholder={seeAll ? 'كل الموظفين' : 'كل الفريق'}
+              options={users.map((u) => ({ value: u.id, label: u.name }))}
+            />
           )}
         </FilterBar>
       </div>
@@ -260,7 +271,7 @@ export default async function ProjectsPage({
           </p>
           <PipelineBoard
             projects={boardProjects}
-            showOwner={seeAll}
+            showOwner={canFilterByOwner}
             redirectTo={`/projects?${boardQs.toString()}`}
             columns={PROJECT_FLOW}
           />
@@ -277,7 +288,7 @@ export default async function ProjectsPage({
                 {showPrice && <th>الإجمالي</th>}
                 {showPrice && <th>المتبقي</th>}
                 <th>الموعد</th>
-                {seeAll && <th>المسؤول</th>}
+                {canFilterByOwner && <th>المسؤول</th>}
               </tr>
             </thead>
             <tbody>
@@ -324,7 +335,7 @@ export default async function ProjectsPage({
                   >
                     {p.deadline ? formatDate(p.deadline) : '—'}
                   </td>
-                  {seeAll && (
+                  {canFilterByOwner && (
                     <td>
                       {p.owner ? (
                         <span className="flex items-center gap-2">

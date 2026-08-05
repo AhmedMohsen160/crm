@@ -1,7 +1,13 @@
 import Link from '@/components/link';
 import { Plus, UserPlus, Clock } from 'lucide-react';
 import { db } from '@/lib/db';
-import { branchFilter, can, ownerFilter, requireAnyPermission, requireUser } from '@/lib/auth';
+import {
+  branchFilter,
+  can,
+  ownerFilter,
+  requireAnyPermission,
+  visibleUserIds,
+} from '@/lib/auth';
 import { listOptionsMany, settingNumber } from '@/lib/reference';
 import { normalizePhone, formatPhone } from '@/lib/phone';
 import {
@@ -34,15 +40,21 @@ export default async function LeadsPage({
   const params = await searchParams;
 
   // النطاق أولًا — الفريق أو الذات أو الكل، ثم الفرع فوقه
-  const [scope, branchScope, lists, slaHours] = await Promise.all([
+  const [scope, branchScope, lists, slaHours, visibleIds] = await Promise.all([
     ownerFilter(user),
     branchFilter(user),
     listOptionsMany('channel', 'branch'),
     settingNumber('sla_first_reply_hours'),
+    visibleUserIds(user),
   ]);
 
+  // الفلترة بالموظف حقُّ كل من يرى أكثر من شخص — لا صاحب رؤية الشركة وحده
+  const canFilterByOwner = visibleIds === null || visibleIds.length > 1;
+
   const where: Record<string, unknown> = { ...scope, ...branchScope };
-  if (seeAll && params.owner) where.ownerId = params.owner;
+  if (params.owner && (visibleIds === null || visibleIds.includes(params.owner))) {
+    where.ownerId = params.owner;
+  }
   if (params.status) where.status = params.status;
   if (params.channel) where.channel = params.channel;
   if (params.branch) where.branch = params.branch;
@@ -81,8 +93,12 @@ export default async function LeadsPage({
       orderBy: { createdAt: 'desc' },
       take: 200,
     }),
-    seeAll
-      ? db.user.findMany({ where: { active: true }, select: { id: true, name: true } })
+    canFilterByOwner
+      ? db.user.findMany({
+          where: { active: true, ...(visibleIds ? { id: { in: visibleIds } } : {}) },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        })
       : Promise.resolve([] as { id: string; name: string }[]),
     db.lead.groupBy({ by: ['status'], where: scopeOnly, _count: { _all: true } }),
     db.lead.count({
@@ -155,20 +171,20 @@ export default async function LeadsPage({
             options={lists.channel.map((c) => ({ value: c.value, label: c.label }))}
           />
           {seeAll && (
-            <>
-              <FilterSelect
-                name="branch"
-                defaultValue={params.branch}
-                placeholder="كل الفروع"
-                options={lists.branch.map((b) => ({ value: b.value, label: b.label }))}
-              />
-              <FilterSelect
-                name="owner"
-                defaultValue={params.owner}
-                placeholder="كل الموظفين"
-                options={users.map((u) => ({ value: u.id, label: u.name }))}
-              />
-            </>
+            <FilterSelect
+              name="branch"
+              defaultValue={params.branch}
+              placeholder="كل الفروع"
+              options={lists.branch.map((b) => ({ value: b.value, label: b.label }))}
+            />
+          )}
+          {canFilterByOwner && (
+            <FilterSelect
+              name="owner"
+              defaultValue={params.owner}
+              placeholder={seeAll ? 'كل الموظفين' : 'كل الفريق'}
+              options={users.map((u) => ({ value: u.id, label: u.name }))}
+            />
           )}
         </FilterBar>
 
@@ -191,7 +207,7 @@ export default async function LeadsPage({
                   <th>المرحلة</th>
                   <th>القناة</th>
                   <th>القيمة المتوقعة</th>
-                  {seeAll && <th>المسؤول</th>}
+                  {canFilterByOwner && <th>المسؤول</th>}
                   <th>وصل في</th>
                 </tr>
               </thead>
@@ -236,7 +252,7 @@ export default async function LeadsPage({
                       <td className="nums font-medium">
                         {lead.estimatedValue ? formatMoney(lead.estimatedValue) : '—'}
                       </td>
-                      {seeAll && (
+                      {canFilterByOwner && (
                         <td>
                           {lead.owner ? (
                             <span className="flex items-center gap-2">
