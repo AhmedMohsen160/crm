@@ -1,7 +1,8 @@
 import Link from '@/components/link';
-import { Plus, CheckCircle2, BookOpen } from 'lucide-react';
+import { Plus, CheckCircle2, BookOpen, Check } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/auth';
+import { listOptions } from '@/lib/reference';
 import { DOCUMENT_TYPES, ENTRY_STATUSES, fiscalMonth, fiscalMonthLabel } from '@/lib/accounting';
 import { formatMoney, formatDate } from '@/lib/utils';
 import { PageHeader, Badge, EmptyState, ErrorAlert } from '@/components/ui';
@@ -23,8 +24,20 @@ const SOURCE_LABEL: Record<string, string> = {
   'freelancerPayment.paid': 'صرف مستحق فريلانسر',
   'commission.period': 'استحقاق عمولات',
   'depreciation.period': 'إهلاك أصول',
+  accounting_import: 'مُرحَّل من دفتر المحاسب',
 };
 
+/**
+ * دفتر اليومية.
+ *
+ * **الصف يُغني عن فتحه.** المحاسب يراجع عشرات القيود في الجلسة الواحدة، وكل
+ * قيد كان يلزمه فتحُ بطاقته ليعرف عميلَه وأدمنَ مبيعاته وحسابَيه. فصار الصف
+ * يحمل ما يُبنى عليه القرار: **من أي حساب إلى أي حساب**، ولأي عميل ومشروع،
+ * وعلى يد من، وفي أي فرع. والتفصيل الكامل خلف اسم المشروع لمن أراده.
+ *
+ * **وزر الاعتماد في الصف** — لأن ترحيل ثلاثين قيدًا لا يحتمل ثلاثين رحلة
+ * ذهابًا وإيابًا. والعودة إلى القائمة بشهرها لا إلى بطاقة القيد.
+ */
 export default async function JournalPage({
   searchParams,
 }: {
@@ -54,12 +67,30 @@ export default async function JournalPage({
       : {}),
   };
 
-  const [entries, closed, counts] = await Promise.all([
+  const [entries, closed, counts, branches] = await Promise.all([
     db.journalEntry.findMany({
       where,
       include: {
-        lines: { select: { debitBase: true, creditBase: true } },
-        createdBy: { select: { name: true } },
+        lines: {
+          select: {
+            debitBase: true,
+            creditBase: true,
+            branch: true,
+            account: { select: { name: true } },
+            salesAdmin: { select: { name: true } },
+            costCenter: { select: { project: true } },
+          },
+          orderBy: { sortOrder: 'asc' },
+        },
+        project: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            client: { select: { name: true } },
+            owner: { select: { name: true } },
+          },
+        },
         postedBy: { select: { name: true } },
       },
       orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
@@ -67,15 +98,18 @@ export default async function JournalPage({
     }),
     db.fiscalPeriod.findUnique({ where: { period } }),
     db.journalEntry.groupBy({ by: ['status'], where: { period }, _count: true }),
+    listOptions('branch'),
   ]);
 
   const countOf = (key: string) => counts.find((c) => c.status === key)?._count ?? 0;
+  const branchLabel = new Map(branches.map((b) => [b.value, b.label]));
+  const drafts = countOf('draft');
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="mx-auto max-w-7xl space-y-4">
       <PageHeader
         title="دفتر اليومية"
-        subtitle={`${fiscalMonthLabel(period)} — ${countOf('draft')} مسوَّدة · ${countOf('posted')} مرحَّل`}
+        subtitle={`${fiscalMonthLabel(period)} — ${drafts} مسوَّدة · ${countOf('posted')} مرحَّل`}
       >
         {!closed?.closedAt && (
           <Link href={`/finance/journal/new?period=${period}`} className="btn-primary">
@@ -128,52 +162,142 @@ export default async function JournalPage({
         </div>
       ) : (
         <div className="card table-wrap">
-          <table className="tbl">
+          <table className="tbl tbl-wide">
             <thead>
               <tr>
-                <th>الرقم</th>
                 <th>التاريخ</th>
-                <th>البيان</th>
+                <th>البيان والحسابان</th>
+                <th>العميل والمشروع</th>
+                <th>أدمن المبيعات</th>
+                <th>الفرع</th>
                 <th>المبلغ</th>
                 <th>الحال</th>
+                <th className="text-left">الإجراء</th>
               </tr>
             </thead>
             <tbody>
               {entries.map((entry) => {
                 const total = entry.lines.reduce((s, l) => s + l.debitBase, 0);
+                // الحسابان الغالبان: أكبر سطر مدين وأكبر سطر دائن
+                const debit = [...entry.lines]
+                  .filter((l) => l.debitBase > 0)
+                  .sort((a, b) => b.debitBase - a.debitBase)[0];
+                const credit = [...entry.lines]
+                  .filter((l) => l.creditBase > 0)
+                  .sort((a, b) => b.creditBase - a.creditBase)[0];
+
+                // من حصّل: أدمن السطر، وإلا مالك المشروع
+                const admin =
+                  entry.lines.find((l) => l.salesAdmin)?.salesAdmin?.name ??
+                  entry.project?.owner?.name ??
+                  null;
+                const branch = entry.lines.find((l) => l.branch)?.branch ?? null;
+                const centre = entry.lines.find((l) => l.costCenter?.project)?.costCenter?.project;
+
                 return (
                   <tr key={entry.id} className={entry.status === 'void' ? 'opacity-50' : undefined}>
-                    <td className="whitespace-nowrap text-xs text-slate-400" dir="ltr">
-                      {entry.code}
-                    </td>
                     <td className="whitespace-nowrap text-sm text-slate-600">
                       {formatDate(entry.date)}
+                      <span className="block text-[11px] text-slate-400" dir="ltr">
+                        {entry.code}
+                      </span>
                     </td>
-                    <td>
+
+                    <td className="min-w-[16rem]">
                       <Link href={`/finance/journal/${entry.id}`} className="link">
                         {entry.description}
                       </Link>
+                      {(debit || credit) && (
+                        <span className="mt-0.5 block text-xs text-slate-500">
+                          {debit?.account.name ?? '—'}
+                          <span className="mx-1 text-slate-300">←</span>
+                          {credit?.account.name ?? '—'}
+                        </span>
+                      )}
                       {entry.sourceType && (
-                        <span className="block text-xs text-brand-600">
+                        <span className="block text-[11px] text-brand-600">
                           مقترح آليًا · {SOURCE_LABEL[entry.sourceType] ?? entry.sourceType}
                         </span>
                       )}
                       {entry.docNumber && (
-                        <span className="block text-xs text-slate-400">
-                          {DOCUMENT_TYPES[entry.docType as keyof typeof DOCUMENT_TYPES] ?? entry.docType}{' '}
+                        <span className="block text-[11px] text-slate-400">
+                          {DOCUMENT_TYPES[entry.docType as keyof typeof DOCUMENT_TYPES] ??
+                            entry.docType}{' '}
                           {entry.docNumber}
                         </span>
                       )}
                     </td>
-                    <td className="nums font-medium">{formatMoney(total)}</td>
+
+                    <td className="text-sm">
+                      {entry.project ? (
+                        <>
+                          <span className="block text-slate-800">
+                            {entry.project.client?.name ?? '—'}
+                          </span>
+                          {/* التفصيل خلف المشروع — لمن أراد أكثر مما في الصف */}
+                          <Link
+                            href={`/projects/${entry.project.id}`}
+                            className="link block text-xs"
+                          >
+                            {entry.project.code} · {entry.project.title}
+                          </Link>
+                        </>
+                      ) : centre ? (
+                        <span className="text-xs text-slate-500">{centre}</span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+
+                    <td className="whitespace-nowrap text-sm text-slate-700">
+                      {admin ?? <span className="text-slate-300">—</span>}
+                    </td>
+
+                    <td className="whitespace-nowrap text-sm text-slate-600">
+                      {branch ? (branchLabel.get(branch) ?? branch) : <span className="text-slate-300">—</span>}
+                    </td>
+
+                    <td className="nums font-semibold">{formatMoney(total)}</td>
+
                     <td>
                       <Badge className={STATUS_STYLE[entry.status] ?? STATUS_STYLE.draft}>
                         {ENTRY_STATUSES[entry.status as keyof typeof ENTRY_STATUSES] ?? entry.status}
                       </Badge>
                       {entry.postedBy && entry.status === 'posted' && (
-                        <span className="block text-xs text-slate-400">
+                        <span className="block text-[11px] text-slate-400">
                           رحّله {entry.postedBy.name}
                         </span>
+                      )}
+                    </td>
+
+                    <td className="text-left">
+                      {entry.status === 'draft' && !closed?.closedAt ? (
+                        <form method="post" action="/api/save" className="inline">
+                          <input type="hidden" name="entity" value="journalEntry.decide" />
+                          <input type="hidden" name="id" value={entry.id} />
+                          <input type="hidden" name="action" value="post" />
+                          <input type="hidden" name="stay" value="1" />
+                          <input type="hidden" name="period" value={period} />
+                          <input
+                            type="hidden"
+                            name="back"
+                            value={`/finance/journal?period=${period}`}
+                          />
+                          <button
+                            type="submit"
+                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            اعتماد وترحيل
+                          </button>
+                        </form>
+                      ) : (
+                        <Link
+                          href={`/finance/journal/${entry.id}`}
+                          className="btn-secondary whitespace-nowrap px-2.5 py-1.5 text-xs"
+                        >
+                          فتح
+                        </Link>
                       )}
                     </td>
                   </tr>
@@ -182,6 +306,13 @@ export default async function JournalPage({
             </tbody>
           </table>
         </div>
+      )}
+
+      {drafts > 0 && !closed?.closedAt && (
+        <p className="text-xs text-slate-400">
+          الاعتماد يُرحّل القيد ويُبقيك في القائمة. والقيد المرحَّل{' '}
+          <b>لا يُعدَّل ولا يُحذف</b> — يُصحَّح بقيد مضادّ من بطاقته.
+        </p>
       )}
     </div>
   );

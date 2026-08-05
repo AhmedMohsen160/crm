@@ -58,7 +58,7 @@ export default async function ClientsPage({
 
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title="العملاء" subtitle="ابحث بالهاتف أو الاسم أو رقم العميل — بلا ضغط إدخال">
+      <PageHeader title="العملاء" subtitle="ابحث بالهاتف أو الاسم أو رقم العميل">
         <Link href="/clients/new" className="btn-primary">
           <Plus className="h-4 w-4" />
           عميل جديد

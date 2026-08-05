@@ -192,12 +192,6 @@ export default function AssignForm({
         <h2 className="section-title">
           {machineMode ? '١ · من شغّل الذكاء الاصطناعي' : `من ينفّذ: ${role}`}
         </h2>
-        {machineMode && (
-          <p className="rounded-lg bg-marine-400/10 px-4 py-2.5 text-sm text-slate-600">
-            في نمط الآلة <b>خطوتان لا واحدة</b>: من شغّل الترجمة الآليّة، ثم من راجعها
-            بشريًّا. وكانت الشاشة تسأل عن مراجعٍ مرتين ولا تسأل عن مشغّل الآلة أصلًا.
-          </p>
-        )}
 
         {wantsInternal && (
           <div>

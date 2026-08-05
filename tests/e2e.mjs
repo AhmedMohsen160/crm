@@ -1916,6 +1916,29 @@ check(await notReached('/hr/employees/new'), 'ولا يعيّن موظفًا —
 
 await loginAs('admin@fasttrans.local');
 
+// ── 24. دفتر اليومية: الصف يُغني عن فتحه ────────────────────
+await go('/finance/journal', '24-journal');
+const journalText = await page.locator('body').innerText();
+check(
+  journalText.includes('البيان والحسابان') && journalText.includes('أدمن المبيعات'),
+  'دفتر اليومية يعرض الحسابين والعميل وأدمن المبيعات في الصف (اختبار ٢٤)'
+);
+const draftButtons = await page.locator('main button:has-text("اعتماد وترحيل")').count();
+if (draftButtons > 0) {
+  await page.locator('main button:has-text("اعتماد وترحيل")').first().click();
+  await page.waitForLoadState('networkidle');
+  check(
+    page.url().includes('/finance/journal') && !page.url().match(/journal\/[a-z0-9]{10,}/),
+    'وزر الاعتماد يُرحّل من القائمة ويُبقي المحاسب فيها'
+  );
+  check(
+    (await page.locator('main button:has-text("اعتماد وترحيل")').count()) === draftButtons - 1,
+    `ونقص المسوَّدات بواحد (${draftButtons} ← ${draftButtons - 1})`
+  );
+} else {
+  check(true, 'لا مسوَّدات في الشهر — يُتخطّى فحص زر الاعتماد');
+}
+
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
 await go('/projects', '12-mobile');

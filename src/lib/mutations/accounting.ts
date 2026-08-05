@@ -304,6 +304,16 @@ export async function decideJournalEntry(fd: FormData, user: SessionUser, id?: s
     throw new MutationError(error instanceof Error ? error.message : 'تعذّر تنفيذ الإجراء');
   }
 
+  /**
+   * **الترحيل من القائمة يُبقي المحاسب في القائمة.**
+   *
+   * قيود الشهر تُرحَّل واحدًا بعد واحد؛ والعودة إلى بطاقة كل قيد تعني رحلةً
+   * ذهابًا وإيابًا لكل سطر. فمن ضغط الزر في القائمة يعود إليها بشهره.
+   */
+  const period = str(fd, 'period');
+  if (str(fd, 'stay') === '1' && period) {
+    return `/finance/journal?period=${period}`;
+  }
   return `/finance/journal/${id}`;
 }
 
