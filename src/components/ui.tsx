@@ -52,7 +52,8 @@ export function PageHeader({
   children,
 }: {
   title: string;
-  subtitle?: string;
+  /** نصٌّ عادةً — ويقبل عنصرًا حين يتغيّر في مكانه (عدّاد دفتر اليومية) */
+  subtitle?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (

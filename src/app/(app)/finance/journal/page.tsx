@@ -1,21 +1,16 @@
 import Link from '@/components/link';
-import { Plus, CheckCircle2, BookOpen, Check } from 'lucide-react';
+import { Plus, CheckCircle2, BookOpen } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/auth';
 import { listOptions } from '@/lib/reference';
 import { DOCUMENT_TYPES, ENTRY_STATUSES, fiscalMonth, fiscalMonthLabel } from '@/lib/accounting';
 import { formatMoney, formatDate } from '@/lib/utils';
-import { PageHeader, Badge, EmptyState, ErrorAlert } from '@/components/ui';
+import { PageHeader, EmptyState, ErrorAlert } from '@/components/ui';
 import { FilterBar, SearchInput, FilterSelect, KeepParam } from '@/components/filters';
+import { JournalDecision, JournalTally } from '@/components/journal-decision';
 
 export const metadata = { title: 'دفتر اليومية' };
 export const dynamic = 'force-dynamic';
-
-const STATUS_STYLE: Record<string, string> = {
-  draft: 'border-amber-200 bg-amber-50 text-amber-700',
-  posted: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  void: 'border-slate-300 bg-slate-100 text-slate-400',
-};
 
 /** مصدر المقترح — يُنسب ليُراجَع لا ليُصدَّق */
 const SOURCE_LABEL: Record<string, string> = {
@@ -36,7 +31,8 @@ const SOURCE_LABEL: Record<string, string> = {
  * وعلى يد من، وفي أي فرع. والتفصيل الكامل خلف اسم المشروع لمن أراده.
  *
  * **وزر الاعتماد في الصف** — لأن ترحيل ثلاثين قيدًا لا يحتمل ثلاثين رحلة
- * ذهابًا وإيابًا. والعودة إلى القائمة بشهرها لا إلى بطاقة القيد.
+ * ذهابًا وإيابًا. والضغطة تُبدّل الصفّ في مكانه بلا إعادة بناء الصفحة
+ * (`JournalDecision`)، والعدّة في الترويسة تتبعها.
  */
 export default async function JournalPage({
   searchParams,
@@ -49,7 +45,7 @@ export default async function JournalPage({
     generated?: string;
   }>;
 }) {
-  await requirePermission('canManageAccounting');
+  const user = await requirePermission('canManageAccounting');
   const { period: requested, status, q, error, generated } = await searchParams;
   const period = /^\d{4}-\d{2}$/.test(requested ?? '') ? requested! : fiscalMonth(new Date());
 
@@ -109,7 +105,13 @@ export default async function JournalPage({
     <div className="mx-auto max-w-7xl space-y-4">
       <PageHeader
         title="دفتر اليومية"
-        subtitle={`${fiscalMonthLabel(period)} — ${drafts} مسوَّدة · ${countOf('posted')} مرحَّل`}
+        subtitle={
+          <JournalTally
+            prefix={fiscalMonthLabel(period)}
+            drafts={drafts}
+            posted={countOf('posted')}
+          />
+        }
       >
         {!closed?.closedAt && (
           <Link href={`/finance/journal/new?period=${period}`} className="btn-primary">
@@ -259,47 +261,14 @@ export default async function JournalPage({
 
                     <td className="nums font-semibold">{formatMoney(total)}</td>
 
-                    <td>
-                      <Badge className={STATUS_STYLE[entry.status] ?? STATUS_STYLE.draft}>
-                        {ENTRY_STATUSES[entry.status as keyof typeof ENTRY_STATUSES] ?? entry.status}
-                      </Badge>
-                      {entry.postedBy && entry.status === 'posted' && (
-                        <span className="block text-[11px] text-slate-400">
-                          رحّله {entry.postedBy.name}
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="text-left">
-                      {entry.status === 'draft' && !closed?.closedAt ? (
-                        <form method="post" action="/api/save" className="inline">
-                          <input type="hidden" name="entity" value="journalEntry.decide" />
-                          <input type="hidden" name="id" value={entry.id} />
-                          <input type="hidden" name="action" value="post" />
-                          <input type="hidden" name="stay" value="1" />
-                          <input type="hidden" name="period" value={period} />
-                          <input
-                            type="hidden"
-                            name="back"
-                            value={`/finance/journal?period=${period}`}
-                          />
-                          <button
-                            type="submit"
-                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                            اعتماد وترحيل
-                          </button>
-                        </form>
-                      ) : (
-                        <Link
-                          href={`/finance/journal/${entry.id}`}
-                          className="btn-secondary whitespace-nowrap px-2.5 py-1.5 text-xs"
-                        >
-                          فتح
-                        </Link>
-                      )}
-                    </td>
+                    <JournalDecision
+                      id={entry.id}
+                      period={period}
+                      status={entry.status}
+                      postedBy={entry.postedBy?.name ?? null}
+                      currentUserName={user.name}
+                      locked={Boolean(closed?.closedAt)}
+                    />
                   </tr>
                 );
               })}

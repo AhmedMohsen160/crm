@@ -1,4 +1,4 @@
-import { type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { redirectTo, redirectWithError } from '@/lib/http';
 import { getCurrentUser } from '@/lib/auth';
 import {
@@ -92,12 +92,24 @@ import {
  *   back   : الصفحة التي نعود إليها عند وجود خطأ
  *
  * وعند النجاح ننتقل إلى صفحة السجل المحفوظ.
+ *
+ * **وحقل `json=1` يغيّر شكل الردّ لا مساره**: نفس البوابة ونفس القواعد
+ * ونفس التدقيق، لكن الردّ `{ ok, destination }` بدل تحويل ٣٠٣. يستعمله
+ * الزرّ الذي يريد نتيجةً في مكانه بلا إعادة بناء الصفحة كلها. والنموذج
+ * العادي لا يرسل الحقل، فيبقى عمله كما هو حتى لو تعطّل الجافاسكربت.
  */
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return redirectTo('/login');
-
   const fd = await request.formData();
+  const wantsJson = String(fd.get('json') ?? '') === '1';
+
+  const user = await getCurrentUser();
+  if (!user) {
+    // الجلسة انتهت: نقول ذلك صراحةً بدل أن نُعيد صفحة الدخول كأنها نتيجة
+    return wantsJson
+      ? NextResponse.json({ ok: false, error: 'انتهت الجلسة — سجّل الدخول من جديد' }, { status: 401 })
+      : redirectTo('/login');
+  }
+
   const entity = String(fd.get('entity') ?? '');
   const rawId = String(fd.get('id') ?? '').trim();
   const id = rawId === '' ? undefined : rawId;
@@ -353,11 +365,13 @@ export async function POST(request: NextRequest) {
         throw new MutationError(`نوع سجل غير معروف: ${entity}`);
     }
 
-    return redirectTo(destination);
+    return wantsJson ? NextResponse.json({ ok: true, destination }) : redirectTo(destination);
   } catch (error) {
     const message =
       error instanceof MutationError ? error.message : 'تعذّر الحفظ. حاول مرة أخرى.';
     if (!(error instanceof MutationError)) console.error('فشل الحفظ:', error);
+
+    if (wantsJson) return NextResponse.json({ ok: false, error: message }, { status: 400 });
 
     // نعود إلى النموذج ونعرض سبب المشكلة
     return redirectWithError(String(fd.get('back') ?? ''), message);
