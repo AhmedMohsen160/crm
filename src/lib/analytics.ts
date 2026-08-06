@@ -14,6 +14,9 @@ import { REVENUE_FILTER } from './projects';
  * صفر. الصفر إجابة، و«لا بيانات» إجابة أخرى.
  */
 
+// الجمع بالقرش الصحيح — لا بـ`+` على الجنيهات (راجع `money.ts`)
+import { sumBy } from './money';
+
 export type Range = { from: Date; to: Date };
 
 // ── أهم تقرير في المنظومة: هامش كل نمط تشغيل ───────────────────
@@ -105,8 +108,8 @@ export async function workModeMargins(
   for (const [workMode, list] of grouped) {
     const pages = list.reduce((s, p) => s + (p.pages ?? 0), 0);
     const weighted = list.reduce((s, p) => s + (p.weightedPages ?? 0), 0);
-    const revenue = round2(list.reduce((s, p) => s + (p.netTotal ?? 0), 0));
-    const directCost = round2(list.reduce((s, p) => s + (p.costTotal ?? 0), 0));
+    const revenue = sumBy(list, (p) => p.netTotal ?? 0);
+    const directCost = sumBy(list, (p) => p.costTotal ?? 0);
 
     // نصيب النمط من المصروف غير المباشر — بالصفحات الموزونة
     const share = totalWeighted > 0 ? weighted / totalWeighted : 0;
@@ -187,7 +190,7 @@ export async function sellerPerformance(range: Range): Promise<SellerRow[]> {
         }),
       ]);
 
-      const revenue = round2(projects.reduce((s, p) => s + (p.netTotal ?? 0), 0));
+      const revenue = sumBy(projects, (p) => p.netTotal ?? 0);
       const collected = round2(
         projects.reduce((s, p) => s + p.deposit + p.collectedAmount, 0)
       );

@@ -6,6 +6,8 @@
  * الدائن**.
  */
 
+import { money, toPiastres, fromPiastres } from './money';
+
 // ── أنواع الحسابات ─────────────────────────────────────────────
 
 export const ACCOUNT_TYPES = {
@@ -96,8 +98,14 @@ export type BalanceCheck = {
 
 /** تقريب لقرشين — الفرق الأصغر منه كسرُ حساب لا خطأ إدخال */
 const CENT = 0.005;
+/**
+ * تثبيت المبلغ على قرشٍ صحيح.
+ *
+ * **يبقى بهذا الاسم** لأنه مستعمل في عشرات المواضع، وصار يفوّض إلى وحدة
+ * المال الخالصة فلا يبقى تعريفان لقاعدة واحدة.
+ */
 export function round2(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
+  return money(value);
 }
 
 /**
@@ -109,8 +117,13 @@ export function round2(value: number): number {
  */
 export function checkBalance(lines: LineInput[]): BalanceCheck {
   const problems: string[] = [];
-  let totalDebit = 0;
-  let totalCredit = 0;
+  /**
+   * **المجموع بالقرش الصحيح لا بالجنيه العائم.** جمعُ ثمانين سطرًا بـ`+`
+   * ينحرف بكسرٍ لا يُرى في القيد الواحد ويتراكم عبر آلاف القيود حتى يُخرج
+   * ميزان المراجعة عن التوازن — وقد وقع ذلك بقرش بعد ترحيل ٢٬٢٤٧ قيدًا.
+   */
+  let debitPiastres = 0;
+  let creditPiastres = 0;
 
   lines.forEach((line, i) => {
     const debit = Number(line.debit) || 0;
@@ -130,18 +143,19 @@ export function checkBalance(lines: LineInput[]): BalanceCheck {
       problems.push(`${at}: بلا حساب`);
     }
 
-    totalDebit += Math.max(0, debit);
-    totalCredit += Math.max(0, credit);
+    debitPiastres += toPiastres(Math.max(0, debit));
+    creditPiastres += toPiastres(Math.max(0, credit));
   });
 
   if (lines.length < 2) {
     problems.push('القيد المزدوج يحتاج سطرين على الأقل');
   }
 
-  totalDebit = round2(totalDebit);
-  totalCredit = round2(totalCredit);
-  const difference = round2(totalDebit - totalCredit);
-  const balanced = Math.abs(difference) < CENT;
+  const totalDebit = fromPiastres(debitPiastres);
+  const totalCredit = fromPiastres(creditPiastres);
+  const difference = fromPiastres(debitPiastres - creditPiastres);
+  // التوازن صار مقارنةَ عددين صحيحين — لا «فرقًا أصغر من قرش»
+  const balanced = debitPiastres === creditPiastres;
 
   if (!balanced) {
     problems.push(

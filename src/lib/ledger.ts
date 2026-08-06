@@ -23,6 +23,9 @@ import {
  * تنتظر مراجعته — لا يدخل الدفتر من ظهره.
  */
 
+// الجمع بالقرش الصحيح — لا بـ`+` على الجنيهات (راجع `money.ts`)
+import { sumBy } from './money';
+
 // ── الفترات ────────────────────────────────────────────────────
 
 export async function isPeriodClosed(period: string): Promise<boolean> {
@@ -191,7 +194,7 @@ export async function profitAndLoss(filter: LedgerFilter): Promise<PLResult> {
   const totals = await accountTotals(filter);
 
   const sum = (predicate: (t: AccountTotals) => boolean) =>
-    round2(totals.filter(predicate).reduce((s, t) => s + t.balance, 0));
+    sumBy(totals.filter(predicate), (t) => t.balance);
 
   // «إيرادات أخرى» (فروق العملة) تُعرض بعد الصافي كما في الدفاتر —
   // خلطها بإيراد الخدمات يرفع الهامش المجمل زورًا
@@ -236,7 +239,10 @@ export async function monthlyProfitAndLoss(
 export async function balanceSheetTotals(asOf: Date) {
   const totals = await accountTotals({ to: asOf });
   const of = (type: AccountType) =>
-    round2(totals.filter((t) => t.type === type).reduce((s, t) => s + t.balance, 0));
+    sumBy(
+      totals.filter((t) => t.type === type),
+      (t) => t.balance
+    );
 
   const assets = of('asset');
   const liabilities = of('liability');
@@ -490,7 +496,7 @@ export async function draftCommissionAccrual(period: string): Promise<string | n
     where: { period },
     _sum: { amount: true },
   });
-  const total = round2(entries.reduce((s, e) => s + (e._sum.amount ?? 0), 0));
+  const total = sumBy(entries, (e) => e._sum.amount ?? 0);
   if (total <= 0) return null;
 
   const [expense, accrued] = await Promise.all([
