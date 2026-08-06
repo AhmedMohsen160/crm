@@ -14,6 +14,7 @@ import {
   Mail,
   ShieldAlert,
   DatabaseBackup,
+  Clock,
 } from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -49,6 +50,13 @@ export default async function SettingsPage() {
         errorCount === 0
           ? 'لا عطل جديد — وأغلب الأعطال لا يشتكي منها أحد، فتظهر هنا'
           : `${errorCount} عطلًا لم يُطّلع عليه — راجِعها`,
+      permission: 'canManageSettings',
+    },
+    {
+      href: '/settings/jobs',
+      icon: Clock,
+      title: 'المهام المجدولة',
+      description: 'سحب البريد وتوليد التنبيهات — وآخر مرة نجحت فيها كلٌّ منها',
       permission: 'canManageSettings',
     },
     {
