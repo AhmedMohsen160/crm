@@ -9,6 +9,7 @@ import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
 import { normalizePhone } from '@/lib/phone';
+import { round2 } from '@/lib/accounting';
 import {
   nextLeadCode,
   nextClientCode,
@@ -250,6 +251,29 @@ export async function moveProject(fd: FormData, user: SessionUser, id: string) {
       throw new MutationError('ليس لديك صلاحية تسجيل التحصيل');
     }
     patch.collectedAmount = collectedAmount;
+    patch.collectedAt = date(fd, 'collectedAt') ?? now;
+  }
+
+  /**
+   * **`collectNow` مبلغُ هذه الدفعة، و`collectedAmount` الرصيدُ كلّه.**
+   *
+   * زرّ التحصيل في الصف يرسل ما قُبض الآن، والخادم يجمعه على ما سبق. ولو
+   * حَسَبَ المتصفحُ المجموعَ وأرسله، لكفى أن يفتح أدمنان الصفَّ نفسه في
+   * لحظتين متقاربتين حتى تُكتب دفعةٌ فوق أختها فيضيع مبلغٌ من دفتر المكتب.
+   */
+  const collectNow = num(fd, 'collectNow');
+  if (collectNow !== null && collectNow !== undefined) {
+    if (!can(user, 'canRecordCollection')) {
+      throw new MutationError('ليس لديك صلاحية تسجيل التحصيل');
+    }
+    if (collectNow <= 0) throw new MutationError('مبلغ التحصيل يجب أن يكون أكبر من صفر');
+    const balance = round2(project.netTotal - project.deposit - project.collectedAmount);
+    if (collectNow - balance > 0.01) {
+      throw new MutationError(
+        `المتبقي على هذا المشروع ${balance.toFixed(2)} — لا يُحصَّل أكثر منه`
+      );
+    }
+    patch.collectedAmount = round2(project.collectedAmount + collectNow);
     patch.collectedAt = date(fd, 'collectedAt') ?? now;
   }
   const qaIssues = num(fd, 'qaIssues');

@@ -856,7 +856,10 @@ const countPickerCalls = (req) => {
 page.on('request', countPickerCalls);
 
 const searchStart = Date.now();
-await page.fill('#primaryFreelancerId-search', FL_NAME.slice(0, 12));
+// **يُبحث بالجزء الفريد لا بالبادئة المشتركة.** كل تشغيلٍ يُنشئ «مترجم
+// اختبار XXXX»، فبعد عشرات التشغيلات صارت البادئة تطابق عشرات الأسماء
+// وسقط الجديد خارج ما تعرضه القائمة — فيفشل اختبارٌ لا خلل فيه.
+await page.fill('#primaryFreelancerId-search', RUN);
 await page.waitForFunction(
   (name) => {
     const box = document.querySelector('[data-testid=primaryFreelancerId-results]');
@@ -905,7 +908,7 @@ await page.locator('summary:has-text("خطوات التنفيذ")').first().clic
 await page.selectOption('select[name=stepType]', 'human_translation');
 await page.selectOption('select[name=costSource]', 'external');
 await page.fill('input[name=pages]', '12');
-await page.fill('#freelancerId-search', FL_NAME.slice(0, 12));
+await page.fill('#freelancerId-search', RUN);
 await page.waitForSelector(`[data-testid=freelancerId-results] button:has-text("${FL_NAME}")`, {
   timeout: 5000,
 });
@@ -2173,6 +2176,75 @@ await go('/leaderboard');
 check(
   (await page.locator('body').innerText()).includes('مدير النظام'),
   'بينما يراها كاملةً من يملك تحليلات الشركة'
+);
+
+// ── 28. التحصيل من الصف ─────────────────────────────────────
+//
+// **أدمن المبيعات يحصّل عشرة مشاريع في الجلسة**، وكان كلٌّ منها رحلةً إلى
+// بطاقة المشروع وعودةً منها.
+
+await loginAs('admin@fasttrans.local');
+await go('/projects?status=delivered&view=list', '28-collect');
+const collectButtons = await page.locator('[data-testid=collect-open]').count();
+
+if (collectButtons > 0) {
+  await page.evaluate(() => {
+    window.__collectMark = 'alive';
+  });
+
+  await page.locator('[data-testid=collect-open]').first().click();
+  // المتبقي مكتوبٌ سلفًا — لا يُقرأ من بطاقة ولا يُكتب يدويًا
+  const suggested = await page.locator('input[name=collectNow]').first().inputValue();
+  check(
+    Number(suggested) > 0,
+    `اللوحة تقترح المتبقي مكتوبًا سلفًا — ${suggested} (اختبار ٢٨)`
+  );
+
+  await page.locator('[data-testid=collect-confirm]').first().click();
+  await page.waitForSelector('[data-testid=collected-ok]', { timeout: 20000 });
+
+  check(
+    (await page.evaluate(() => window.__collectMark)) === 'alive',
+    '★ **والتأكيد يسجّل التحصيل في مكانه** — بلا فتح المشروع وبلا إعادة بناء الصفحة'
+  );
+
+  // والرقم وصل الدفتر فعلًا: المشروع خرج من قائمة المسلَّمة
+  const before = collectButtons;
+  await go('/projects?status=delivered&view=list');
+  check(
+    (await page.locator('[data-testid=collect-open]').count()) === before - 1,
+    `ونقصت المسلَّمة بواحد (${before} ← ${before - 1}) — التحصيل كُتب لا عُرض`
+  );
+} else {
+  check(true, 'لا مشاريع مسلَّمة تنتظر التحصيل — يُتخطّى فحص الزر');
+}
+
+// ولا يظهر الزر لمن لا يملك تسجيل التحصيل
+await loginAs('tarek@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/projects?view=list');
+check(
+  (await page.locator('[data-testid=collect-open]').count()) === 0,
+  '★ ولا يصل زرُّ التحصيل من لا يملك تسجيله'
+);
+
+// ── 29. التحليلات تتبع عمل صاحبها ───────────────────────────
+await go('/analytics', '29-analytics-ops');
+const opsAnalytics = await page.locator('body').innerText();
+check(
+  !opsAnalytics.includes('أداء أدمن المبيعات') && !opsAnalytics.includes('قمع المبيعات'),
+  '★ ومدير المشاريع لا يرى أداءَ البائعين ولا قمعَ المبيعات (اختبار ٢٩)'
+);
+check(
+  opsAnalytics.includes('المنتِج') || opsAnalytics.includes('إنتاجية') ||
+    opsAnalytics.includes('لا بيانات') || opsAnalytics.includes('نمط تشغيل'),
+  'ويرى ما يخصّه: أنماط التشغيل وإنتاجية المنفِّذين'
+);
+
+await loginAs('admin@fasttrans.local');
+await go('/analytics');
+check(
+  (await page.locator('body').innerText()).includes('أداء أدمن المبيعات'),
+  'بينما يراه من يبيع'
 );
 
 await loginAs('admin@fasttrans.local');

@@ -37,6 +37,16 @@ export default async function AnalyticsPage({
   const { year: requestedYear, line, scope } = await searchParams;
 
   const seesCompany = can(user, 'canViewCompanyAnalytics');
+  /**
+   * **الأقسام تتبع عملَ صاحبها لا رتبتَه.**
+   *
+   * كان أداءُ المنفِّذين محجوبًا خلف «تحليلات الشركة» وأداءُ البائعين مفتوحًا
+   * لكل من يفتح الشاشة — فيرى مديرُ المشاريع أرقامَ بيعٍ لا قرار له فيها،
+   * ولا يرى إنتاجيةَ فريقه وهي عملُه كلّه. فصار البيعُ لمن يبيع، والإنتاجُ
+   * لمن يُسند.
+   */
+  const seesSales = can(user, 'canViewSellPrice');
+  const seesProduction = seesCompany || can(user, 'canAssignProduction');
   const year = Number(requestedYear) || new Date().getFullYear();
   const monthly = scope === 'month';
   const range = monthly ? monthRange(fiscalMonth(new Date())) : yearRange(year);
@@ -44,11 +54,13 @@ export default async function AnalyticsPage({
   const [modes, sellers, channels, steps, clients, producers, trend, serviceLines] =
     await Promise.all([
       workModeMargins({ from: range.start, to: range.end }, { serviceLine: line ?? null }),
-      sellerPerformance({ from: range.start, to: range.end }),
+      seesSales
+        ? sellerPerformance({ from: range.start, to: range.end })
+        : Promise.resolve([]),
       seesCompany ? channelPerformance({ from: range.start, to: range.end }) : Promise.resolve([]),
       funnel({ from: range.start, to: range.end }),
       clientValue({ from: range.start, to: range.end }),
-      seesCompany ? producerPerformance({ from: range.start, to: range.end }) : Promise.resolve([]),
+      seesProduction ? producerPerformance({ from: range.start, to: range.end }) : Promise.resolve([]),
       seesCompany ? yearlyTrend([year - 3, year - 2, year - 1, year]) : Promise.resolve([]),
       listOptions('service_line'),
     ]);
@@ -252,7 +264,8 @@ export default async function AnalyticsPage({
         )}
       </section>
 
-      {/* ══ القمع وقيمة العميل ═════════════════════════════════ */}
+      {/* ══ القمع وقيمة العميل — لمن يبيع ══════════════════════ */}
+      {seesSales && (
       <section className="card card-pad">
         <h2 className="mb-1 flex items-center gap-2 section-title">
           <Target className="h-4 w-4 text-brand-600" />
@@ -263,7 +276,9 @@ export default async function AnalyticsPage({
         </p>
         <Funnel steps={steps.map((s) => ({ stage: s.stage, count: s.count }))} />
       </section>
+      )}
 
+      {seesSales && (
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
           label="عملاء تعاملوا في المدى"
@@ -286,8 +301,10 @@ export default async function AnalyticsPage({
           accent="emerald"
         />
       </div>
+      )}
 
-      {/* ══ أداء أدمن المبيعات ═════════════════════════════════ */}
+      {/* ══ أداء أدمن المبيعات — لمن يبيع ══════════════════════ */}
+      {seesSales && (
       <section>
         <h2 className="mb-3 section-title">أداء أدمن المبيعات</h2>
         <div className="card card-pad mb-3">
@@ -358,6 +375,7 @@ export default async function AnalyticsPage({
           يُدرَّب عليه، لا ما يُعاقَب به.
         </p>
       </section>
+      )}
 
       {/* ══ القنوات والاكتساب ══════════════════════════════════ */}
       {seesCompany && channels.length > 0 && (
@@ -437,7 +455,7 @@ export default async function AnalyticsPage({
       )}
 
       {/* ══ المنتِجون ══════════════════════════════════════════ */}
-      {seesCompany && producers.length > 0 && (
+      {seesProduction && producers.length > 0 && (
         <section>
           <h2 className="mb-3 section-title">أداء المنتِجين</h2>
           <div className="card card-pad mb-3">

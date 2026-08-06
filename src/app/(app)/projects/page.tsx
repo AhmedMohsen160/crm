@@ -19,6 +19,7 @@ import { formatMoney, formatDate, cn, search } from '@/lib/utils';
 import { PageHeader, Badge, Avatar, EmptyState, StatCard } from '@/components/ui';
 import { FilterBar, SearchInput, FilterSelect, KeepParam } from '@/components/filters';
 import PipelineBoard, { type BoardProject } from '@/components/pipeline-board';
+import CollectButton from '@/components/collect-button';
 
 export const metadata = { title: 'المشاريع' };
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,8 @@ export default async function ProjectsPage({
   const user = await requireUser();
   const seeAll = can(user, 'canViewAllLeads');
   const showPrice = can(user, 'canViewSellPrice');
+  // التحصيل من الصف — لمن يملكه وحده، وزرٌّ لا يظهر لغيره
+  const canCollect = can(user, 'canRecordCollection');
   const params = await searchParams;
   const view = params.view === 'list' ? 'list' : 'board';
 
@@ -289,6 +292,7 @@ export default async function ProjectsPage({
                 {showPrice && <th>المتبقي</th>}
                 <th>الموعد</th>
                 {canFilterByOwner && <th>المسؤول</th>}
+                {canCollect && <th className="text-left">تحصيل</th>}
               </tr>
             </thead>
             <tbody>
@@ -344,6 +348,19 @@ export default async function ProjectsPage({
                         </span>
                       ) : (
                         '—'
+                      )}
+                    </td>
+                  )}
+                  {canCollect && (
+                    <td className="text-left">
+                      {p.status === 'delivered' ? (
+                        <CollectButton
+                          id={p.id}
+                          balance={projectBalance(p)}
+                          back={`/projects?${boardQs.toString().replace('view=board', 'view=list')}`}
+                        />
+                      ) : (
+                        <span className="text-slate-300">—</span>
                       )}
                     </td>
                   )}

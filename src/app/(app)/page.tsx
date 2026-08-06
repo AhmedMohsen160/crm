@@ -27,6 +27,7 @@ import {
 import { formatMoney, formatDate, isOverdue, cn, fullName } from '@/lib/utils';
 import { StatCard, Badge, Avatar, EmptyState } from '@/components/ui';
 import OpsDashboard from '@/components/ops-dashboard';
+import CollectButton from '@/components/collect-button';
 
 export const metadata = { title: 'لوحة التحكم' };
 export const dynamic = 'force-dynamic';
@@ -282,10 +283,21 @@ export default async function DashboardPage() {
                         {seeAll && p.owner ? ` · ${p.owner.name}` : ''}
                       </span>
                     </span>
-                    <span className="font-semibold text-rose-700 nums">
-                      {formatMoney(remaining > 0 ? remaining : p.netTotal)}
+                    <span className="flex items-center gap-3">
+                      <span className="font-semibold text-rose-700 nums">
+                        {formatMoney(remaining > 0 ? remaining : p.netTotal)}
+                      </span>
                     </span>
                   </Link>
+                  {can(user, 'canRecordCollection') && (
+                    <span className="mb-2 block">
+                      <CollectButton
+                        id={p.id}
+                        balance={remaining > 0 ? remaining : p.netTotal}
+                        back="/"
+                      />
+                    </span>
+                  )}
                 </li>
               );
             })}
