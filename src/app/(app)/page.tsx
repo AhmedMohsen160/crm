@@ -26,6 +26,7 @@ import {
 } from '@/lib/projects';
 import { formatMoney, formatDate, isOverdue, cn, fullName } from '@/lib/utils';
 import { StatCard, Badge, Avatar, EmptyState } from '@/components/ui';
+import OpsDashboard from '@/components/ops-dashboard';
 
 export const metadata = { title: 'لوحة التحكم' };
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,14 @@ export const dynamic = 'force-dynamic';
 export default async function DashboardPage() {
   const user = await requireUser();
   const seeAll = can(user, 'canViewAllLeads');
-  const mine = seeAll ? {} : { ownerId: user.id };
+  /**
+   * **نطاق اللوحة هو نطاق الرؤية نفسه** — لا سجلاتُه وحده.
+   *
+   * كان `ownerId: user.id`، فيفتح مديرُ المبيعات لوحته فلا يرى مشروعًا سلّمه
+   * أحدُ فريقه: يظهر له في «المشاريع» (نطاق فريق) ويغيب عن «سُلّم» في مسار
+   * المبيعات (نطاق ذات). ورقمان لنفس السؤال في شاشتين.
+   */
+  const mine = await ownerFilter(user);
   const myTasks = seeAll ? {} : { assigneeId: user.id };
 
   /**
@@ -41,6 +49,15 @@ export default async function DashboardPage() {
    * وتكلفتها وأسعارها». فالعدد يُحسب على المستوى الذي يراه، والبطاقة تفقد
    * رابطها فلا تقوده إلى شاشة محجوبة عنه.
    */
+  /**
+   * **من يُسند ولا يبيع له لوحته.** الشرط صلاحيةٌ لا اسمُ دور: من يملك إسناد
+   * الإنتاج ولا يملك رؤية سعر البيع مشغّلٌ لا بائع، فأرقامُ المبيعات لا
+   * تخصّه ولا يصحّ أن يراها.
+   */
+  if (can(user, 'canAssignProduction') && !can(user, 'canViewSellPrice')) {
+    return <OpsDashboard user={user} />;
+  }
+
   const seesLeadStats = can(user, 'canViewLeadStats');
   const opensLeads = seeAll || can(user, 'canViewTeamLeads') || can(user, 'canCreateLead');
   const leadScope = seeAll || seesLeadStats ? {} : { ownerId: user.id };
@@ -61,6 +78,7 @@ export default async function DashboardPage() {
     upcomingTasks,
     recentDeals,
     stageBreakdown,
+    awaitingCollection,
     leaderboard,
   ] = await Promise.all([
     // المشاريع الجارية — قيد الإسناد حتى جاهز للتسليم
@@ -118,6 +136,27 @@ export default async function DashboardPage() {
       where: mine,
       _count: { _all: true },
       _sum: { netTotal: true },
+    }),
+    /**
+     * **ما سُلّم وينتظر التحصيل — قائمةً لا رقمًا.**
+     * التسليم إشارةُ بدءٍ لأدمن المبيعات: يتّصل ويحصّل. وكان الوصول إليها
+     * لا يتمّ إلا بفتح «المشاريع» وترشيحها، فصارت في اللوحة نفسها.
+     */
+    db.project.findMany({
+      where: { ...mine, status: 'delivered' },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        netTotal: true,
+        deposit: true,
+        collectedAmount: true,
+        deliveredAt: true,
+        client: { select: { name: true } },
+        owner: { select: { name: true } },
+      },
+      orderBy: { deliveredAt: 'desc' },
+      take: 8,
     }),
     // ترتيب الفريق حسب المبيعات المكسوبة هذا الشهر (للمديرين فقط)
     seeAll
@@ -183,11 +222,12 @@ export default async function DashboardPage() {
           href="/projects"
         />
         <StatCard
-          label="مستحق على العملاء"
+          label="سُلّم وينتظر التحصيل"
           value={formatMoney(outstanding)}
-          hint="إجمالي ما لم يُحصَّل بعد"
+          hint={`${awaitingCollection.length} مشروع جاهز للتحصيل`}
           icon={<TrendingUp className="h-5 w-5" />}
           accent={outstanding > 0 ? 'amber' : 'slate'}
+          href="/projects?status=delivered&view=list"
         />
         <StatCard
           label="إيراد هذا الشهر"
@@ -208,6 +248,50 @@ export default async function DashboardPage() {
           />
         )}
       </div>
+
+      {/* سُلّم وينتظر التحصيل — بالأحمر لأنه فعلٌ ينتظر لا خبرٌ يُقرأ */}
+      {awaitingCollection.length > 0 && (
+        <section className="card card-pad border-rose-200">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 font-semibold text-rose-800">
+              <AlertTriangle className="h-4 w-4 text-rose-500" />
+              سُلّم وينتظر التحصيل
+              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700 nums">
+                {awaitingCollection.length}
+              </span>
+            </h2>
+            <Link href="/projects?status=delivered&view=list" className="link text-sm">
+              كل المسلَّمة
+            </Link>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {awaitingCollection.map((p) => {
+              const remaining = p.netTotal - (p.deposit + p.collectedAmount);
+              return (
+                <li key={p.id}>
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2.5 hover:bg-slate-50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-slate-800">
+                        {p.client?.name ?? p.title}
+                      </span>
+                      <span className="block text-[11px] text-slate-400">
+                        {p.code} · سُلّم {p.deliveredAt ? formatDate(p.deliveredAt) : '—'}
+                        {seeAll && p.owner ? ` · ${p.owner.name}` : ''}
+                      </span>
+                    </span>
+                    <span className="font-semibold text-rose-700 nums">
+                      {formatMoney(remaining > 0 ? remaining : p.netTotal)}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* توزيع الصفقات على المراحل */}

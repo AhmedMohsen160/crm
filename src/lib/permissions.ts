@@ -231,9 +231,18 @@ export const DEFAULT_ROLES: {
     name: 'project_manager',
     label: 'مدير مشاريع',
     sortOrder: 7,
-    // لا يرى سعر البيع عمدًا — حتى لا يُبنى قرار الإسناد على قيمة الطلب
+    /**
+     * لا يرى سعر البيع عمدًا — حتى لا يُبنى قرار الإسناد على قيمة الطلب.
+     *
+     * **ولا يرى الليدز ولا سجلّ العملاء.** كان يحمل `canViewAllLeads` ليصل
+     * إلى المشاريع كلها فيُسندها، فحمل معها جردَ الليدز والعملاء وأرقامَ
+     * مبيعات الفرق. والوصولُ إلى المشاريع صار من `canAssignProduction`
+     * نفسها (`projectFilter`)، فسقطت الحاجة إلى الصلاحية الواسعة.
+     *
+     * ومن أرادت له الإدارة أن يُدخل ليدزه بجانب عمله، مُنح `canCreateLead`
+     * من شاشة الأدوار — فتظهر له الشاشة بسجلاته هو وحدها.
+     */
     permissions: [
-      'canViewAllLeads',
       'canAssignProduction',
       'canViewFreelancerCost',
       'canViewCostIndicator',

@@ -59,22 +59,41 @@ const COLLECTORS: Record<string, Collector> = {
     );
   },
 
-  // ── سُلّم — لصاحبه هو لا لكل المبيعات ────────────────────────
+  /**
+   * سُلّم — **لصاحبه ولمديره، لا لكل المبيعات**.
+   *
+   * التسليم إشارةُ بدءٍ لا خبرًا: الأدمن يتّصل ويحصّل، ومديره ينتبه لما
+   * سُلّم ولم يصل مقابله. وكان يصل الأدمن وحده، فيمرّ المشروع أسابيع بلا
+   * تحصيل ولا يعلم به أحد فوقه.
+   */
   async project_delivered(now) {
     const since = new Date(now.getTime() - 3 * 86_400_000);
     const projects = await db.project.findMany({
       where: { status: 'delivered', deliveredAt: { gte: since }, ownerId: { not: null } },
-      select: { id: true, code: true, title: true, ownerId: true, netTotal: true },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        ownerId: true,
+        netTotal: true,
+        owner: { select: { reportsToId: true } },
+      },
       take: 200,
     });
 
-    return projects.map((project) => ({
-      userId: project.ownerId!,
-      recordId: project.id,
-      recordLabel: `${project.code ?? ''} ${project.title}`.trim(),
-      link: `/projects/${project.id}`,
-      detail: 'سُلّم للعميل — تابع التحصيل',
-    }));
+    return projects.flatMap((project) => {
+      const base = {
+        recordId: project.id,
+        recordLabel: `${project.code ?? ''} ${project.title}`.trim(),
+        link: `/projects/${project.id}`,
+        detail: 'سُلّم للعميل — تابع التحصيل',
+      };
+      const rows = [{ ...base, userId: project.ownerId! }];
+      const manager = project.owner?.reportsToId;
+      // ولا يُرسَل لمن هو نفسه صاحبه — بطاقتان لحدثٍ واحد تشويش
+      if (manager && manager !== project.ownerId) rows.push({ ...base, userId: manager });
+      return rows;
+    });
   },
 
   // ── خصم يتجاوز الحد ─────────────────────────────────────────

@@ -49,9 +49,34 @@ const NAV = [
     icon: UserPlus,
     anyOf: ['canViewAllLeads', 'canViewTeamLeads', 'canCreateLead'] as const,
   },
-  { href: '/clients', label: 'العملاء', icon: Contact },
-  { href: '/companies', label: 'الشركات', icon: Building2 },
-  { href: '/contacts', label: 'جهات الاتصال', icon: Users },
+  /**
+   * سجلّات العلاقة التجارية — **لمن يبيع أو يتابع بيعًا**.
+   *
+   * مدير المشاريع مشغّل: العميل يبلغه في بطاقة المشروع الذي ينفّذه، أما
+   * جردُ كل عملاء المكتب وشركاته وجهات اتصاله فلا قرار له فيه. وإخفاؤها
+   * ليس حجبًا — الحجب في الصفحة — لكن قائمةً تعرض ما لا يخصّ صاحبها تُشغله
+   * كل يوم عن عمله.
+   *
+   * والشرط صلاحيةٌ لا اسمُ دور: من يبيع أو يتابع ليدًا يراها.
+   */
+  {
+    href: '/clients',
+    label: 'العملاء',
+    icon: Contact,
+    anyOf: ['canViewSellPrice', 'canCreateLead', 'canViewTeamLeads', 'canViewAllLeads'] as const,
+  },
+  {
+    href: '/companies',
+    label: 'الشركات',
+    icon: Building2,
+    anyOf: ['canViewSellPrice', 'canCreateLead', 'canViewTeamLeads', 'canViewAllLeads'] as const,
+  },
+  {
+    href: '/contacts',
+    label: 'جهات الاتصال',
+    icon: Users,
+    anyOf: ['canViewSellPrice', 'canCreateLead', 'canViewTeamLeads', 'canViewAllLeads'] as const,
+  },
   { href: '/projects', label: 'المشاريع', icon: Briefcase },
   {
     href: '/production',
@@ -78,8 +103,18 @@ const NAV = [
     permission: 'canViewSellPrice' as const,
   },
   { href: '/tasks', label: 'المهام', icon: ListChecks },
-  // «نسبي» و«أدائي» بلا صلاحية: كلٌّ يرى نفسه. الترشيح في الخادم.
-  { href: '/commissions', label: 'نسبي', icon: Percent },
+  /**
+   * «نسبي» لمن له نسبة. و«أدائي» للجميع — كلٌّ يرى نفسه.
+   *
+   * مدير المشاريع لا نسبة له على البيع، فشاشةٌ تقول له «صفر» كل شهر ليست
+   * معلومةً بل سؤالٌ مفتوح. ومن أسندت له الإدارة خطةَ نسب رآها.
+   */
+  {
+    href: '/commissions',
+    label: 'نسبي',
+    icon: Percent,
+    anyOf: ['canViewSellPrice', 'canViewOthersCommission'] as const,
+  },
   { href: '/me', label: 'أدائي', icon: Gauge, exact: true },
   {
     href: '/leaderboard',

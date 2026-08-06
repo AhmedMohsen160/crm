@@ -14,6 +14,7 @@ import {
 import { freelancerStepCost } from './freelancers';
 // أنماط التشغيل التي هي أصلًا مراجعة — لا تُحتسب مراجعة فوقها
 import { workModeIsReview } from './projects';
+import { payslip, loadedMonthlyCost, periodOf } from './hr';
 
 /**
  * تطبيق معادلات §٨ على مشروع حقيقي.
@@ -50,9 +51,56 @@ async function factorOf(listName: string, value: string | null, fallback = 1) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function staffRateOf(userId: string | null) {
+/**
+ * أجر المنفِّذ الداخلي وطاقته.
+ *
+ * **الراتب مصدره الموارد البشرية، لا خانةٌ ثانية تُملأ يدويًّا.** كانت
+ * التكلفة تُقرأ من `StaffCost.monthlySalary` وحدها، فمن أُدخل راتبه في ملفّه
+ * بالموارد البشرية كان النظام يقول عنه «منتِج بلا تكلفة مسجَّلة» ويحسب
+ * هامشًا ١٠٠٪ وهميًّا. ورقمان لشيء واحد يختلفان، ولا يُعرف أيّهما الصحيح.
+ *
+ * فصار الأجر يُشتقّ من بنود الأجر السارية (§الأجر بنودٌ بتاريخ سريان)، ويبقى
+ * في `StaffCost` ما لا مكان له في كشف الراتب: **نسبة الوقت المنتج والطاقة
+ * اليومية** — وهما تشغيليّان لا ماليّان.
+ *
+ * و`StaffCost.monthlySalary` يبقى بديلًا لمن لا ملفّ له في الموارد البشرية،
+ * فلا تنكسر بياناتٌ قديمة أُدخلت قبل وجود الوحدة.
+ */
+async function staffRateOf(userId: string | null, when = new Date()) {
   if (!userId) return null;
-  return db.staffCost.findUnique({ where: { userId } });
+
+  const [row, components] = await Promise.all([
+    db.staffCost.findUnique({ where: { userId } }),
+    db.salaryComponent.findMany({
+      where: { userId, active: true },
+      select: {
+        kind: true,
+        label: true,
+        amount: true,
+        isPercent: true,
+        frequency: true,
+        period: true,
+        effectiveFrom: true,
+        effectiveTo: true,
+        active: true,
+      },
+    }),
+  ]);
+
+  // الأجر المحمَّل = الإجمالي قبل الاستقطاع؛ الاستقطاع شأنٌ بين الموظف
+  // والشركة ولا يُنقص تكلفةَ ساعته على المشروع
+  const fromHr = components.length
+    ? loadedMonthlyCost(payslip(components, periodOf(when)))
+    : 0;
+
+  const monthlySalary = fromHr || row?.monthlySalary || 0;
+  if (!monthlySalary) return null;
+
+  return {
+    monthlySalary,
+    productiveRatio: row?.productiveRatio ?? 0.7,
+    dailyCapacity: row?.dailyCapacity ?? 4,
+  };
 }
 
 /**

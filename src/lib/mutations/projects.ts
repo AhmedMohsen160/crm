@@ -686,5 +686,23 @@ export async function deliverProject(fd: FormData, user: SessionUser, id: string
 
   // التجميد بعد الانتقال، فيلتقط الحالة النهائية
   await freezeProjectCost(id);
+
+  /**
+   * **التنبيه يقع لحظةَ التسليم لا في دورة الجدولة.**
+   * الحدث «فوريّ» في كتالوج التنبيهات، لكن الفوريّ لم يكن يُطلق إلا حين
+   * يعمل المجدوِل — و`/api/cron` مغلق افتراضيًّا بلا `CRON_SECRET`. فكان
+   * أدمن المبيعات لا يعلم أن مشروعه سُلّم حتى يفتح شاشة المشاريع بنفسه.
+   *
+   * والفشل هنا لا يُسقط التسليم: التسليم واقعةٌ حدثت، والتنبيه خدمةٌ حولها.
+   */
+  try {
+    const { runEvent } = await import('@/lib/notification-engine');
+    const { eventByKey } = await import('@/lib/notifications');
+    const event = eventByKey('project_delivered');
+    if (event) await runEvent(event);
+  } catch (error) {
+    console.error('تعذّر إطلاق تنبيه التسليم:', error);
+  }
+
   return destination;
 }

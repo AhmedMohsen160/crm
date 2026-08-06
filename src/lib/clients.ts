@@ -157,6 +157,14 @@ export type TeamClientRow = {
 export async function teamClients(opts: {
   /** المستخدمون الذين تدخل سجلاتهم في نطاق الرؤية — null يعني كل الشركة */
   ownerIds: string[] | null;
+  /**
+   * نطاق التشغيل بدل نطاق البيع.
+   *
+   * من يُسند الإنتاج ولا يبيع «عملاؤه» هم **من قدّم لهم أعمالًا** — أي أصحاب
+   * المشاريع التي دخلت التشغيل فعلًا، لا جردُ عملاء المكتب. ومن أنشأ سجلَّه
+   * لا يعنيه في شيء.
+   */
+  production?: boolean;
   /** ترشيح على أدمن بعينه من داخل النطاق */
   adminId?: string | null;
   from?: Date | null;
@@ -184,12 +192,20 @@ export async function teamClients(opts: {
       ? { createdAt: { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lt: opts.to } : {}) } }
       : {};
 
-  const projectWhere = {
-    clientId: { not: null },
-    ...(scoped ? { ownerId: { in: scoped } } : {}),
-    ...(opts.branch ? { branch: opts.branch } : {}),
-    ...dateFilter,
-  };
+  const projectWhere = opts.production
+    ? {
+        clientId: { not: null },
+        // دخل التشغيل فعلًا — وما ينتظر الإسناد لم يُقدَّم لصاحبه شيء بعد
+        status: { not: 'pending_assignment' },
+        ...(opts.branch ? { branch: opts.branch } : {}),
+        ...dateFilter,
+      }
+    : {
+        clientId: { not: null },
+        ...(scoped ? { ownerId: { in: scoped } } : {}),
+        ...(opts.branch ? { branch: opts.branch } : {}),
+        ...dateFilter,
+      };
 
   const [all, earned, owned] = await Promise.all([
     db.project.groupBy({
@@ -205,12 +221,14 @@ export async function teamClients(opts: {
           _sum: { netTotal: true },
         })
       : Promise.resolve([] as { clientId: string | null; _sum: { netTotal: number | null } }[]),
-    // من أنشأ الفريق بطاقته ولم يشترِ بعد
-    db.client.findMany({
-      where: { ...(scoped ? { ownerId: { in: scoped } } : {}), ...dateFilter },
-      select: { id: true },
-      take: 2000,
-    }),
+    // من أنشأ الفريق بطاقته ولم يشترِ بعد — ولا معنى لها في نطاق التشغيل
+    opts.production
+      ? Promise.resolve([] as { id: string }[])
+      : db.client.findMany({
+          where: { ...(scoped ? { ownerId: { in: scoped } } : {}), ...dateFilter },
+          select: { id: true },
+          take: 2000,
+        }),
   ]);
 
   const counts = new Map<string, { deals: number; last: Date | null }>();

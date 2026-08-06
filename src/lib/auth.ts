@@ -231,6 +231,22 @@ export async function ownerFilter(
 }
 
 /**
+ * نطاق **المشاريع**.
+ *
+ * **من يُسند يرى كل المشاريع ليُسندها — ولا يرى بذلك ليدًا ولا عميلًا.**
+ * كان مدير المشاريع يُمنح `canViewAllLeads` ليصل إلى قائمة الإسناد، فيفتح
+ * معها جردَ الليدز وسجلَّ العملاء وأرقامَ مبيعات الفرق. والصلاحية الواسعة
+ * ثمنٌ باهظ لحاجةٍ ضيّقة، فصار وصولُه إلى المشاريع من صلاحية الإسناد نفسها.
+ */
+export async function projectFilter(
+  user: SessionUser,
+  field = 'ownerId'
+): Promise<Record<string, unknown>> {
+  if (can(user, 'canAssignProduction')) return {};
+  return ownerFilter(user, field);
+}
+
+/**
  * تقييد الرؤية بالفرع.
  * مفعَّل حسب إعداد النظام `restrict_by_branch` — والإدارة قرّرت تفعيله.
  * من يملك رؤية كل الليدز لا يُقيَّد.

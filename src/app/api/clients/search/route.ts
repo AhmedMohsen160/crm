@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
 
   const { rows, total } = await teamClients({
     ownerIds: await visibleUserIds(user),
+    production: can(user, 'canAssignProduction') && !can(user, 'canViewSellPrice'),
     adminId: p.get('admin'),
     from,
     to,

@@ -1,7 +1,7 @@
 import Link from '@/components/link';
 import { Plus, LayoutGrid, List, Briefcase, AlertTriangle } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, can, ownerFilter, branchFilter, visibleUserIds } from '@/lib/auth';
+import { requireUser, can, projectFilter, branchFilter, visibleUserIds } from '@/lib/auth';
 import { listOptionsMany } from '@/lib/reference';
 import {
   PROJECT_STATUSES,
@@ -43,7 +43,7 @@ export default async function ProjectsPage({
   const view = params.view === 'list' ? 'list' : 'board';
 
   const [scope, branchScope, lists, visibleIds] = await Promise.all([
-    ownerFilter(user),
+    projectFilter(user),
     branchFilter(user),
     listOptionsMany('service_line', 'branch'),
     visibleUserIds(user),

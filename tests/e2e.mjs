@@ -2113,6 +2113,68 @@ check(
   '★ وفلترة المشاريع حسب الموظف صارت حقًّا لمدير الفريق لا لصاحب رؤية الشركة وحده'
 );
 
+// ── 27. مدير المشاريع: لوحةُ مشغّلٍ لا لوحةُ بائع ───────────
+//
+// **الأرقام التي تخصّ عمله لا عمل غيره.** كانت لوحته مبنيّةً لأدمن المبيعات:
+// مسار مبيعات وقيمة صفقات وترتيب بائعين — أرقامٌ لا يملك منها قرارًا ولا
+// يصحّ أن يراها.
+
+await loginAs('tarek@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/', '27-ops-dashboard');
+const opsText = await page.locator('body').innerText();
+
+check(
+  opsText.includes('لوحة التشغيل'),
+  'مدير المشاريع يفتح لوحة تشغيل لا لوحة مبيعات (اختبار ٢٧)'
+);
+check(
+  opsText.includes('التسليم في الموعد') && opsText.includes('صفحات موزونة'),
+  'وفيها أرقامه: الالتزام بالموعد والحجم المنجَز'
+);
+check(
+  !opsText.includes('مسار المبيعات') && !opsText.includes('قيمة المشاريع الجارية'),
+  '★ ولا مسارَ مبيعات ولا قيمةَ صفقات — لا قرار له فيها'
+);
+check(
+  !opsText.includes('ترتيب الفريق هذا الشهر'),
+  '★ ولا ترتيبَ بائعين — أرقام مبيعات غيره لا تخصّه'
+);
+
+// حمولة الصفحة نفسها خالية من سعر البيع
+const opsHtml = await page.content();
+check(
+  !opsHtml.includes('قيمة المشاريع الجارية'),
+  'ولا يصله سعرُ بيعٍ في حمولة الاستجابة — لا يُخفى في المتصفح'
+);
+
+// القائمة الجانبية: سجلّات البيع ليست له
+const opsNav = await page.locator('aside').innerText();
+check(
+  !opsNav.includes('العملاء المحتملون') && !opsNav.includes('الشركات'),
+  '★ ولا جردَ عملاءَ محتملين ولا شركات في قائمته — يبلغه العميل في بطاقة مشروعه'
+);
+check(
+  !opsNav.includes('نسبي'),
+  'ولا شاشة «نسبي» — لا نسبة له على البيع فلا شاشة تقول له صفرًا كل شهر'
+);
+check(opsNav.includes('قائمة الإسناد'), 'ويبقى له ما يخصّه: قائمة الإسناد');
+
+// لوحة الترتيب: نطاقُ فريقٍ لا نطاقُ شركة
+await loginAs('magly@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/leaderboard', '27-leaderboard-scope');
+const scopedBoard = await page.locator('body').innerText();
+check(
+  !scopedBoard.includes('مدير النظام'),
+  '★ **ولوحة الترتيب لا تعرض لمدير المبيعات من هو خارج فريقه** — ولا مبيعات مدير النظام'
+);
+
+await loginAs('admin@fasttrans.local');
+await go('/leaderboard');
+check(
+  (await page.locator('body').innerText()).includes('مدير النظام'),
+  'بينما يراها كاملةً من يملك تحليلات الشركة'
+);
+
 await loginAs('admin@fasttrans.local');
 
 // ── 12. عرض الجوال ──────────────────────────────────────────

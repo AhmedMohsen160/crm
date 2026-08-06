@@ -1,6 +1,6 @@
 import Link from '@/components/link';
 import { Trophy, Wallet, Users } from 'lucide-react';
-import { requirePermission, can } from '@/lib/auth';
+import { requirePermission, can, canAny, visibleUserIds } from '@/lib/auth';
 import { computePeriod } from '@/lib/commission-engine';
 import { periodOf, periodLabel, shiftPeriod, rankBy, medal } from '@/lib/commission';
 import { formatMoney } from '@/lib/utils';
@@ -19,6 +19,12 @@ export const dynamic = 'force-dynamic';
  * الاستحقاق، لأنه يراه في شاشة «نسبي» أصلًا.
  *
  * والترشيح في الخادم: صفوف الاستحقاق لا تُبنى أصلًا لمن لا يملك رؤيتها.
+ *
+ * **واللوحة لوحةُ فريقٍ لا لوحةُ شركة.** كان كل من يفتحها يرى كل من باع في
+ * الشركة — فيرى مديرُ المبيعات أرقام فريقٍ آخر، ويرى أرقامَ من ليس بائعًا
+ * أصلًا فتختلط المنافسة. فصار النطاق نطاقَ الرؤية نفسه (هو ومن يتبعونه)،
+ * ولا يراها كاملةً إلا من يملك تحليلات الشركة أو دفاترها: المالك والمدير
+ * التنفيذي والمحاسب.
  */
 export default async function LeaderboardPage({
   searchParams,
@@ -32,8 +38,13 @@ export default async function LeaderboardPage({
   const summary = await computePeriod(period);
   const seesCommission = can(user, 'canViewOthersCommission');
 
+  // من يرى الشركة كلها: تحليلاتها أو دفاترها. وما عداه يرى نطاقه وحده.
+  const seesEveryone = canAny(user, 'canViewCompanyAnalytics', 'canManageAccounting');
+  const scopeIds = seesEveryone ? null : await visibleUserIds(user);
+  const inScope = (userId: string) => scopeIds === null || scopeIds.includes(userId);
+
   const rows = rankBy(
-    summary.sellers.map((s) => ({
+    summary.sellers.filter((s) => inScope(s.userId)).map((s) => ({
       userId: s.userId,
       userName: s.userName,
       achieved: s.achieved,

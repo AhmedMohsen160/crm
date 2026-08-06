@@ -41,6 +41,12 @@ export default async function ClientsPage({
   const user = await requireUser();
   const seeAll = can(user, 'canViewAllLeads');
   const showValue = can(user, 'canViewSellPrice');
+  /**
+   * **من يُسند ولا يبيع يرى من قدّم لهم أعمالًا، لا جردَ عملاء المكتب.**
+   * العميل يبلغه في بطاقة المشروع الذي نفّذه؛ أما سجلّ العلاقة التجارية
+   * كاملًا فلا قرار له فيه.
+   */
+  const production = can(user, 'canAssignProduction') && !showValue;
 
   // النطاق نفسه الذي يحكم الليدز والمشاريع — هو ومن يتبعونه إداريًا
   const ownerIds = await visibleUserIds(user);
@@ -57,6 +63,7 @@ export default async function ClientsPage({
     listOptions('branch'),
     teamClients({
       ownerIds,
+      production,
       adminId: params.admin ?? null,
       from,
       to,
@@ -90,9 +97,11 @@ export default async function ClientsPage({
       <PageHeader
         title="العملاء"
         subtitle={
-          seeAll
-            ? 'كل عملاء المكتب'
-            : 'عملاء فريقك — من أتممت أنت أو أحد فريقك معهم بيعًا'
+          production
+            ? 'العملاء الذين قدّمت لهم أعمالًا — من دخلت مشاريعهم التشغيل'
+            : seeAll
+              ? 'كل عملاء المكتب'
+              : 'عملاء فريقك — من أتممت أنت أو أحد فريقك معهم بيعًا'
         }
       >
         <Link href="/clients/new" className="btn-primary">
