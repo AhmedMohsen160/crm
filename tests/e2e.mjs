@@ -2305,6 +2305,43 @@ check(
   'وحسابٌ آخر يدخل عاديًا — الحدّ على البريد المهاجَم لا على الباب كلّه'
 );
 
+// ── 31. النسخة الاحتياطية وسجل الأعطال ──────────────────────
+
+await go('/settings/backup', '31-backup');
+const backupText = await page.locator('body').innerText();
+check(
+  backupText.includes('نزّل النسخة') && backupText.includes('جدولًا'),
+  'شاشة النسخة الاحتياطية تفتح وتقول ما فيها (اختبار ٣١)'
+);
+
+const backup = await page.request.get('http://localhost:3000/api/backup');
+check(backup.status() === 200, 'والنسخة تُنزَّل فعلًا');
+const dump = await backup.json();
+check(
+  dump.version === 1 && dump.takenAt && Object.keys(dump.tables).length > 20,
+  `والملف يحمل ${Object.keys(dump.tables).length} جدولًا بتاريخه`
+);
+check(
+  (dump.tables.client?.length ?? 0) > 0 && (dump.tables.project?.length ?? 0) > 0,
+  `وفيه العملاء والمشاريع فعلًا (${dump.tables.client?.length} · ${dump.tables.project?.length})`
+);
+check(
+  !JSON.stringify(dump.tables.user ?? []).includes('passwordHash'),
+  '★ **ولا كلمة مرور تخرج في الملف** — ملفٌ يُنزَّل ويُرسَل ليس مكانًا لها'
+);
+
+// ومن لا يملك الإعدادات لا ينزّلها
+await loginAs('agent@fasttrans.local');
+const denied = await page.request.get('http://localhost:3000/api/backup');
+check(denied.status() === 403, '★ ولا يصلها من لا يملك إعدادات النظام');
+
+await loginAs('admin@fasttrans.local');
+await go('/settings/errors', '31-errors');
+check(
+  (await page.locator('body').innerText()).includes('أعطال النظام'),
+  'وسجل الأعطال يفتح لمن يملك الإعدادات'
+);
+
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
 await go('/projects', '12-mobile');

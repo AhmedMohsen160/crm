@@ -8,7 +8,8 @@ import { db } from './db';
  * لأي رقم ومعرفة من غيّره ومتى ومن أي قيمة. السجل **لا يُحذف ولا يُعدَّل**.
  */
 
-export type AuditAction = 'create' | 'update' | 'delete' | 'restore' | 'login';
+// `export`: إخراج بيانات من النظام — أخطر ما يقع بلا تغيير سجل واحد
+export type AuditAction = 'create' | 'update' | 'delete' | 'restore' | 'login' | 'export';
 
 type Scalar = string | number | boolean | Date | null | undefined;
 

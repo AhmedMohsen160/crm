@@ -107,6 +107,7 @@ model User {
   handledEmails EmailMessage[] @relation("EmailHandler")
   aiThreads     AiThread[]     @relation("AiThreadOwner")
   aiRuns        AiRun[]        @relation("AiRunUser")
+  errorLogs     ErrorLog[]
 
   @@index([email])
   @@index([reportsToId])
@@ -1982,4 +1983,35 @@ model LoginAttempt {
   createdAt DateTime @default(now())
 
   @@index([key, createdAt])
+}
+
+/// خطأ وقع في الخادم — ليعلم به المالك قبل أن يشتكي موظف.
+///
+/// **ليس سجلّ تدقيق**: ذاك يوثّق ما فعله الناس ويبقى، وهذا يوثّق ما انكسر
+/// ويُقلَّم. ولا يُخزَّن فيه شيء من كلمات المرور ولا المفاتيح — يُنقّى قبل
+/// الكتابة (`redactSecrets`).
+model ErrorLog {
+  id String @id @default(cuid())
+
+  /// save | mutate | cron | job — أين وقع
+  kind    String
+  /// رسالة الخطأ بعد التنقية
+  message String
+  /// أثر التنفيذ أو سياق إضافي — قد يطول
+  detail  String?
+  /// المسار أو الكيان الذي كان يُحفظ
+  path    String?
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  /// عدد مرات تكرار نفس الخطأ — بطاقة واحدة تُحدَّث لا مئة بطاقة
+  count Int @default(1)
+
+  seen      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([seen, createdAt])
 }

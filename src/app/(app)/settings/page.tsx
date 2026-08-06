@@ -12,6 +12,8 @@ import {
   Percent,
   Upload,
   Mail,
+  ShieldAlert,
+  DatabaseBackup,
 } from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -24,11 +26,12 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPage() {
   const user = await requireUser();
 
-  const [userCount, roleCount, listCount, auditCount] = await Promise.all([
+  const [userCount, roleCount, listCount, auditCount, errorCount] = await Promise.all([
     db.user.count({ where: { active: true } }),
     db.role.count(),
     db.listItem.count({ where: { active: true } }),
     db.auditLog.count(),
+    db.errorLog.count({ where: { seen: false } }),
   ]);
 
   const cards: {
@@ -38,6 +41,23 @@ export default async function SettingsPage() {
     description: string;
     permission?: Permission;
   }[] = [
+    {
+      href: '/settings/errors',
+      icon: ShieldAlert,
+      title: 'أعطال النظام',
+      description:
+        errorCount === 0
+          ? 'لا عطل جديد — وأغلب الأعطال لا يشتكي منها أحد، فتظهر هنا'
+          : `${errorCount} عطلًا لم يُطّلع عليه — راجِعها`,
+      permission: 'canManageSettings',
+    },
+    {
+      href: '/settings/backup',
+      icon: DatabaseBackup,
+      title: 'النسخة الاحتياطية',
+      description: 'نزّل نسخةً كاملة تملكها أنت — خارج حساب مزوّد القاعدة',
+      permission: 'canManageSettings',
+    },
     {
       href: '/settings/users',
       icon: Users,

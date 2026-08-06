@@ -78,6 +78,7 @@ import {
   saveRole,
   saveListItem,
   saveSettings,
+  markErrorsSeen,
   saveTargets,
   changeOwnPassword,
 } from '@/lib/mutations';
@@ -355,6 +356,9 @@ export async function POST(request: NextRequest) {
       case 'settings':
         destination = await saveSettings(fd, user);
         break;
+      case 'errors.seen':
+        destination = await markErrorsSeen(fd, user);
+        break;
       case 'targets':
         destination = await saveTargets(fd, user);
         break;
@@ -369,7 +373,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message =
       error instanceof MutationError ? error.message : 'تعذّر الحفظ. حاول مرة أخرى.';
-    if (!(error instanceof MutationError)) console.error('فشل الحفظ:', error);
+    // `MutationError` رسالةُ قاعدةِ عملٍ للمستخدم لا عطلٌ — لا تدخل سجل الأعطال
+    if (!(error instanceof MutationError)) {
+      console.error('فشل الحفظ:', error);
+      const { logError } = await import('@/lib/error-log-engine');
+      await logError({ kind: 'save', error, path: entity, userId: user.id });
+    }
 
     if (wantsJson) return NextResponse.json({ ok: false, error: message }, { status: 400 });
 

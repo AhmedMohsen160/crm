@@ -444,6 +444,18 @@ export async function saveTargets(fd: FormData, admin: SessionUser) {
 //  إعدادات النظام — §٩
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * وضع علامة «اطّلعت» على كل الأعطال.
+ *
+ * **ولا تُحذف**: العطل الذي اطُّلع عليه يبقى في السجل ليُعرف إن عاد. وعودتُه
+ * بعد الاطّلاع تُعيده «جديدًا» — لأن تكراره بعد المعرفة خبرٌ جديد.
+ */
+export async function markErrorsSeen(_fd: FormData, admin: SessionUser) {
+  if (!can(admin, 'canManageSettings')) throw new MutationError('لا صلاحية');
+  await db.errorLog.updateMany({ where: { seen: false }, data: { seen: true } });
+  return '/settings/errors';
+}
+
 export async function saveSettings(fd: FormData, admin: SessionUser) {
   if (!can(admin, 'canManageSettings')) {
     throw new MutationError('ليس لديك صلاحية إدارة الإعدادات');

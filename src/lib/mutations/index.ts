@@ -46,6 +46,7 @@ export {
   saveRole,
   saveListItem,
   saveSettings,
+  markErrorsSeen,
   saveTargets,
   saveStaffCost,
   changeOwnPassword,

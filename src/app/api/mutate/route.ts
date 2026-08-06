@@ -33,6 +33,8 @@ export async function POST(request: NextRequest) {
     const message =
       error instanceof Error ? error.message : 'تعذّر تنفيذ العملية. حاول مرة أخرى.';
     console.error(`فشل تنفيذ العملية ${op}:`, error);
+    const { logError } = await import('@/lib/error-log-engine');
+    await logError({ kind: 'mutate', error, path: op, userId: user.id });
     return redirectWithError(requested, message);
   }
 }
