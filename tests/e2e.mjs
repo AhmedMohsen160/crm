@@ -2273,7 +2273,37 @@ check(
   'بينما يراه من يبيع'
 );
 
+// ── 30. حدُّ محاولات الدخول ──────────────────────────────────
+//
+// **بابٌ بلا حدٍّ لمحاولات الفتح مفتوحٌ لمن يملك الوقت.** ويُجرَّب على بريدٍ
+// وهميّ عمدًا، فلا يُحبَس حسابٌ حقيقيّ عن بقيّة الاختبارات.
+
+const GHOST = `ghost-${RUN}@fasttrans.local`;
+let lockedAt = 0;
+for (let attempt = 1; attempt <= 12; attempt += 1) {
+  const res = await page.request.post('http://localhost:3000/api/auth', {
+    form: { mode: 'login', email: GHOST, password: 'wrong-password' },
+    maxRedirects: 0,
+  });
+  // العنوان يرمّز المسافة `+` لا `%20`، فلا يكفي فكُّ الترميز وحده
+  const location = decodeURIComponent(res.headers()['location'] ?? '').replace(/\+/g, ' ');
+  if (location.includes('محاولات كثيرة')) {
+    lockedAt = attempt;
+    break;
+  }
+}
+
+check(
+  lockedAt > 0 && lockedAt <= 11,
+  `★ **الدخول يُوقَف بعد محاولات متتالية** — أُوقف عند المحاولة ${lockedAt} (اختبار ٣٠)`
+);
+
+// والحساب الحقيقي لم يُمَسّ: الحدّ على البريد الذي هوجم لا على النظام كله
 await loginAs('admin@fasttrans.local');
+check(
+  page.url() === 'http://localhost:3000/',
+  'وحسابٌ آخر يدخل عاديًا — الحدّ على البريد المهاجَم لا على الباب كلّه'
+);
 
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
