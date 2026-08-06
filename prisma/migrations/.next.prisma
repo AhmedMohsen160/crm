@@ -1,0 +1,2017 @@
+// ═══════════════════════════════════════════════════════════════
+//  Fast Trans CRM — مخطط قاعدة البيانات
+//  كل "model" هنا = جدول في قاعدة البيانات (مثل شيت في إكسل)
+// ═══════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────────────────────────
+//  المستخدمون والصلاحيات
+// ───────────────────────────────────────────────
+
+model User {
+  id   String @id @default(cuid())
+  name String
+
+  /// البريد وكلمة المرور **اختياريان**: المنفِّذ الداخلي (مترجم أو مراجع)
+  /// يُسجَّل ليُسنَد إليه العمل ولا يدخل النظام أصلًا. مدير المشاريع يكتب
+  /// من نفّذ ومن راجع، فتُحسب التكلفة وتُقاس الطاقة بلا حساب دخول له.
+  email        String? @unique
+  passwordHash String?
+  /// هل يدخل النظام؟ فارغها = سجلّ موظف للإسناد والتكلفة فقط
+  canLogin     Boolean @default(true)
+
+  phone       String?
+  jobTitle    String?
+  active      Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // الدور مرجع إلى جدول الأدوار — الصلاحيات بيانات لا كود
+  roleId  String?
+  roleRef Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  /// فرع الموظف — يُقيّد رؤيته حسب إعداد النظام
+  branch String?
+
+  /// المدير المباشر — عليه يقوم نطاق رؤية الفريق وحصة النسب
+  reportsToId String?
+  reportsTo   User?   @relation("UserManager", fields: [reportsToId], references: [id], onDelete: SetNull)
+  team        User[]  @relation("UserManager")
+
+  /// هل ينتج فعليًا (يترجم/يراجع)؟ مستقل تمامًا عن الدور
+  isProducer Boolean @default(false)
+
+  // ── الموارد البشرية ──────────────────────────────
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  /// تاريخ التعيين — أساس مدة الخدمة والاستحقاقات
+  hireDate       DateTime?
+  endDate        DateTime?
+  /// full_time | part_time | contract | intern
+  employmentType String?     @default("full_time")
+  nationalId     String?
+  bankAccount    String?
+  payMethod      String?
+
+  // العلاقات
+  ownedCompanies   Company[]     @relation("CompanyOwner")
+  ownedContacts    Contact[]     @relation("ContactOwner")
+  ownedLeads       Lead[]        @relation("LeadOwner")
+  ownedProjects    Project[]     @relation("ProjectOwner")
+  managedProjects  Project[]     @relation("ProjectManager")
+  producedProjects Project[]     @relation("ProjectProducer")
+  reviewedProjects Project[]     @relation("ProjectReviewer")
+  approvedProjects Project[]     @relation("ProjectApprover")
+  staffCost        StaffCost?
+  projectSteps     ProjectStep[] @relation("StepPerformer")
+  assignedTasks    Task[]        @relation("TaskAssignee")
+  createdTasks     Task[]        @relation("TaskCreator")
+  notes            Note[]
+  activities       Activity[]
+  quotes           Quote[]
+  auditEntries     AuditLog[]
+  ownedClients     Client[]      @relation("ClientOwner")
+  createdClients   Client[]      @relation("ClientCreator")
+
+  commissionEntries CommissionEntry[]      @relation("CommissionBeneficiary")
+  commissionSources CommissionEntry[]      @relation("CommissionSource")
+  commissionPlans   CommissionAssignment[]
+  closedPeriods     CommissionPeriod[]
+
+  confirmedPayments FreelancerPayment[] @relation("PaymentConfirmer")
+
+  authoredEntries JournalEntry[]    @relation("EntryAuthor")
+  postedEntries   JournalEntry[]    @relation("EntryPoster")
+  ledgerLines     JournalLine[]     @relation("LineSalesAdmin")
+  closedFiscal    FiscalPeriod[]    @relation("PeriodCloser")
+  approvedBudgets Budget[]          @relation("BudgetApprover")
+  resolvedReviews MigrationReview[] @relation("ReviewResolver")
+  notifications   Notification[]
+  proposals       Proposal[]        @relation("ProposalOwner")
+
+  salaryComponents SalaryComponent[]
+  payrollLines     PayrollLine[]
+  uploadedFiles    StoredFile[]      @relation("FileUploader")
+  managedDepts     Department[]      @relation("DepartmentManager")
+
+  mailboxes     Mailbox[]      @relation("MailboxOwner")
+  handledEmails EmailMessage[] @relation("EmailHandler")
+  aiThreads     AiThread[]     @relation("AiThreadOwner")
+  aiRuns        AiRun[]        @relation("AiRunUser")
+  errorLogs     ErrorLog[]
+
+  @@index([email])
+  @@index([reportsToId])
+  @@index([branch])
+}
+
+// ───────────────────────────────────────────────
+//  الأدوار والصلاحيات — بيانات لا كود
+// ───────────────────────────────────────────────
+
+/// دور يُنشأ ويُعدَّل من الشاشة بلا نشر جديد.
+/// الكود يفحص الصلاحية لا اسم الدور.
+model Role {
+  id        String  @id @default(cuid())
+  name      String  @unique /// مفتاح إنجليزي ثابت
+  label     String /// الاسم المعروض بالعربية
+  isSystem  Boolean @default(false) /// أدوار النظام لا تُحذف
+  sortOrder Int     @default(0)
+
+  // ── الصلاحيات (§٥ من المواصفة، وما أُضيف بعدها) ──
+  canCreateLead           Boolean @default(false)
+  canViewAllLeads         Boolean @default(false)
+  canViewTeamLeads        Boolean @default(false)
+  canConvertProject       Boolean @default(false)
+  canViewSellPrice        Boolean @default(false)
+  canDiscount             Boolean @default(false)
+  canApproveDiscount      Boolean @default(false)
+  canAssignProduction     Boolean @default(false)
+  canViewFreelancerCost   Boolean @default(false)
+  canViewStaffSalary      Boolean @default(false)
+  canViewCostIndicator    Boolean @default(false)
+  canRecordCollection     Boolean @default(false)
+  canManageFreelancers    Boolean @default(false)
+  canPayFreelancers       Boolean @default(false)
+  canManageAccounting     Boolean @default(false)
+  canManageUsers          Boolean @default(false)
+  /// تعريف الأدوار — منفصلة عن إدارة المستخدمين عمدًا: مدير المبيعات يضيف
+  /// أدمنز ولا يُعيد تعريف من يرى ماذا.
+  canManageRoles          Boolean @default(false)
+  canManageSettings       Boolean @default(false)
+  canViewCompanyAnalytics Boolean @default(false)
+  canViewTeamAnalytics    Boolean @default(false)
+  /// ترتيب زملائه بالمبيعات — أرقامٌ محقَّقة لا مبالغ استحقاق
+  canViewLeaderboard      Boolean @default(false)
+  /// مبالغ استحقاق غيره ونسبهم — محجوبة عن أدمن المبيعات
+  canViewOthersCommission Boolean @default(false)
+  /// أعداد الليدز وتكلفتها إجمالًا بلا فتح سجلاتها — للمحاسب
+  canViewLeadStats        Boolean @default(false)
+  canUseEmail             Boolean @default(false)
+  canUseAi                Boolean @default(false)
+  canManageHr             Boolean @default(false)
+
+  /// أقصى نسبة خصم يمنحها صاحب هذا الدور بلا اعتماد (٠٫١ تعني ١٠٪).
+  /// عمود في الدور لا مفتاح إعدادات باسم دور، لأن الأدوار تُنشأ من الشاشة.
+  discountLimit Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+}
+
+// ───────────────────────────────────────────────
+//  القوائم المرجعية — تُدار من الشاشة
+// ───────────────────────────────────────────────
+
+/// كل قائمة منسدلة في النظام: الفروع، القنوات، أنماط التشغيل، خطوط الخدمة...
+/// الحقل extra يحمل المعامل حيث ينطبق (معامل الجهد أو التخصص).
+model ListItem {
+  id          String  @id @default(cuid())
+  listName    String /// اسم القائمة: branch | channel | work_mode | service_line ...
+  value       String /// المفتاح الإنجليزي
+  label       String /// المعروض بالعربية
+  sortOrder   Int     @default(0)
+  active      Boolean @default(true)
+  extra       String? /// المعامل رقمًا نصيًا
+  /// شرح أو شروط نصية — تظهر في عرض السعر لخطوط الخدمة (§١٠ بند ٥)
+  description String?
+
+  @@unique([listName, value])
+  @@index([listName, active])
+}
+
+// ───────────────────────────────────────────────
+//  سجل التدقيق — لا شيء يُمحى
+// ───────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  ts        DateTime @default(now())
+  action    String /// CREATE | UPDATE | DELETE | LOGIN ...
+  tableName String
+  recordId  String
+  field     String?
+  oldValue  String?
+  newValue  String?
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tableName, recordId])
+  @@index([ts])
+}
+
+// ───────────────────────────────────────────────
+//  الشركات (الحسابات) — العميل المؤسسي
+// ───────────────────────────────────────────────
+
+model Company {
+  id           String   @id @default(cuid())
+  name         String
+  nameAr       String?
+  industry     String? // القطاع: محاماة، طبي، حكومي...
+  website      String?
+  phone        String?
+  email        String?
+  country      String?
+  city         String?
+  address      String?
+  taxNumber    String? // الرقم الضريبي / السجل التجاري
+  paymentTerms String? // شروط الدفع: فوري، 30 يوم...
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownerId String?
+  owner   User?   @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  contacts   Contact[]
+  clients    Client[]
+  projects   Project[]
+  proposals  Proposal[]
+  tasks      Task[]
+  noteItems  Note[]
+  quotes     Quote[]
+  activities Activity[]
+  emails     EmailMessage[]
+
+  @@index([name])
+  @@index([ownerId])
+}
+
+// ───────────────────────────────────────────────
+//  جهات الاتصال — الأشخاص داخل الشركات
+// ───────────────────────────────────────────────
+
+model Contact {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String?
+  email     String?
+  phone     String?
+  mobile    String?
+  jobTitle  String?
+  language  String? // لغة التواصل المفضلة
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User?   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  projects   Project[]
+  tasks      Task[]
+  noteItems  Note[]
+  quotes     Quote[]
+  activities Activity[]
+
+  @@index([email])
+  @@index([companyId])
+  @@index([ownerId])
+}
+
+// ───────────────────────────────────────────────
+//  العملاء المحتملون (Leads) — قبل التأهيل
+// ───────────────────────────────────────────────
+
+// ───────────────────────────────────────────────
+//  العملاء — كائن واحد يخدم الفرد والشركة
+//  «لا يُنشأ عميل مكرر أبدًا» (§4.1)
+// ───────────────────────────────────────────────
+
+model Client {
+  id   String  @id @default(cuid())
+  /// معرّف تسلسلي دائم بصيغة CL-00001.
+  /// اختياري في السكيما لا في السلوك: كل سجل يُنشأ من النظام يحصل عليه فورًا،
+  /// والاختيارية موجودة ليستطيع النشر إضافة العمود على جدول فيه صفوف قديمة
+  /// ثم يملؤها التجهيز. راجع backfillCodes في scripts/bootstrap.ts.
+  code String? @unique
+  name String
+
+  /// الهاتف كما أدخله المستخدم — للعرض والاتصال
+  phone              String
+  /// الهاتف بعد التطبيع السباعي (§١٤) — **مفتاح منع الازدواج**
+  phoneNormalized    String  @unique
+  phoneAlt           String?
+  /// المطبَّع للهاتف البديل — يدخل البحث ولا يمنع الازدواج
+  phoneAltNormalized String?
+
+  email String?
+  /// individual | company
+  type  String  @default("individual")
+
+  companyName String?
+  taxId       String?
+  country     String?
+  city        String?
+  /// الفرع الذي جاء منه أول مرة — لا يتغيّر
+  firstBranch String?
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?   @relation("ClientCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User?   @relation("ClientOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// ربط اختياري بسجل الشركة (الرقم الضريبي وشروط الدفع)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  leads     Lead[]
+  projects  Project[]
+  /// حسابه الشخصي في شجرة «العملاء» — يربط بطاقته بدفتر الأستاذ
+  accounts  Account[]
+  proposals Proposal[]
+  emails    EmailMessage[]
+
+  @@index([phoneNormalized])
+  @@index([phoneAltNormalized])
+  @@index([name])
+  @@index([ownerId])
+  @@index([firstBranch])
+}
+
+// ───────────────────────────────────────────────
+//  تكلفة الموظف — تُقرأ بصلاحية canViewStaffSalary وحدها
+// ───────────────────────────────────────────────
+
+/// معطيات حساب تكلفة الصفحة الموزونة للمنتِج الداخلي (§٨).
+/// **لا يُرسل أي حقل منها لمن لا يملك صلاحية رؤية الرواتب.**
+model StaffCost {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// الراتب الشهري
+  monthlySalary   Float @default(0)
+  /// نسبة الوقت المنتج فعلًا من وقت الدوام
+  productiveRatio Float @default(0.7)
+  /// الصفحات الموزونة التي ينجزها في اليوم
+  dailyCapacity   Float @default(4)
+
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ───────────────────────────────────────────────
+//  خطوات تنفيذ المشروع
+// ───────────────────────────────────────────────
+
+/// خطوة واحدة في تنفيذ مشروع. **مخفية افتراضيًا في الشاشة** حتى لا تبطئ
+/// الحالة البسيطة (منتِج واحد بلا خطوات)، وتُفتح عند الحاجة.
+model ProjectStep {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// نوع الخطوة من قائمة step_type — منه يأتي معامل الجهد
+  stepType String
+
+  /// المنفِّذ الداخلي
+  performerId String?
+  performer   User?   @relation("StepPerformer", fields: [performerId], references: [id], onDelete: SetNull)
+
+  /// اسم المنفِّذ الخارجي نصًّا — يبقى للخطوات السابقة لملف الفريلانسرز
+  externalName String?
+  /// أجر المنفِّذ الخارجي بوحدته
+  externalRate Float?
+  /// وحدة الأجر: page | word | word_250 | hour | minute | project
+  rateUnit     String  @default("page")
+  /// عدد الساعات/الوحدات حين لا يكون الأجر بالصفحة
+  rateUnits    Float?
+
+  /// الفريلانسر المسجَّل المنفِّذ لهذه الخطوة (§١١)
+  freelancerId String?
+  freelancer   Freelancer? @relation("StepFreelancer", fields: [freelancerId], references: [id], onDelete: SetNull)
+
+  /// internal | external
+  costSource String @default("internal")
+
+  pages         Float @default(0)
+  /// محسوبة ومخزَّنة وقت الحفظ — لا تتغيّر بتغيّر المعاملات لاحقًا
+  weightedPages Float @default(0)
+  cost          Float @default(0)
+
+  notes     String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments FreelancerPayment[]
+
+  @@index([projectId])
+  @@index([performerId])
+  @@index([freelancerId])
+}
+
+// ───────────────────────────────────────────────
+//  الفريلانسرز (§١١) — حتى ألف مترجم
+// ───────────────────────────────────────────────
+
+model Freelancer {
+  id   String  @id @default(cuid())
+  /// معرّف تسلسلي FL-0001
+  code String? @unique
+
+  name     String
+  phone    String?
+  phoneAlt String?
+  email    String?
+  country  String?
+  city     String?
+
+  /// لغاته مفصولة بفواصل — قائمة واحدة تخدم «من» و«إلى» (المصدر: اسم التبويب)
+  langs           String?
+  /// تخصصاته مفصولة بفواصل — من قائمة خطوط الخدمة
+  specialisations String?
+
+  /// السعر الافتراضي. **فارغ يعني «لم يُتفق» لا «مجاني»** (§١٤)
+  defaultRate Float?
+  /// page | word | word_250 | hour | minute | project
+  rateUnit    String @default("page")
+  currency    String @default("EGP")
+
+  /// approved = الفريق الحقيقي · bench = مخزون مواهب · trial · suspended
+  tier   String  @default("bench")
+  active Boolean @default(true)
+
+  /// من ١٠ — في المصدر مخزَّن كتاريخ، ويُستخرج عند الاستيراد (§١٤)
+  rating Float?
+
+  /// عدّادات تُحدَّث عند الإسناد — للترتيب لا للحساب المالي
+  projectsCount Int       @default(0)
+  lastUsedAt    DateTime?
+
+  /// مفتاح من قائمة `payment_method` — لا نصّ حر: النص الحر لا يُرشَّح ولا يُجمَّع
+  paymentMethod String?
+  paymentRef    String?
+  /// رابط خارجي للسيرة — يبقى للسجلات القديمة
+  cvUrl         String?
+  /// السيرة مرفوعة على النظام — أوثق من رابط قد يُحذف من عند صاحبه
+  cvFileId      String?     @unique
+  cvFile        StoredFile? @relation("FreelancerCv", fields: [cvFileId], references: [id], onDelete: SetNull)
+  notes         String?
+
+  /// صفٌّ لم يُحسم عند الاستيراد ويحتاج مراجعة بشرية (§١٤)
+  needsReview Boolean @default(false)
+  /// ما جاء في الملف حرفيًا حين تعذّر تفسيره — لا نحذف ولا نخمّن
+  importNote  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rates            FreelancerRate[]
+  payments         FreelancerPayment[]
+  steps            ProjectStep[]       @relation("StepFreelancer")
+  projects         Project[]           @relation("ProjectFreelancer")
+  reviewedProjects Project[]           @relation("ProjectReviewerFreelancer")
+
+  @@index([tier])
+  @@index([name])
+  @@index([phone])
+}
+
+/// استثناءات السعر — الحقل الفارغ يعني «أي قيمة»، وأدقّ تطابق يفوز
+model FreelancerRate {
+  id           String     @id @default(cuid())
+  freelancerId String
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+
+  langFrom    String?
+  langTo      String?
+  serviceLine String?
+  stepType    String?
+
+  rate     Float
+  rateUnit String @default("page")
+  currency String @default("EGP")
+
+  notes       String?
+  needsReview Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([freelancerId])
+}
+
+/// حساب دائنين مستقل عن حساب العملاء — سطر يُنشأ **تلقائيًا** عند الإسناد
+model FreelancerPayment {
+  id           String     @id @default(cuid())
+  freelancerId String
+  freelancer   Freelancer @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+
+  projectId String?
+  project   Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  stepId    String?
+  step      ProjectStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+
+  amount   Float
+  currency String @default("EGP")
+
+  dueDate DateTime?
+  /// due | paid | held
+  status  String    @default("due")
+
+  paidAt    DateTime?
+  paidById  String?
+  paidBy    User?     @relation("PaymentConfirmer", fields: [paidById], references: [id], onDelete: SetNull)
+  method    String?
+  reference String?
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([freelancerId, status])
+  @@index([projectId])
+  @@index([stepId])
+  @@index([status, dueDate])
+}
+
+// ───────────────────────────────────────────────
+//  نسب المبيعات — كل رقم فيها بيانات تُعدَّل من الشاشة
+// ───────────────────────────────────────────────
+
+/// خطة نسب: الأساس وطريقة الشريحة وتاريخ سريانها.
+/// تغيير الخطة **لا يمسّ فترة مغلقة** — الشهر المغلق يحتفظ باستحقاقاته.
+model CommissionScheme {
+  id       String @id @default(cuid())
+  name     String
+  /// collected = المحصَّل فعلًا · net = إجمالي المبيعات
+  basis    String @default("collected")
+  /// progressive = كل شريحة على جزئها · whole = الشريحة تبتلع الكل («قافزة»)
+  tierMode String @default("progressive")
+  /// user = على مبيعات الشخص (§٦) · branch = على إيراد الفرع (مواصفة الفروع §٩)
+  /// خطتان مستقلّتان تعملان معًا: الأولى تُحاسب البائع، والثانية تدخل في
+  /// اشتقاق تعادل الفرع وتارجته.
+  scope    String @default("user")
+
+  effectiveFrom DateTime @default(now())
+  active        Boolean  @default(true)
+  /// الخطة التي تُطبَّق على من لا خطة مسنَدة له
+  isDefault     Boolean  @default(false)
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tiers       CommissionTier[]
+  assignments CommissionAssignment[]
+  entries     CommissionEntry[]
+}
+
+/// شريحة واحدة: من مبلغ إلى مبلغ، ونسبتا الأدمن ومديره.
+/// عددها غير محدود — تُضاف وتُحذف من الشاشة.
+model CommissionTier {
+  id       String           @id @default(cuid())
+  schemeId String
+  scheme   CommissionScheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  /// بداية الشريحة (شامل)
+  fromAmount Float
+  /// نهايتها (غير شامل) — فارغ يعني «فما فوق»
+  toAmount   Float?
+
+  adminRate   Float
+  managerRate Float
+  sortOrder   Int   @default(0)
+
+  @@index([schemeId, fromAmount])
+}
+
+/// من يخضع لأي خطة ومن متى
+model CommissionAssignment {
+  id       String           @id @default(cuid())
+  userId   String
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schemeId String
+  scheme   CommissionScheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  /**
+   * **عتبة الاستحقاق** — «له ٣٪ بعد تحقيق رقم معين نضعه بعد الحسابات
+   * الدقيقة، فإذا تجاوز هذا الرقم (التارجت) ياخد ٣٪ ومديره ٢٪».
+   * تُقاس على نفس أساس الخطة (المحصَّل عادةً). ما دون العتبة **لا نسبة
+   * أصلًا** — لا نسبةً مخفَّضة. وفارغها يعني بلا عتبة: الشرائح وحدها تحكم.
+   * وهي على الإسناد لا على الخطة، فيشترك عشرة في خطة واحدة ولكلٍّ تارجته.
+   */
+  target Float?
+
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId, effectiveFrom])
+}
+
+/// استحقاق محسوب لشخص عن مشروع في فترة.
+///
+/// **مشتق لا مُدخَل:** يُعاد بناؤه من المشاريع المحصَّلة في أي وقت، فلا
+/// إدخال يدوي ولا تعديل. كل سطر مربوط بمشروعه فيمكن تتبّع أي مبلغ لمصدره.
+model CommissionEntry {
+  id     String @id @default(cuid())
+  /// الفترة YYYY-MM
+  period String
+
+  /// المستفيد
+  userId String
+  user   User   @relation("CommissionBeneficiary", fields: [userId], references: [id], onDelete: Cascade)
+  /// دوره في هذا الاستحقاق: admin | manager
+  role   String
+
+  /// البائع صاحب المبيعة — للمدير يختلف عن المستفيد
+  sourceUserId String?
+  sourceUser   User?   @relation("CommissionSource", fields: [sourceUserId], references: [id], onDelete: SetNull)
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  /// المبلغ الذي احتُسب عليه هذا السطر
+  base   Float
+  /// النسبة الحدّية المطبَّقة — للعرض والتفسير
+  rate   Float
+  amount Float
+
+  schemeId String?
+  scheme   CommissionScheme? @relation(fields: [schemeId], references: [id], onDelete: SetNull)
+
+  /// قيد عكسي لاسترداد أو إلغاء — لا يُحذف الأصلي أبدًا (§٣ بند ٥)
+  isReversal Boolean @default(false)
+  note       String?
+
+  computedAt DateTime @default(now())
+
+  @@index([period, userId])
+  @@index([userId])
+  @@index([projectId])
+}
+
+/// إغلاق الفترة: بعده لا يُعاد بناء استحقاقاتها
+model CommissionPeriod {
+  period     String    @id
+  closedAt   DateTime?
+  closedById String?
+  closedBy   User?     @relation(fields: [closedById], references: [id], onDelete: SetNull)
+  note       String?
+  updatedAt  DateTime  @updatedAt
+}
+
+// ───────────────────────────────────────────────
+//  أهداف الفروع الشهرية — تُعدَّل من الشاشة
+// ───────────────────────────────────────────────
+
+/// التارجت الشهري لكل فرع. سطر لكل (فرع، شهر) حتى يبقى هدف الشهر الماضي
+/// كما كان مهما عُدِّل هدف هذا الشهر — التقارير التاريخية لا تتغيّر بأثر رجعي.
+model BranchTarget {
+  id     String @id @default(cuid())
+  branch String /// مفتاح من قائمة branch
+  /// الشهر بصيغة YYYY-MM
+  period String
+  /// الهدف بالجنيه
+  amount Float  @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branch, period])
+  @@index([period])
+}
+
+// ───────────────────────────────────────────────
+//  عدّادات المعرّفات التسلسلية
+// ───────────────────────────────────────────────
+
+/// مفتاح واحد لكل سلسلة: "client" عام، و"lead-2608" يتجدّد شهريًا.
+/// التخصيص يتم داخل معاملة حتى لا يحصل شخصان على الرقم نفسه.
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
+model Lead {
+  id              String    @id @default(cuid())
+  /// معرّف تسلسلي بصيغة LD-2608-0001 — العدّاد يتجدّد شهريًا.
+  /// اختياري في السكيما لا في السلوك (انظر التعليق على Client.code).
+  code            String?   @unique
+  firstName       String
+  lastName        String?
+  companyName     String?
+  email           String?
+  phone           String?
+  source          String? // مصدر قديم — يُستبدل تدريجيًا بـ channel
+  status          String    @default("NEW") // NEW | CONTACTED | QUOTED | NEGOTIATION | WON | LOST
+  serviceInterest String? // نوع الخدمة المطلوبة
+  sourceLang      String?
+  targetLang      String?
+  estimatedValue  Float?
+  notes           String?
+  convertedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  /// قناة وصول الليد — إلزامية (§4.2)
+  channel       String?
+  /// وسيلة التواصل: واتساب | اتصال | إيميل | مقر
+  contactMethod String?
+  /// فرع الليد — يُملأ تلقائيًا من فرع المستخدم المُنشئ
+  branch        String?
+  /// عدد الصفحات التقديري
+  estPages      Float?
+
+  /// أول انتقال عن «جديد» — منه تُقاس سرعة الرد وقياس الـSLA
+  firstReplyAt DateTime?
+  /// وقت الحسم فوزًا أو خسارة
+  closedAt     DateTime?
+  /// إلزامي عند الخسارة — بلا سبب لا نتعلّم شيئًا
+  lossReason   String?
+
+  /// مفتاح الصف في الملف القديم — يمنع تكرار الترحيل (§١٤)
+  legacyKey String? @unique
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User?   @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// **متقاعد** — كان «المالك الفرعي» في الملكية المزدوجة، وأُلغيت في المرحلة
+  /// ١٦ («مالكٌ واحد للصفقة: من أدخلها»). لا يقرأه كود ولا يكتبه.
+  ///
+  /// **ويبقى العمود ولا يُحذف**: بناء النشر يُحدِّث القاعدة **قبل** أن يبني
+  /// الكود، فحذفُ عمودٍ يُسقِط النسخة العاملة في اللحظة التي تُحدَّث فيها
+  /// القاعدة وقبل أن يصل الكود الجديد. العمود المتقاعد لا يكلّف شيئًا،
+  /// وحذفُه يكلّف تعطّلًا (§٩ خطر ٢).
+  coOwnerId String?
+
+  tasks      Task[]
+  noteItems  Note[]
+  activities Activity[]
+  projects   Project[]
+  proposals  Proposal[]
+  emails     EmailMessage[]
+
+  @@index([status])
+  @@index([ownerId])
+  @@index([clientId])
+  @@index([branch])
+  @@index([createdAt])
+}
+
+// ───────────────────────────────────────────────
+//  المشاريع — الكائن المحوري (§4.3)
+//
+//  @@map("Deal") مقصود: الجدول الفيزيائي يحتفظ باسمه القديم فلا تتحرك
+//  صفوف ولا تضيع بيانات عند النشر. الاسم في الكود هو الاسم الصحيح.
+// ───────────────────────────────────────────────
+
+model Project {
+  id          String  @id @default(cuid())
+  /// معرّف تسلسلي بصيغة PR-2608-0042 — العدّاد يتجدّد شهريًا
+  code        String? @unique
+  title       String
+  description String?
+
+  /// الحالة التشغيلية الثمانية (§٦) — لا مرحلة بيعية
+  status      String @default("pending_assignment") @map("stage")
+  probability Int    @default(20)
+
+  // ── التسعير ──────────────────────────────────
+  /// السعر المُباع به إجمالًا — محجوب عمّن لا يملك canViewSellPrice
+  netTotal      Float   @default(0) @map("amount")
+  currency      String  @default("EGP")
+  unitPrice     Float?
+  gross         Float?
+  isRush        Boolean @default(false)
+  /// none | percent | amount | volume | repeat_client
+  discountType  String?
+  discountValue Float?
+
+  // ── التحصيل ──────────────────────────────────
+  deposit         Float     @default(0)
+  collectedAmount Float     @default(0)
+  collectedAt     DateTime?
+
+  // ── الخدمة ───────────────────────────────────
+  serviceLine String?   @map("serviceType")
+  sourceLang  String?
+  targetLang  String?
+  wordCount   Int?
+  pages       Float?    @map("pageCount")
+  deadline    DateTime? @map("deliveryDate")
+  /// زر «فوري» — يضبط الموعد نهاية اليوم بضغطة
+  isExpress   Boolean   @default(false)
+
+  // ── الاعتماد (يُفعَّل في مرحلة التسعير) ────────
+  /// not_required | pending | approved | rejected
+  approvalState String    @default("not_required")
+  approvedAt    DateTime?
+  /// سبب رفض الاعتماد إن رُفض
+  approvalNote  String?
+  approvedById  String?
+  approvedBy    User?     @relation("ProjectApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  // ── التشغيل (تُملأ في مرحلة الإسناد) ───────────
+  projectManagerId  String?
+  projectManager    User?   @relation("ProjectManager", fields: [projectManagerId], references: [id], onDelete: SetNull)
+  /// نمط التشغيل من قائمة work_mode — يحدد معامل الجهد
+  workMode          String?
+  /// internal | external | mixed
+  sourcing          String?
+  primaryProducerId String?
+  primaryProducer   User?   @relation("ProjectProducer", fields: [primaryProducerId], references: [id], onDelete: SetNull)
+  reviewerId        String?
+  reviewer          User?   @relation("ProjectReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  qaIssues          Int     @default(0)
+
+  /// **وحدتان منفصلتان لا واحدة** (§١٢): دمجهما يُخفي القيد الحقيقي —
+  /// الطاقة تتوقّف عند ما تستوعبه المراجعة البشرية لا عند سرعة الترجمة.
+  /// تُملآن من الصفحات عند التسليم فلا تُبطئ عمل الكاونتر.
+  unitsTranslated Float?
+  unitsReviewed   Float?
+  isRework        Boolean @default(false)
+  folderUrl       String?
+
+  /// أجر الفريلانسر للصفحة حين يكون التشغيل خارجيًا بلا خطوات صريحة
+  externalRate         Float?
+  /// اسم المنفِّذ الخارجي نصًّا — يبقى للسجلات القديمة السابقة لملف الفريلانسرز
+  externalName         String?
+  /// المنتِج الخارجي حين يكون فريلانسرًا مسجَّلًا (§١١)
+  primaryFreelancerId  String?
+  primaryFreelancer    Freelancer? @relation("ProjectFreelancer", fields: [primaryFreelancerId], references: [id], onDelete: SetNull)
+  /// المراجع حين يكون فريلانسرًا لا موظفًا
+  reviewerFreelancerId String?
+  reviewerFreelancer   Freelancer? @relation("ProjectReviewerFreelancer", fields: [reviewerFreelancerId], references: [id], onDelete: SetNull)
+  /// أجر المراجع الخارجي للصفحة
+  reviewerRate         Float?
+
+  // ── التكلفة والهامش — تُجمَّد وقت التسليم (§٨) ──
+  // لا تُعاد بتغيّر راتب أو معامل لاحقًا، وإلا تغيّر تاريخ الهوامش
+  weightedPages Float?
+  costInternal  Float?
+  costExternal  Float?
+  costTotal     Float?
+  margin        Float?
+  marginPct     Float?
+  /// آخر لحظة أُعيد فيها الحساب — للتشخيص
+  costedAt      DateTime?
+
+  // ── الطوابع الزمنية الخمسة (§4.3) ──────────────
+  createdAt   DateTime  @default(now())
+  convertedAt DateTime?
+  assignedAt  DateTime?
+  deliveredAt DateTime?
+  closedAt    DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  /// مفتاح تجميع التقارير — يُبصم عند الاعتراف بالإيراد
+  revenueMonth String?
+  /// سبب الإلغاء — الملغى لا يُمحى ولا يدخل تقريرًا ماليًا
+  cancelReason String? @map("lostReason")
+  branch       String?
+
+  expectedCloseDate DateTime?
+
+  /// مفتاح الصف في الملف القديم — يمنع تكرار الترحيل (§١٤)
+  legacyKey String? @unique
+
+  leadId String?
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  /// العميل صاحب المشروع — عليه تقوم بطاقته وتاريخ مشترياته
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   User?   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// **متقاعد** — «المالك الفرعي» الملغى في المرحلة ١٦. يبقى ولا يُحذف
+  /// لنفس سبب نظيره في `Lead`.
+  coOwnerId String?
+
+  tasks              Task[]
+  noteItems          Note[]
+  quotes             Quote[]
+  activities         Activity[]
+  steps              ProjectStep[]
+  commissions        CommissionEntry[]
+  freelancerPayments FreelancerPayment[]
+  journalEntries     JournalEntry[]
+  emails             EmailMessage[]
+
+  @@index([status])
+  @@index([ownerId])
+  @@index([companyId])
+  @@index([clientId])
+  @@index([branch])
+  @@index([revenueMonth])
+  @@index([deadline])
+  @@index([primaryProducerId])
+  @@map("Deal")
+}
+
+// ───────────────────────────────────────────────
+//  المهام
+// ───────────────────────────────────────────────
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      String    @default("OPEN") // OPEN | IN_PROGRESS | DONE | CANCELLED
+  priority    String    @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  type        String    @default("TODO") // CALL | EMAIL | MEETING | FOLLOW_UP | TODO
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  assigneeId String?
+  assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  creatorId String?
+  creator   User?   @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+
+  // المهمة قد ترتبط بأي كيان
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  projectId String?  @map("dealId")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([assigneeId, status])
+  @@index([dueDate])
+}
+
+// ───────────────────────────────────────────────
+//  الملاحظات
+// ───────────────────────────────────────────────
+
+model Note {
+  id        String   @id @default(cuid())
+  body      String
+  createdAt DateTime @default(now())
+
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  projectId String?  @map("dealId")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+// ───────────────────────────────────────────────
+//  عروض الأسعار
+// ───────────────────────────────────────────────
+
+model Quote {
+  id           String    @id @default(cuid())
+  number       String    @unique // QT-2026-0001
+  title        String
+  status       String    @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED
+  currency     String    @default("EGP")
+  subtotal     Float     @default(0)
+  /// قيمة الخصم بالعملة — تُشتقّ حين يكون النمط نسبيًا ولا تُدخَل مباشرةً
+  discount     Float     @default(0)
+  /// amount = مبلغ ثابت · percent = نسبة من المجموع الفرعي
+  discountMode String    @default("amount")
+  /// النسبة المئوية حين يكون النمط نسبيًا (١٠ تعني ١٠٪)
+  discountPct  Float     @default(0)
+  taxRate      Float     @default(0)
+  taxAmount    Float     @default(0)
+  total        Float     @default(0)
+  validUntil   DateTime?
+  notes        String?
+  terms        String?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // ── العرض المصمَّم بالذكاء الاصطناعي ─────────────
+  /// موقع العميل — يُقرأ ليُستوحى منه أسلوب العرض ومحتواه
+  clientWebsite String?
+  /// ملخّص ما قُرئ من موقع العميل — يُعرض للموظف قبل التوليد
+  clientBrief   String?
+  /// توجيه الموظف للنموذج
+  designPrompt  String?
+  /// المستند المولَّد — HTML مُعقَّم يُعرض ويُطبع
+  designHtml    String?
+  designedAt    DateTime?
+  designModel   String?
+
+  items QuoteItem[]
+
+  projectId String?  @map("dealId")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  ownerId   String?
+  owner     User?    @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+model QuoteItem {
+  id          String  @id @default(cuid())
+  description String
+  serviceType String?
+  sourceLang  String?
+  targetLang  String?
+  unit        String  @default("WORD") // WORD | PAGE | HOUR | PROJECT
+  quantity    Float   @default(1)
+  unitPrice   Float   @default(0)
+  lineTotal   Float   @default(0)
+  sortOrder   Int     @default(0)
+
+  quoteId String
+  quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId])
+}
+
+// ───────────────────────────────────────────────
+//  سجل الأنشطة (من فعل ماذا ومتى)
+// ───────────────────────────────────────────────
+
+model Activity {
+  id        String   @id @default(cuid())
+  type      String // CREATED | UPDATED | STAGE_CHANGED | NOTE_ADDED | EMAIL_SENT | CALL_LOGGED
+  title     String
+  detail    String?
+  createdAt DateTime @default(now())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  projectId String?  @map("dealId")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+// ───────────────────────────────────────────────
+//  إعدادات النظام (أسعار اللغات، إلخ)
+// ───────────────────────────────────────────────
+
+model Setting {
+  key       String   @id
+  value     String
+  /// الاسم العربي المعروض في شاشة الإعدادات
+  label     String?
+  updatedAt DateTime @updatedAt
+}
+
+/// بند في قائمة الأسعار: خط الخدمة × من لغة × إلى لغة ← سعر الصفحة.
+///
+/// **`effectiveFrom` إلزامي** (§١٠ بند ١): تعديل سعر اليوم لا يغيّر أسعار
+/// الماضي. البند الجديد يُضاف بتاريخ سريان، ويبقى القديم كما هو، فيُقرأ سعر
+/// أي مشروع بتاريخ إنشائه هو.
+model PriceListItem {
+  id          String @id @default(cuid())
+  serviceLine String
+  langFrom    String
+  langTo      String
+
+  /// سعر الصفحة الواحدة
+  unitPrice Float
+  currency  String @default("EGP")
+  /// حد أدنى لقيمة الطلب في هذا البند — يعلو على الحد العام إن وُجد
+  minOrder  Float?
+
+  /// من متى يسري هذا السعر
+  effectiveFrom DateTime @default(now())
+  active        Boolean  @default(true)
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([serviceLine, langFrom, langTo, effectiveFrom])
+  @@index([active])
+}
+
+// ───────────────────────────────────────────────
+//  المحاسبة (docs/FINANCE-SPEC.md)
+// ───────────────────────────────────────────────
+
+/// شجرة الحسابات — أربعة مستويات، والقيد لا يقع إلا على حساب ختامي.
+/// تُعدَّل من الشاشة: إضافة حساب أو تعطيله بلا نشر جديد.
+model Account {
+  id   String  @id @default(cuid())
+  /// كود اختياري يستخدمه المحاسب (1010, 4100...)
+  code String? @unique
+
+  /// الاسم بالعربية — هو ما يظهر في كل شاشة
+  name   String
+  /// الاسم كما ورد في الدفاتر الإنجليزية — للمطابقة عند الترحيل
+  nameEn String?
+
+  /// asset | liability | equity | revenue | expense
+  type         String
+  /// للمصروفات: selling_marketing | general_admin | production_operating
+  expenseGroup String?
+
+  /// 1..4 — الرابع هو الحساب الختامي الذي تقع عليه القيود
+  level    Int       @default(1)
+  parentId String?
+  parent   Account?  @relation("AccountTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Account[] @relation("AccountTree")
+
+  /// هل يقبل قيدًا مباشرًا؟ المستويات الأعلى للتجميع وحده
+  isPostable Boolean @default(false)
+  active     Boolean @default(true)
+
+  /// حساب نظامي يربطه النظام بحدث تشغيلي (مثل: إيراد الترجمة التحريرية)
+  systemKey String? @unique
+
+  /// حساب العميل الشخصي في شجرة «العملاء»
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines       JournalLine[]
+  budgetLines BudgetLine[]
+
+  /// fixed = ثابتة لا تتغيّر بحجم الإنتاج · variable = مرتبطة بالحجم
+  /// خطوتا ٣ و٤ من بناء الموازنة: الثابت يُحصر، والمتغيّر يُقدَّر بالحجم
+  costBehavior String?
+
+  /// هل يمثّل خروج نقد فعليًّا؟ الإهلاك مصروف غير نقدي، ويُستبعد من
+  /// **التعادل النقدي** (§١٠٫٢). ويُشتقّ من الحساب لا يُملأ في كل سطر:
+  /// حقلٌ يُملأ يدويًا آلاف المرات يُملأ خطأً مرة على الأقل.
+  isCash Boolean @default(true)
+
+  @@index([type])
+  @@index([parentId])
+  @@index([isPostable, active])
+}
+
+/// مركز التكلفة = حساب + مشروع، كما في دفاتر فاست ترانس
+model CostCenter {
+  id      String  @id @default(cuid())
+  name    String
+  project String?
+  active  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines JournalLine[]
+
+  departments Department[]
+
+  /// **الفئة المحاسبية** — هي ما يحدّد أين يقع الجنيه (§٣ من مواصفة الفروع):
+  ///   production        الإنتاج والتشغيل — كتلة مشتركة ثابتة
+  ///   central_marketing التسويق المؤسسي — كتلة مشتركة
+  ///   general_admin     الإدارة العامة — كتلة مشتركة
+  ///   branch_direct     مصاريف فرع بعينه — لا تدخل الكتلة أبدًا
+  kind String @default("branch_direct")
+
+  @@unique([name, project])
+}
+
+/// رأس قيد اليومية — لا يُرحَّل إلا متوازنًا
+model JournalEntry {
+  id   String  @id @default(cuid())
+  /// معرّف تسلسلي JV-2608-0001
+  code String? @unique
+
+  date        DateTime
+  /// YYYY-MM — مفتاح تجميع التقارير والإقفال
+  period      String
+  /// unspecified | e_invoice | proforma | credit_note | receipt | payment_voucher | journal
+  docType     String   @default("journal")
+  docNumber   String?
+  description String
+
+  /// draft = مسوَّدة · posted = مرحَّل · void = ملغى
+  status String @default("draft")
+
+  /// من أنشأ القيد ومن رحّله — التوقيع جزء من الدفتر
+  createdById String?
+  createdBy   User?     @relation("EntryAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  postedById  String?
+  postedBy    User?     @relation("EntryPoster", fields: [postedById], references: [id], onDelete: SetNull)
+  postedAt    DateTime?
+  voidReason  String?
+
+  /// القيد المقترح من المشغّل — يُنسب لمصدره ليُراجَع لا ليُصدَّق
+  sourceType String?
+  sourceId   String?
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines JournalLine[]
+
+  @@index([period, status])
+  @@index([date])
+  @@index([sourceType, sourceId])
+  @@index([projectId])
+}
+
+/// سطر القيد — يحمل الحساب والمبلغ **وأبعاده الثمانية**
+model JournalLine {
+  id      String       @id @default(cuid())
+  entryId String
+  entry   JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  /// بعملة القيد
+  debit  Float @default(0)
+  credit Float @default(0)
+
+  currency   String @default("EGP")
+  /// سعر التحويل **وقت القيد** — يُخزَّن فلا تتغيّر أرباح الماضي بتحرّك الدولار
+  fxRate     Float  @default(1)
+  /// بالعملة الأساس — عليه تُبنى كل التقارير
+  debitBase  Float  @default(0)
+  creditBase Float  @default(0)
+
+  // ── الأبعاد ───────────────────────────────
+  branch          String?
+  costCenterId    String?
+  costCenter      CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  salesAdminId    String?
+  salesAdmin      User?       @relation("LineSalesAdmin", fields: [salesAdminId], references: [id], onDelete: SetNull)
+  trafficSource   String?
+  translationType String?
+
+  memo      String?
+  sortOrder Int     @default(0)
+
+  @@index([entryId])
+  @@index([accountId])
+  @@index([branch])
+  @@index([costCenterId])
+}
+
+/// إقفال شهري — بعده لا يُحرَّر قيد في الفترة ولا يُعدَّل
+model FiscalPeriod {
+  period     String    @id
+  closedAt   DateTime?
+  closedById String?
+  closedBy   User?     @relation("PeriodCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  note       String?
+  updatedAt  DateTime  @updatedAt
+}
+
+/// موازنة سنة — رأس واحد لكل سنة، وبنوده لكل حساب لكل شهر
+model Budget {
+  id     String  @id @default(cuid())
+  year   Int     @unique
+  name   String
+  notes  String?
+  /// draft = قيد الإعداد · approved = معتمدة
+  status String  @default("draft")
+
+  approvedById String?
+  approvedBy   User?     @relation("BudgetApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines BudgetLine[]
+
+  /// نسبة صندوق الطوارئ (خطوة ٦) — تُضاف فوق مجموع المصروفات المخطَّطة
+  contingencyPct Float   @default(0)
+  /// last_year_plus | zero_based | manual — كيف بُنيت هذه الموازنة
+  method         String?
+  /// نسبة النمو المفترضة حين تُبنى من العام الماضي
+  growthPct      Float   @default(0)
+  planNotes      String?
+}
+
+model BudgetLine {
+  id       String @id @default(cuid())
+  budgetId String
+  budget   Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  /// 1..12 — المستهدف الشهري
+  month  Int
+  amount Float   @default(0)
+  /// اختياري: يقيّد المستهدف بفرع بعينه
+  branch String?
+
+  @@unique([budgetId, accountId, month, branch])
+  @@index([budgetId, month])
+}
+
+/// الأصول الثابتة وإهلاكها بالقسط الثابت
+model FixedAsset {
+  id   String  @id @default(cuid())
+  code String? @unique
+  name String
+
+  /// نوع الأصل — يربطه بحساب الأصل وحساب مصروف الإهلاك
+  category String
+
+  cost         Float
+  /// النسبة السنوية: ٠٫٢٥ = ٢٥٪
+  annualRate   Float
+  salvageValue Float @default(0)
+
+  purchaseDate DateTime
+  /// من أي شهر يبدأ الإهلاك — افتراضًا شهر الشراء
+  startPeriod  String
+
+  /// مجمّع الإهلاك المحتسَب حتى الآن — يزيد بكل ترحيل شهري
+  accumulated  Float     @default(0)
+  /// آخر شهر رُحّل إهلاكه — يمنع الترحيل مرتين لنفس الشهر
+  lastPeriod   String?
+  branch       String?
+  disposedAt   DateTime?
+  disposalNote String?
+  active       Boolean   @default(true)
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([active])
+}
+
+/// صفٌّ من ملف قديم تعذّر حسمه — «لا تحذف ولا تخمّن» (§١٤).
+/// يُعرض في شاشة مراجعة، ويُصحَّح يدويًا أو يُستبعد بقرار صريح.
+model MigrationReview {
+  id     String @id @default(cuid())
+  /// leads | sales
+  source String
+  /// رقم الصف في الملف — ليجده المراجع
+  rowNo  Int?
+
+  /// الصف كما ورد حرفيًا (مفصولًا بتبويب)
+  raw    String
+  /// لماذا لم يُحسم
+  reason String
+
+  /// resolved = صُحّح ورُحّل · skipped = استُبعد بقرار · pending
+  status       String    @default("pending")
+  resolvedAt   DateTime?
+  resolvedById String?
+  resolvedBy   User?     @relation("ReviewResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  note         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([source, status])
+}
+
+/// تنبيه مُرسَل (§١٢) — **ملخص واحد لكل شخص لكل حدث** لا رسالة لكل سجل
+model Notification {
+  id       String @id @default(cuid())
+  /// مفتاح الحدث من NOTIFICATION_EVENTS
+  eventKey String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title     String
+  body      String
+  link      String?
+  /// info | warn | urgent
+  severity  String  @default("info")
+  /// عدد السجلات التي جمعها هذا الملخص
+  count     Int     @default(1)
+  /// معرّفات السجلات مفصولة بفواصل — العرض يُختصر والبيانات لا
+  recordIds String?
+
+  /// الحدث + الشخص + الدورة — يمنع رسالتين لنفس الشيء
+  dedupeKey String @unique
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([eventKey])
+}
+
+/// آخر مرة رُوجع فيها حدثٌ — عليه يقوم قرار «هل حان الملخص؟»
+model NotificationRun {
+  eventKey   String    @id
+  lastSentAt DateTime?
+  lastRunAt  DateTime  @default(now())
+  lastCount  Int       @default(0)
+  note       String?
+}
+
+/// عرض سعر احترافي (على غرار عرض Tristar) — مستند يُرسَل لا سطر في جدول
+model Proposal {
+  id       String  @id @default(cuid())
+  /// مرجع العرض: FT-KSA-2608-021
+  code     String? @unique
+  /// رقم المراجعة — العرض المنقَّح يحمل رقمًا لا يُستبدل الأصل
+  revision Int     @default(1)
+
+  title         String
+  /// الجهة المستقبِلة
+  clientName    String
+  attention     String?
+  attentionRole String?
+
+  /// زوج اللغات المعروض عليه
+  sourceLang String?
+  targetLang String?
+
+  currency          String @default("SAR")
+  /// نسبة ضريبة القيمة المضافة — ٠٫١٥ = ١٥٪
+  vatRate           Float  @default(0.15)
+  validityDays      Int    @default(30)
+  paymentDays       Int    @default(30)
+  contractingEntity String @default("فاست ترانس — الرياض، المملكة العربية السعودية")
+
+  /// الشرائح — **بأثر رجعي على حجم الشهر كاملًا**
+  tiers         ProposalTierRow[]
+  /// أحجام المثال في جدول «ما يعنيه هذا عمليًا» — مفصولة بفواصل
+  sampleVolumes String            @default("100000,250000,500000,1000000")
+
+  /// draft | sent | accepted | declined | expired
+  status       String    @default("draft")
+  sentAt       DateTime?
+  decidedAt    DateTime?
+  decisionNote String?
+
+  /// نصوص يحرّرها معدّ العرض فوق الافتراضي
+  intro       String?
+  positioning String?
+  nextSteps   String?
+  notes       String?
+
+  /// من أصدره ومن يوقّعه
+  ownerId     String?
+  owner       User?   @relation("ProposalOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  signerName  String?
+  signerTitle String?
+
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([clientId])
+  @@index([ownerId])
+}
+
+model ProposalTierRow {
+  id         String   @id @default(cuid())
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  label       String
+  fromWords   Int
+  toWords     Int?
+  discountPct Float  @default(0)
+  ratePerPage Float
+  sortOrder   Int    @default(0)
+
+  @@index([proposalId, fromWords])
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  البريد والذكاء الاصطناعي
+// ═══════════════════════════════════════════════════════════════
+
+/// صندوق بريد مربوط بالنظام.
+///
+/// `ownerId` فارغًا يعني **صندوقًا مشتركًا** يراه كل من يملك صلاحية البريد،
+/// وممتلئًا يعني صندوق شخص بعينه لا يقرؤه غيره. القرار بين النمطين إعداد
+/// لا كود، لأن المكتب قد يبدأ بصندوق `info@` واحد ثم يفرد لكل أدمن صندوقه.
+model Mailbox {
+  id      String  @id @default(cuid())
+  label   String
+  address String  @unique
+  ownerId String?
+  owner   User?   @relation("MailboxOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  imapHost   String
+  imapPort   Int     @default(993)
+  imapSecure Boolean @default(true)
+  smtpHost   String
+  smtpPort   Int     @default(465)
+  smtpSecure Boolean @default(true)
+  username   String
+  /// كلمة مرور التطبيق مُعمّاة — لا تُقرأ في أي شاشة ولا تُرسل للمتصفح
+  secret     String
+  folder     String  @default("INBOX")
+  /// اسم المرسِل الظاهر في الردود
+  fromName   String?
+  /// توقيع يُذيَّل به كل رد
+  signature  String?
+  active     Boolean @default(true)
+
+  /// آخر UID قُرئ — نسحب ما بعده وحده فلا نعيد تنزيل الصندوق كل مرة
+  lastUid    Int       @default(0)
+  lastSyncAt DateTime?
+  lastError  String?
+
+  messages  EmailMessage[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([ownerId])
+}
+
+/// رسالة بريد — واردة أو صادرة.
+///
+/// تُحفظ بنصّها كاملًا لا بمرجعٍ إلى الخادم: صندوق البريد قد يُحذف منه، وسجلّ
+/// المراسلة مع العميل جزء من ملفّه لا من الصندوق (§٣ بند ٥).
+model EmailMessage {
+  id        String  @id @default(cuid())
+  mailboxId String
+  mailbox   Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  /// in = واردة · out = صادرة
+  direction String  @default("in")
+  messageId String? @unique
+  inReplyTo String?
+  /// مفتاح الخيط: الموضوع بعد تجريده من Re/Fwd + عنوان الطرف الآخر
+  threadKey String
+  uid       Int?
+
+  fromAddress String
+  fromName    String?
+  toAddresses String
+  ccAddresses String?
+  subject     String
+  bodyText    String
+  bodyHtml    String?
+  /// النص بعد نزع الاقتباس والتوقيع — ما يُرسل للتحليل
+  cleanText   String?
+
+  sentAt          DateTime
+  receivedAt      DateTime @default(now())
+  attachmentNames String?
+
+  /// تحليل الذكاء الاصطناعي — كلّه اختياري: الرسالة تُحفظ ولو تعطّل التحليل
+  intent         String?
+  language       String?
+  urgency        String?
+  sentiment      String?
+  summary        String?
+  suggestedReply String?
+  analyzedAt     DateTime?
+
+  /// الربط بسجلّات النظام — يُستنتج بالعنوان أو يُصحَّح يدويًا
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  /// من عالجها ومتى — الوارد غير المعالَج هو ما يظهر في التنبيهات
+  handledAt   DateTime?
+  handledById String?
+  handledBy   User?     @relation("EmailHandler", fields: [handledById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([mailboxId, direction])
+  @@index([threadKey])
+  @@index([leadId])
+  @@index([clientId])
+  @@index([handledAt])
+}
+
+/// محادثة مع مساعد النظام الذكي — يقرأ أرقام النظام ويجيب عنها بالعربية.
+model AiThread {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("AiThreadOwner", fields: [userId], references: [id], onDelete: Cascade)
+  title  String @default("محادثة جديدة")
+
+  messages  AiMessage[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+model AiMessage {
+  id       String   @id @default(cuid())
+  threadId String
+  thread   AiThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  /// user | assistant
+  role     String
+  content  String
+  /// أسماء الأدوات التي استُخدمت للإجابة — مفصولة بفواصل
+  usedData String?
+
+  createdAt DateTime @default(now())
+
+  @@index([threadId])
+}
+
+/// سجلّ كل نداء للذكاء الاصطناعي — للتكلفة والتدقيق.
+///
+/// النموذج يُنادى بمال، ونداء لا يُسجَّل لا يُحاسَب عليه أحد.
+model AiRun {
+  id        String  @id @default(cuid())
+  userId    String?
+  user      User?   @relation("AiRunUser", fields: [userId], references: [id], onDelete: SetNull)
+  /// email.analyze | email.reply | assistant | proposal.draft
+  purpose   String
+  model     String
+  inTokens  Int     @default(0)
+  outTokens Int     @default(0)
+  costUsd   Float   @default(0)
+  ms        Int     @default(0)
+  ok        Boolean @default(true)
+  error     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([purpose, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  الملفات المرفوعة
+// ═══════════════════════════════════════════════════════════════
+
+/// ملف مرفوع على النظام.
+///
+/// يُخزَّن **داخل قاعدة البيانات** لا على قرص الخادم: النشر على Vercel بلا
+/// قرص دائم، فملفٌ يُكتب اليوم يختفي مع أول إعادة نشر. والسير الذاتية صغيرة
+/// (سقفها ٥ ميجابايت)، فكلفة تخزينها في القاعدة أرخص من خدمة تخزين كاملة.
+model StoredFile {
+  id       String @id @default(cuid())
+  /// اسم الملف كما رفعه صاحبه — يُعاد به عند التنزيل
+  name     String
+  mimeType String
+  /// بالبايت — يُفحص قبل الحفظ لا بعده
+  size     Int
+  data     Bytes
+
+  /// ما الذي يخصّه هذا الملف: freelancer_cv | quote_attachment | …
+  purpose      String  @default("attachment")
+  uploadedById String?
+  uploadedBy   User?   @relation("FileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  freelancerCv Freelancer? @relation("FreelancerCv")
+
+  createdAt DateTime @default(now())
+
+  @@index([purpose])
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  الموارد البشرية
+// ═══════════════════════════════════════════════════════════════
+
+/// الإدارة أو القسم — **شجرة**: القسم يتبع إدارة، والإدارة تتبع الشركة.
+///
+/// التشجير هنا مستقل عن `reportsToId` عمدًا: التبعية الإدارية للشخص قد
+/// تخالف موقعه التنظيمي (مترجم في قسم الإنتاج يتبع مدير مشاريع في قسم آخر)،
+/// وخلطهما يُفسد تقارير القسمين معًا.
+model Department {
+  id       String       @id @default(cuid())
+  name     String
+  code     String?      @unique
+  parentId String?
+  parent   Department?  @relation("DeptTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Department[] @relation("DeptTree")
+
+  managerId String?
+  manager   User?   @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
+
+  branch       String?
+  /// مركز التكلفة المحاسبي المقابل — يربط الرواتب بالدفتر
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members User[]
+
+  @@index([parentId])
+}
+
+/// بند في هيكل أجر الموظف: أساسي · بدل · حافز · استقطاع.
+///
+/// **بتاريخ سريان** كالأسعار: زيادة راتب هذا الشهر لا تُعيد كتابة كشوف
+/// الشهور الماضية، ولا تُغيّر تكلفة مشروع سُلّم وجُمّدت تكلفته.
+model SalaryComponent {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// basic | allowance | incentive | bonus | deduction
+  kind      String
+  label     String
+  /// مبلغ ثابت، أو نسبة من الأساسي حين `isPercent`
+  amount    Float   @default(0)
+  isPercent Boolean @default(false)
+
+  /// monthly = يتكرر كل شهر · once = مرة واحدة في شهر بعينه
+  frequency String  @default("monthly")
+  /// الشهر `YYYY-MM` حين تكون لمرة واحدة
+  period    String?
+
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  active        Boolean   @default(true)
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, kind])
+  @@index([effectiveFrom])
+}
+
+/// كشف رواتب شهر.
+///
+/// يُبنى مسوّدةً من بنود الأجر السارية، ويُعتمد، ثم يولّد **قيد مسوّدة** في
+/// الدفتر — لا يُرحَّل من ظهر المحاسب (§٤).
+model PayrollRun {
+  id     String @id @default(cuid())
+  /// `YYYY-MM`
+  period String @unique
+  /// draft | approved | paid
+  status String @default("draft")
+
+  branch String?
+
+  totalBasic      Float @default(0)
+  totalAllowances Float @default(0)
+  totalIncentives Float @default(0)
+  totalDeductions Float @default(0)
+  totalNet        Float @default(0)
+
+  approvedAt     DateTime?
+  approvedById   String?
+  paidAt         DateTime?
+  /// القيد المولَّد — لا يُولَّد مرتين
+  journalEntryId String?
+  notes          String?
+
+  lines PayrollLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model PayrollLine {
+  id    String     @id @default(cuid())
+  runId String
+  run   PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  basic      Float @default(0)
+  allowances Float @default(0)
+  incentives Float @default(0)
+  deductions Float @default(0)
+  net        Float @default(0)
+
+  /// تفصيل البنود وقت البناء — لقطة لا تتغيّر بتعديل لاحق على هيكل الأجر
+  breakdown String?
+  notes     String?
+
+  @@unique([runId, userId])
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  محاسبة الفروع وتوزيع التكلفة المركزية
+//  (مواصفة «Branch Profitability & Cost Allocation»)
+// ═══════════════════════════════════════════════════════════════
+
+/// الفرع ككيان لا كنصّ في قائمة.
+///
+/// **`code` هو نفس مفتاح قائمة `branch` القائمة** (mokattam · riyadh …)،
+/// فكل ما هو مخزَّن في `Project.branch` و`JournalLine.branch` يبقى صالحًا
+/// ولا يُرحَّل صفٌّ واحد.
+///
+/// وملاحظة معمارية من §٢٫١: **الفرع المركزي يؤدي أكثر من دور**، فيُمثَّل
+/// هنا فرعَ بيعٍ له إيراده ومصاريفه الذاتية، بينما تقع كتلته المركزية في
+/// **مراكز تكلفة** بأنواع مشتركة لا في الفرع. دمجهما هو أصل الخلل الذي
+/// يعالجه هذا الموديول.
+model Branch {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  country  String?
+  currency String  @default("EGP")
+
+  /// retail | corporate | production_hub
+  type          String @default("retail")
+  /// planning | ramp_up | active | downsized | closed
+  status        String @default("active")
+  /// foundation | launch | growth | mature — يحدّد معامل التحميل المطبَّق
+  maturityStage String @default("mature")
+
+  openedAt DateTime?
+  closedAt DateTime?
+
+  // ── قيود ما قبل الفتح (§١١٫٢) ─────────────────
+  /// تجهيز + تأمين — يدخل في الاستنزاف النقدي التراكمي
+  setupCost         Float @default(0)
+  /// شهور متوقَّعة للوصول إلى التعادل
+  monthsToBreakEven Int   @default(0)
+
+  // ── بوابة القرار (§١١٫١) ──────────────────────
+  /// معيار النجاح مكتوبًا **قبل** الافتتاح لا بعده
+  gateCriteria String?
+  gateAt       DateTime?
+  /// hold | extend | downsize — ويبقى فارغًا حتى تُتّخذ
+  gateDecision String?
+  gateNote     String?
+
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+/// المعدل المعياري لتحميل الكتلة المشتركة — **مثبَّت لسنة كاملة**.
+///
+/// لماذا يُثبَّت ولا يُحسب شهريًا (§٤٫٢): الحساب الشهري صحيح رياضيًا لكنه
+/// يُلغي قابلية التخطيط (التارجت لا يُعرف إلا بعد انتهاء الشهر)، ويعاقب
+/// الفرع على أداء غيره، ويُخفي الرفع التشغيلي وتكلفة الطاقة العاطلة.
+model AllocationRate {
+  id   String @id @default(cuid())
+  year Int    @unique
+
+  /// المعدل المثبَّت (٠٫٤٥ = ٤٥٪ من إيراد الفرع)
+  standardRate Float  @default(0)
+  /// revenue | units | orders — والمعتمد حاليًا `revenue`
+  basis        String @default("revenue")
+
+  /// عدد الشهور التي اشتُقّ منها (٣ إلى ١٢)
+  derivedFromMonths Int       @default(12)
+  /// ما نتج عن الاشتقاق وقت إجرائه — للمقارنة بما ثُبِّت فعلًا
+  derivedRate       Float?
+  derivedAt         DateTime?
+  /// إيراد الشركة والكتلة المشتركة في فترة الاشتقاق — سند الرقم
+  derivedRevenue    Float?
+  derivedMass       Float?
+
+  /// المثبَّت لا يُعدَّل بعد القفل إلا بقيد صريح — سنةٌ بمعدَّلين لا تُقارَن
+  lockedAt DateTime?
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// إقفال شهري لمحاسبة الفروع.
+///
+/// يُخزَّن **مجمَّدًا**: الفعليّ يتغيّر بقيد يُرحَّل لاحقًا، وتقريرٌ صدر في
+/// حينه يجب أن يبقى كما قُرئ. ولا يُقفَل الشهر ما لم تساوِ معادلة التحقّق
+/// صفرًا (§٨).
+model BranchPeriodResult {
+  id         String  @id @default(cuid())
+  /// YYYY-MM
+  period     String
+  /// فارغ = سطر الشركة الإجمالي
+  branchCode String?
+
+  revenue        Float @default(0)
+  directExpenses Float @default(0)
+  /// الإهلاك ضمن المصاريف الذاتية — يُستبعد من التعادل النقدي
+  depreciation   Float @default(0)
+  commissions    Float @default(0)
+  /// الإيراد − الذاتية − العمولات
+  contribution   Float @default(0)
+  /// الإيراد × نسبة التحميل المطبَّقة
+  allocated      Float @default(0)
+  /// المساهمة − التحميل
+  loadedNet      Float @default(0)
+
+  appliedRate   Float   @default(0)
+  maturityStage String?
+  orders        Int     @default(0)
+  adSpend       Float   @default(0)
+
+  /// على سطر الشركة وحده
+  sharedMass       Float?
+  recoveryVariance Float?
+  companyNet       Float?
+
+  closedAt   DateTime?
+  closedById String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([period, branchCode])
+  @@index([period])
+}
+
+/// محاولات الدخول الفاشلة — لتحديد المعدّل.
+///
+/// **سجلٌّ قصير العمر لا تاريخٌ دائم**: يُمسح عند نجاح الدخول، ولا يُحتفظ
+/// منه إلا بما داخل النافذة. وليس بديلًا عن سجلّ التدقيق — ذاك للدخول
+/// الناجح ويبقى.
+model LoginAttempt {
+  id String @id @default(cuid())
+
+  /// البريد الذي حاول — مطبَّعًا صغيرًا
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+}
+
+/// خطأ وقع في الخادم — ليعلم به المالك قبل أن يشتكي موظف.
+///
+/// **ليس سجلّ تدقيق**: ذاك يوثّق ما فعله الناس ويبقى، وهذا يوثّق ما انكسر
+/// ويُقلَّم. ولا يُخزَّن فيه شيء من كلمات المرور ولا المفاتيح — يُنقّى قبل
+/// الكتابة (`redactSecrets`).
+model ErrorLog {
+  id String @id @default(cuid())
+
+  /// save | mutate | cron | job — أين وقع
+  kind    String
+  /// رسالة الخطأ بعد التنقية
+  message String
+  /// أثر التنفيذ أو سياق إضافي — قد يطول
+  detail  String?
+  /// المسار أو الكيان الذي كان يُحفظ
+  path    String?
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  /// عدد مرات تكرار نفس الخطأ — بطاقة واحدة تُحدَّث لا مئة بطاقة
+  count Int @default(1)
+
+  seen      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([seen, createdAt])
+}
