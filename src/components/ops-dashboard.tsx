@@ -7,6 +7,7 @@ import {
   TrendingUp,
   TrendingDown,
   Users,
+  ShieldCheck,
 } from 'lucide-react';
 import { db } from '@/lib/db';
 import { can, type SessionUser } from '@/lib/auth';
@@ -19,6 +20,8 @@ import {
   costPerPage,
   rankProducers,
 } from '@/lib/ops-metrics';
+import { qualitySummary, DEFAULT_WORDS_PER_PAGE, DEFAULT_PENALTY_PER_ERROR } from '@/lib/quality';
+import { allSettings } from '@/lib/reference';
 import { formatMoney, formatDate } from '@/lib/utils';
 import { PageHeader, StatCard, Badge, EmptyState } from '@/components/ui';
 import { BarList } from '@/components/chart';
@@ -42,7 +45,9 @@ export default async function OpsDashboard({ user }: { user: SessionUser }) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-  const [thisMonth, lastMonth, waiting, running, overdueRows, producers] = await Promise.all([
+  const [settings, thisMonth, lastMonth, waiting, running, overdueRows, producers] =
+    await Promise.all([
+      allSettings(),
     db.project.findMany({
       where: { status: { in: REVENUE_STATUSES }, deliveredAt: { gte: monthStart } },
       select: {
@@ -53,6 +58,10 @@ export default async function OpsDashboard({ user }: { user: SessionUser }) {
         deadline: true,
         weightedPages: true,
         pages: true,
+        qaIssues: true,
+        isRework: true,
+        unitsTranslated: true,
+        primaryProducerId: true,
         // التكلفة تُقرأ فقط لمن يملك مؤشرها — ولا تُرسل لغيره (§٣ بند ٢)
         ...(seesCost ? { costTotal: true, netTotal: true } : {}),
       },
@@ -111,6 +120,22 @@ export default async function OpsDashboard({ user }: { user: SessionUser }) {
   const roi = operatingRoi(soldTotal, costTotal);
   const perPage = costPerPage(costTotal, pagesNow);
 
+  /**
+   * الجودة — **كثافة الملاحظات لكل ألف كلمة، لا عددُها المجرّد**.
+   * التفصيل ولماذا في `src/lib/quality.ts`. والعقوبة إعدادٌ يضبطه المكتب.
+   */
+  const wordsPerPage = Number(settings.words_per_page) || DEFAULT_WORDS_PER_PAGE;
+  const penalty = Number(settings.quality_penalty_per_error) || DEFAULT_PENALTY_PER_ERROR;
+  const quality = qualitySummary(
+    thisMonth.map((p) => ({
+      qaIssues: p.qaIssues ?? 0,
+      pages: p.pages ?? 0,
+      words: p.unitsTranslated ? p.unitsTranslated * wordsPerPage : null,
+      isRework: p.isRework ?? false,
+    })),
+    { wordsPerPage, penaltyPerError: penalty }
+  );
+
   const producerIds = producers.map((p) => p.primaryProducerId).filter(Boolean) as string[];
   const names = producerIds.length
     ? new Map(
@@ -122,6 +147,25 @@ export default async function OpsDashboard({ user }: { user: SessionUser }) {
         ).map((u) => [u.id, u.name])
       )
     : new Map<string, string>();
+
+  // جودة كل منفِّذ على حدة — بنفس القاعدة، فلا يختلف معنى الرقم بين شاشتين
+  const qualityOf = new Map<string, ReturnType<typeof qualitySummary>>();
+  for (const id of new Set(producerIds)) {
+    qualityOf.set(
+      id,
+      qualitySummary(
+        thisMonth
+          .filter((p) => p.primaryProducerId === id)
+          .map((p) => ({
+            qaIssues: p.qaIssues ?? 0,
+            pages: p.pages ?? 0,
+            words: p.unitsTranslated ? p.unitsTranslated * wordsPerPage : null,
+            isRework: p.isRework ?? false,
+          })),
+        { wordsPerPage, penaltyPerError: penalty }
+      )
+    );
+  }
 
   const board = rankProducers(
     producers
@@ -210,6 +254,74 @@ export default async function OpsDashboard({ user }: { user: SessionUser }) {
         )}
       </div>
 
+      <section className="card card-pad">
+        <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-800">
+          <ShieldCheck className="h-4 w-4 text-brand-600" />
+          الجودة هذا الشهر
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-4">
+          <div>
+            <p className="text-xs text-slate-500">درجة الجودة</p>
+            <p className="mt-1 flex items-center gap-2 text-2xl font-bold text-slate-900 nums">
+              {quality.score === null ? '—' : quality.score}
+              {quality.band && (
+                <Badge
+                  className={
+                    quality.band.tone === 'good'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : quality.band.tone === 'warn'
+                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                        : 'border-rose-200 bg-rose-50 text-rose-700'
+                  }
+                >
+                  {quality.band.label}
+                </Badge>
+              )}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              {quality.score === null ? 'لا حجم مقيس هذا الشهر' : 'من مئة'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">ملاحظات لكل ألف كلمة</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900 nums">
+              {quality.density === null ? '—' : quality.density}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              الهدف {Number(settings.quality_target_density) || 1} — والمعيار الصناعي
+              يقيس الخطأ بحجمه
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">سُلّم بلا ملاحظة واحدة</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900 nums">
+              {quality.cleanPct === null ? '—' : `${quality.cleanPct}٪`}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              {quality.measured} مشروعًا مقيسًا من {quality.projects}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">رجع للتصحيح</p>
+            <p
+              className={`mt-1 text-2xl font-bold nums ${
+                quality.reworkPct === null
+                  ? 'text-slate-400'
+                  : quality.reworkPct > 0
+                    ? 'text-rose-600'
+                    : 'text-emerald-600'
+              }`}
+            >
+              {quality.reworkPct === null ? '—' : `${quality.reworkPct}٪`}
+            </p>
+            {/* الخطأ الذي أفلت أغلى من عشرةٍ أمسكتها المراجعة */}
+            <p className="mt-1 text-xs text-slate-400">
+              {quality.reworked} مشروعًا بعد التسليم
+            </p>
+          </div>
+        </div>
+      </section>
+
       {seesCost && (
         <section className="card card-pad">
           <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-800">
@@ -280,7 +392,10 @@ export default async function OpsDashboard({ user }: { user: SessionUser }) {
                 label: `${b.rank}. ${b.userName}`,
                 value: b.pages,
                 display: `${b.pages} صفحة موزونة`,
-                hint: `${b.projects} مشروعًا`,
+                // «غير مقيس» تُعرض شرطةً لا صفرًا — الفرق حكمٌ في حقّ إنسان
+                hint: `${b.projects} مشروعًا · جودة ${
+                  qualityOf.get(b.userId)?.score ?? '—'
+                }`,
               }))}
             />
           )}

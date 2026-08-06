@@ -2227,6 +2227,32 @@ check(
   '★ ولا يصل زرُّ التحصيل من لا يملك تسجيله'
 );
 
+// ── 29أ. الجودة بالمعيار الصناعي ────────────────────────────
+//
+// **الخطأ يُنسب إلى حجمه** — ولا يُقاس بوحدتين في شاشتين.
+
+await go('/', '29a-quality');
+const qualityText = await page.locator('body').innerText();
+check(
+  qualityText.includes('الجودة هذا الشهر') && qualityText.includes('لكل ألف كلمة'),
+  '★ لوحة التشغيل تعرض الجودة بكثافة الملاحظات لكل ألف كلمة (اختبار ٢٩أ)'
+);
+check(
+  qualityText.includes('درجة الجودة') && qualityText.includes('رجع للتصحيح'),
+  'ومعها درجةٌ من مئة ونسبةُ ما رجع بعد التسليم — الخطأ الذي أفلت'
+);
+
+await go('/me');
+const meText = await page.locator('body').innerText();
+check(
+  meText.includes('درجة الجودة'),
+  '★ وشاشة «أدائي» تعرض الدرجة نفسها — لا رقمين لشيء واحد'
+);
+check(
+  meText.includes('لكل ألف كلمة') || meText.includes('غير مقيس'),
+  'وبنفس الوحدة، أو «غير مقيس» حين لا حجم يُقاس'
+);
+
 // ── 29. التحليلات تتبع عمل صاحبها ───────────────────────────
 await go('/analytics', '29-analytics-ops');
 const opsAnalytics = await page.locator('body').innerText();

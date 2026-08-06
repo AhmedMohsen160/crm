@@ -1,5 +1,6 @@
 import 'server-only';
 import { db } from './db';
+import { allSettings } from './reference';
 import {
   buildTree,
   employeeRoi,
@@ -15,6 +16,11 @@ import {
   type Payslip,
 } from './hr';
 import { onTimeRate } from './costing';
+import {
+  qualitySummary,
+  DEFAULT_WORDS_PER_PAGE,
+  DEFAULT_PENALTY_PER_ERROR,
+} from './quality';
 
 /**
  * الموارد البشرية — ما يلمس القاعدة.
@@ -239,6 +245,8 @@ export type OwnWork = {
   onTimePct: number | null;
   /** ملاحظات الجودة لكل مئة صفحة موزونة — `null` حين لا إنتاج */
   qaPer100: number | null;
+  /** الجودة بالمعيار الصناعي: كثافة لكل ألف كلمة ودرجةٌ من مئة */
+  quality: ReturnType<typeof qualitySummary>;
 };
 
 /**
@@ -253,6 +261,10 @@ export type OwnWork = {
  * التزام بالمواعيد».
  */
 export async function ownWork(userId: string, from: Date, to: Date): Promise<OwnWork> {
+  const settings = await allSettings();
+  const wordsPerPage = Number(settings.words_per_page) || DEFAULT_WORDS_PER_PAGE;
+  const penalty = Number(settings.quality_penalty_per_error) || DEFAULT_PENALTY_PER_ERROR;
+
   const [steps, produced, reviewed] = await Promise.all([
     db.projectStep.findMany({
       where: {
@@ -276,7 +288,15 @@ export async function ownWork(userId: string, from: Date, to: Date): Promise<Own
         status: { in: ['delivered', 'collected'] },
         deliveredAt: { gte: from, lte: to },
       },
-      select: { qaIssues: true, deadline: true, deliveredAt: true, weightedPages: true },
+      select: {
+        qaIssues: true,
+        deadline: true,
+        deliveredAt: true,
+        weightedPages: true,
+        pages: true,
+        unitsTranslated: true,
+        isRework: true,
+      },
     }),
     db.project.count({
       where: {
@@ -316,6 +336,20 @@ export async function ownWork(userId: string, from: Date, to: Date): Promise<Own
     reviewedCount: reviewed,
     onTimePct: timing.rate,
     qaPer100: weightedPages > 0 ? round2((qaIssues / weightedPages) * 100) : null,
+    /**
+     * **درجة الجودة بالمعيار الصناعي نفسه** الذي تعرضه لوحة التشغيل — كثافة
+     * الملاحظات لكل ألف كلمة. ولو حسبتها هذه الشاشة بوحدة وتلك بأخرى، لرأى
+     * المنفِّذ رقمين لشيء واحد ولم يعرف أيّهما تقييمه.
+     */
+    quality: qualitySummary(
+      produced.map((p) => ({
+        qaIssues: p.qaIssues ?? 0,
+        pages: p.pages ?? 0,
+        words: p.unitsTranslated ? p.unitsTranslated * wordsPerPage : null,
+        isRework: p.isRework ?? false,
+      })),
+      { wordsPerPage, penaltyPerError: penalty }
+    ),
   };
 }
 

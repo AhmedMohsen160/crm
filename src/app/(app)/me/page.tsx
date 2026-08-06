@@ -76,12 +76,30 @@ export default async function MyPerformancePage({
           icon={<CalendarCheck className="h-5 w-5" />}
           accent={work.onTimePct !== null && work.onTimePct >= 0.9 ? 'emerald' : 'amber'}
         />
+        {/**
+          * درجة الجودة بالمعيار الصناعي — كثافة الملاحظات لكل ألف كلمة.
+          * والوحدة نفسها في لوحة التشغيل، فلا يرى المنفِّذ رقمين لشيء واحد.
+          */}
         <StatCard
-          label="ملاحظات الجودة"
-          value={work.qaPer100 === null ? '—' : work.qaPer100.toFixed(1)}
-          hint={work.qaPer100 === null ? 'غير مقيس' : 'لكل ١٠٠ صفحة موزونة — الأقل أفضل'}
+          label="درجة الجودة"
+          value={work.quality.score === null ? '—' : String(work.quality.score)}
+          hint={
+            work.quality.score === null
+              ? 'غير مقيس هذا الشهر'
+              : `${work.quality.density} ملاحظة لكل ألف كلمة · ${
+                  work.quality.band?.label ?? ''
+                }`
+          }
           icon={<ShieldCheck className="h-5 w-5" />}
-          accent={work.qaPer100 !== null && work.qaPer100 <= 2 ? 'emerald' : 'slate'}
+          accent={
+            work.quality.score === null
+              ? 'slate'
+              : work.quality.band?.tone === 'good'
+                ? 'emerald'
+                : work.quality.band?.tone === 'warn'
+                  ? 'amber'
+                  : 'rose'
+          }
         />
       </div>
 

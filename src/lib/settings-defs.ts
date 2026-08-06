@@ -44,6 +44,22 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     group: 'التشغيل والطاقة',
   },
   {
+    key: 'quality_penalty_per_error',
+    label: 'خصم درجة الجودة لكل خطأ في الألف كلمة',
+    value: '10',
+    kind: 'number',
+    group: 'التشغيل والطاقة',
+    hint: 'خطأٌ واحد لكل ألف كلمة يعني درجة ٩٠. ما يصلح لعقدٍ قانونيّ لا يصلح لمستندٍ شخصيّ',
+  },
+  {
+    key: 'quality_target_density',
+    label: 'الهدف: أخطاء لكل ألف كلمة',
+    value: '1',
+    kind: 'number',
+    group: 'التشغيل والطاقة',
+    hint: 'الحدّ المتعارف عليه في الترجمة المعتمدة — دونه يُقبل العمل بلا تحفّظ',
+  },
+  {
     key: 'min_weighted_unit',
     label: 'الحد الأدنى للوحدة الموزونة',
     value: '1.0',
