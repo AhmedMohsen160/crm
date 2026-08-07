@@ -92,6 +92,30 @@ export const HEALTH_LABELS: Record<JobHealth, string> = {
   never: 'لم تعمل بعد',
 };
 
+// ── حال التهيئة ────────────────────────────────────────────────
+
+export type CronSetupState = 'missing' | 'pending' | 'running';
+
+/**
+ * هل المهام مهيّأة أصلًا؟
+ *
+ * **«لم تعمل بعد» لها سببان مختلفان، وعلاجهما مختلف.** فإن لم يُضبط السرّ
+ * فالمسار مغلق (٥٠٣) ولن تعمل أبدًا مهما انتُظر — والعلاج ضبطُه وإعادةُ
+ * النشر. وإن ضُبط ولم تعمل بعد فالأمر انتظارُ أول دورة لا خللٌ يُطارَد.
+ *
+ * وشاشةٌ تقول الجملة نفسها في الحالين تترك المالك ينتظر بابًا مغلقًا.
+ */
+export function cronSetupState(secretSet: boolean, anyJobRan: boolean): CronSetupState {
+  if (!secretSet) return 'missing';
+  return anyJobRan ? 'running' : 'pending';
+}
+
+export const SETUP_LABELS: Record<CronSetupState, string> = {
+  missing: 'المهام معطّلة — لم يُضبط سرّ الجدولة بعد',
+  pending: 'السرّ مضبوط — في انتظار أول دورة',
+  running: 'المهام مهيّأة وتعمل',
+};
+
 /** «منذ كم» بالعربية — بلا كسور ولا أرقام لا تُقرأ */
 export function agoLabel(minutes: number | null): string {
   if (minutes === null) return '—';

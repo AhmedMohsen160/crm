@@ -2342,6 +2342,25 @@ check(
   'وسجل الأعطال يفتح لمن يملك الإعدادات'
 );
 
+// ── 32. المهام المجدولة تقول حال تهيئتها ────────────────────
+// جهاز التطوير بلا `CRON_SECRET`، فالشاشة يجب أن تقول «معطّلة» وتُملي الخطوات
+await go('/settings/jobs', '32-jobs');
+const jobsText = await page.locator('body').innerText();
+check(
+  jobsText.includes('لم يُضبط سرّ الجدولة'),
+  '★ **الشاشة تقول إن المهام معطّلة بلا سرّ** — لا «لم تعمل بعد» وحدها (اختبار ٣٢)'
+);
+check(
+  jobsText.includes('CRON_SECRET') &&
+    jobsText.includes('Environment Variables') &&
+    jobsText.includes('Redeploy'),
+  'وتُملي خطوات لوحة النشر بأسمائها الإنجليزية كما تُرى فيها'
+);
+check(
+  !jobsText.includes('في انتظار أول دورة'),
+  'ولا تخلط الحالين: انتظارُ الدورة جوابُ سرٍّ ضُبط لا سرٍّ غاب'
+);
+
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
 await go('/projects', '12-mobile');
