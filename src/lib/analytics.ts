@@ -16,6 +16,7 @@ import { REVENUE_FILTER } from './projects';
 
 // الجمع بالقرش الصحيح — لا بـ`+` على الجنيهات (راجع `money.ts`)
 import { sumBy } from './money';
+import { channelOfAccount, UNATTRIBUTED, UNATTRIBUTED_LABEL } from './acquisition';
 
 export type Range = { from: Date; to: Date };
 
@@ -234,6 +235,8 @@ export type ChannelRow = {
   spend: number;
   cac: number | null;
   roas: number | null;
+  /** تكلفة الليد الواحد — `null` بلا ليدز */
+  costPerLead: number | null;
 };
 
 /**
@@ -255,24 +258,30 @@ export async function channelPerformance(range: Range): Promise<ChannelRow[]> {
       where: { ...REVENUE_FILTER, deliveredAt: { gte: range.from, lt: range.to } },
       _sum: { netTotal: true },
     }),
+    /**
+     * **المصروف التسويقي يُقرأ من الدفتر — مُدخَلٌ مرة واحدة.**
+     * وكان يُقرأ من حسابَين فقط (جوجل وفيسبوك)، فيسقط إنفاق تيك توك
+     * وإنستجرام وخدمات التسويق الخارجية — فيبدو عائد الإعلان أعلى مما هو.
+     * صار يقرأ **مجموعة المصروف البيعي والتسويقي كلها**، وما لا يُنسب لقناة
+     * يظهر صفًّا مستقلًّا ولا يُخفى.
+     */
     db.journalLine.findMany({
       where: {
         entry: { status: 'posted', date: { gte: range.from, lt: range.to } },
-        account: { systemKey: { in: ['exp_ads_google', 'exp_ads_facebook'] } },
+        account: { expenseGroup: 'selling_marketing' },
       },
       include: { account: { select: { systemKey: true } } },
     }),
   ]);
   void projects;
 
-  const spendByChannel: Record<string, number> = {
-    google_ads: adSpend
-      .filter((l) => l.account.systemKey === 'exp_ads_google')
-      .reduce((s, l) => s + l.debitBase - l.creditBase, 0),
-    meta_ads: adSpend
-      .filter((l) => l.account.systemKey === 'exp_ads_facebook')
-      .reduce((s, l) => s + l.debitBase - l.creditBase, 0),
-  };
+  const spendByChannel: Record<string, number> = {};
+  for (const line of adSpend) {
+    const key = channelOfAccount(line.account.systemKey);
+    spendByChannel[key] = round2(
+      (spendByChannel[key] ?? 0) + line.debitBase - line.creditBase
+    );
+  }
 
   const label = new Map(items.map((i) => [i.value, i.label]));
 
@@ -296,7 +305,12 @@ export async function channelPerformance(range: Range): Promise<ChannelRow[]> {
     revenueByChannel.set(key, (revenueByChannel.get(key) ?? 0) + (row.netTotal ?? 0));
   }
 
-  const keys = new Set([...byChannel.keys(), ...revenueByChannel.keys()]);
+  // القناة التي أُنفق عليها ولم تأتِ بليد تظهر كذلك — وهي أهمّ ما يُرى
+  const keys = new Set([
+    ...byChannel.keys(),
+    ...revenueByChannel.keys(),
+    ...Object.keys(spendByChannel),
+  ]);
 
   return [...keys]
     .map((channel) => {
@@ -305,7 +319,13 @@ export async function channelPerformance(range: Range): Promise<ChannelRow[]> {
       const spend = round2(spendByChannel[channel] ?? 0);
       return {
         channel,
-        label: label.get(channel) ?? (channel === 'unknown' ? 'غير محدد' : channel),
+        label:
+          label.get(channel) ??
+          (channel === 'unknown'
+            ? 'غير محدد'
+            : channel === UNATTRIBUTED
+              ? UNATTRIBUTED_LABEL
+              : channel),
         leads: entry.leads,
         won: entry.won,
         conversionPct: entry.leads > 0 ? entry.won / entry.leads : 0,
@@ -314,6 +334,8 @@ export async function channelPerformance(range: Range): Promise<ChannelRow[]> {
         // بلا عملاء لا يُقسَّم على صفر — «لا بيانات» لا صفر
         cac: cac(spend, entry.won),
         roas: roas(revenue, spend),
+        // «غير مقيس» لا صفر: قناةٌ أنفقت ولم تأتِ بليد ليست تكلفتها صفرًا
+        costPerLead: entry.leads > 0 ? round2(spend / entry.leads) : null,
       };
     })
     .sort((a, b) => b.revenue - a.revenue);

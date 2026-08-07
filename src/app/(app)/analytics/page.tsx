@@ -382,8 +382,9 @@ export default async function AnalyticsPage({
         <section>
           <h2 className="mb-1 section-title">القنوات وتكلفة الاكتساب</h2>
           <p className="mb-3 text-xs text-slate-500">
-            الإنفاق مقروء من <b>دفتر الأستاذ</b> (حسابات الإعلانات المدفوعة) لا من
-            إدخال يدوي — فالرقم يطابق ما صُرف فعلًا.
+            الإنفاق مقروء من <b>دفتر الأستاذ</b> — مجموعة «مصاريف بيعية وتسويقية»
+            كاملةً لا من إدخال يدوي، فالرقم يطابق ما صُرف فعلًا ويُدخَل مرة واحدة.
+            وما لم يُنسب لقناة يظهر صفًّا مستقلًّا ولا يُخفى.
           </p>
           <div className="card card-pad mb-3">
             <p className="mb-3 text-xs font-medium text-slate-500">
@@ -399,7 +400,11 @@ export default async function AnalyticsPage({
                 hint:
                   c.cac === null
                     ? `${c.leads} ليدًا · لا بيانات لتكلفة الاكتساب`
-                    : `تكلفة الاكتساب ${formatMoney(c.cac)}${c.roas === null ? '' : ` · عائد ${c.roas}×`}`,
+                    : `الليد ${
+                        c.costPerLead === null ? '—' : formatMoney(c.costPerLead)
+                      } · الاكتساب ${formatMoney(c.cac)}${
+                        c.roas === null ? '' : ` · عائد ${c.roas}×`
+                      }`,
                 tone: c.roas === null ? 'default' : c.roas >= 3 ? 'good' : c.roas >= 1 ? 'warn' : 'bad',
               }))}
             />
@@ -415,7 +420,8 @@ export default async function AnalyticsPage({
                   <th>معدل التحويل</th>
                   <th>الإيراد</th>
                   <th>الإنفاق</th>
-                  <th>CAC</th>
+                  <th>تكلفة الليد</th>
+                  <th>تكلفة العميل المكتسب</th>
                   <th>ROAS</th>
                 </tr>
               </thead>
@@ -430,8 +436,16 @@ export default async function AnalyticsPage({
                     <td className="nums text-slate-600">
                       {c.spend > 0 ? formatMoney(c.spend) : '—'}
                     </td>
+                    <td className="nums text-slate-700">
+                      {/* بلا ليدز لا تكلفة ليد — والصفر يعني «مجّانًا» */}
+                      {c.costPerLead === null ? (
+                        <span className="text-xs text-slate-400">—</span>
+                      ) : (
+                        formatMoney(c.costPerLead)
+                      )}
+                    </td>
                     <td className="nums font-semibold">
-                      {/* بلا عملاء لا CAC — والصفر هنا كذبة */}
+                      {/* بلا عملاء لا تكلفة اكتساب — والصفر هنا كذبة */}
                       {c.cac === null ? (
                         <span className="text-xs text-slate-400">لا بيانات</span>
                       ) : (
