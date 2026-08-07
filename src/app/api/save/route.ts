@@ -33,7 +33,8 @@ import {
   deleteThread,
   saveBranch,
   seedBranches,
-  saveCostCenterKinds,
+  saveSpendKinds,
+  suggestSpendKinds,
   saveAccountCashFlags,
   saveAllocationRate,
   deriveAllocationRate,
@@ -216,8 +217,11 @@ export async function POST(request: NextRequest) {
       case 'branch.seed':
         destination = await seedBranches(fd, user);
         break;
-      case 'costCenter.kinds':
-        destination = await saveCostCenterKinds(fd, user);
+      case 'account.spendKinds':
+        destination = await saveSpendKinds(fd, user);
+        break;
+      case 'account.suggestSpendKinds':
+        destination = await suggestSpendKinds(fd, user);
         break;
       case 'account.cash':
         destination = await saveAccountCashFlags(fd, user);

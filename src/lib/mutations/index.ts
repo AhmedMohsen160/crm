@@ -102,7 +102,8 @@ export { readClientSite, designQuoteDocument, clearQuoteDesign } from './quotes'
 export {
   saveBranch,
   seedBranches,
-  saveCostCenterKinds,
+  saveSpendKinds,
+  suggestSpendKinds,
   saveAccountCashFlags,
   saveAllocationRate,
   deriveAllocationRate,

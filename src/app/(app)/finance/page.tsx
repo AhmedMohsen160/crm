@@ -58,6 +58,7 @@ export default async function FinancePage({
     { href: '/finance/reports/trial', icon: Scale, title: 'ميزان المراجعة', desc: 'أرصدة كل حساب ومجموعا العمودين' },
     { href: '/finance/branches', icon: Building2, title: 'محاسبة الفروع', desc: 'المساهمة والصافي المحمَّل وفرق الاسترداد — ومنع دوامة الإغلاق' },
     { href: '/finance/reports/branches', icon: Scale, title: 'كشف الفروع', desc: 'مبيعات ومصاريف وعمولات كل فرع' },
+    { href: '/finance/profit-centers', icon: Target, title: 'ربحية المشاريع', desc: 'المشروع المستمرّ بإيراده وتكلفته وهامشه وحده' },
     { href: '/finance/budget/plan', icon: ClipboardList, title: 'بناء الموازنة', desc: 'سبع خطوات: التاريخ · التوقّع · الثابت · المتغيّر · الهامش · الطوارئ · المراجعة' },
     { href: '/finance/budget', icon: Target, title: 'جدول الموازنة', desc: 'المستهدف الشهري وانحرافه عن الفعلي' },
     { href: '/finance/assets', icon: Landmark, title: 'الأصول الثابتة', desc: 'التكلفة والإهلاك والقيمة الدفترية' },

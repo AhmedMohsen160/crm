@@ -6,7 +6,7 @@ import { str, num, date, fullName } from '@/lib/utils';
 import { logActivity, readEntityLink, linkPath, type EntityLink } from '@/lib/actions/helpers';
 import { auditEvent, auditDiff } from '@/lib/audit';
 import { fillFromLastYear } from '@/lib/budget-engine';
-import { checkClassification } from '@/lib/branch-economics';
+import { checkClassification, effectiveSpendKind } from '@/lib/branch-economics';
 import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
@@ -193,6 +193,7 @@ export async function saveJournalEntry(fd: FormData, user: SessionUser, id?: str
     salesAdminId: string | null;
     trafficSource: string | null;
     translationType: string | null;
+    spendKind: string | null;
   }[] = [];
 
   for (let i = 0; i < 40; i += 1) {
@@ -214,6 +215,8 @@ export async function saveJournalEntry(fd: FormData, user: SessionUser, id?: str
       salesAdminId: str(fd, `lines[${i}][salesAdminId]`),
       trafficSource: str(fd, `lines[${i}][trafficSource]`),
       translationType: str(fd, `lines[${i}][translationType]`),
+      // يبقى فارغًا في الغالب الأعمّ — والتصنيف يُقرأ من الحساب
+      spendKind: str(fd, `lines[${i}][spendKind]`),
     });
   }
 
@@ -252,6 +255,7 @@ export async function saveJournalEntry(fd: FormData, user: SessionUser, id?: str
     salesAdminId: l.salesAdminId,
     trafficSource: l.trafficSource,
     translationType: l.translationType,
+    spendKind: l.spendKind,
     sortOrder: i,
   }));
 
@@ -617,31 +621,35 @@ export async function saveBudgetPlanSettings(fd: FormData, user: SessionUser) {
  * تخصّ فرعًا بعينه، وبندٌ ذاتيّ بلا فرع يدخل الكتلة فتتحمّله الفروع كلها.
  * وكلاهما يُفسد قائمة كل فرع لا قائمة واحد.
  *
- * ولا يُفرض إلا حين تكون مراكز التكلفة مصنَّفة أصلًا: مكتبٌ لم يُعدّ الموديول
- * بعد لا تُقفل عليه شاشة القيود.
+ * ولا يُفرض إلا حين تكون حسابات المصروفات مصنَّفة أصلًا: مكتبٌ لم يُعدّ
+ * الموديول بعد لا تُقفل عليه شاشة القيود.
+ *
+ * **والتصنيف من الحساب لا من مركز التكلفة.** كان يُقرأ من المركز، فيُولد كل
+ * مشروعٍ أنشأه المحاسب لقياس ربحيته «مصاريف فرع ذاتية» ثم يطالب بفرع لا
+ * يخصّه — وهو خلطٌ لبُعدين لا علاقة لأحدهما بالآخر.
  */
 async function assertBranchClassification(
-  lines: { accountId: string; costCenterId: string | null; branch: string | null }[]
+  lines: {
+    accountId: string;
+    costCenterId: string | null;
+    branch: string | null;
+    spendKind?: string | null;
+  }[]
 ) {
-  const configured = await db.costCenter.count({ where: { kind: { not: 'branch_direct' } } });
+  const configured = await db.account.count({ where: { spendKind: { not: null } } });
   if (configured === 0) return;
 
   const accounts = await db.account.findMany({
     where: { id: { in: [...new Set(lines.map((l) => l.accountId))] } },
-    select: { id: true, type: true, name: true },
+    select: { id: true, type: true, name: true, spendKind: true },
   });
   const typeOf = new Map(accounts.map((a) => [a.id, a.type]));
   const nameOf = new Map(accounts.map((a) => [a.id, a.name]));
-
-  const centres = await db.costCenter.findMany({
-    where: { id: { in: lines.map((l) => l.costCenterId).filter(Boolean) as string[] } },
-    select: { id: true, kind: true },
-  });
-  const kindOf = new Map(centres.map((c) => [c.id, c.kind]));
+  const kindOf = new Map(accounts.map((a) => [a.id, a.spendKind]));
 
   for (const line of lines) {
     const check = checkClassification({
-      kind: line.costCenterId ? kindOf.get(line.costCenterId) : null,
+      kind: effectiveSpendKind(line.spendKind, kindOf.get(line.accountId)),
       branch: line.branch,
       isExpense: typeOf.get(line.accountId) === 'expense',
     });

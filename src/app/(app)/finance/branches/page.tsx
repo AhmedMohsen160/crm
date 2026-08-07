@@ -4,13 +4,13 @@ import { requirePermission } from '@/lib/auth';
 import { periodReport } from '@/lib/branch-engine';
 import {
   BRANCH_STATUSES,
-  COST_CENTER_KINDS,
+  SPEND_KINDS,
   INDICATORS,
   MATURITY_STAGES,
   recoveryLabel,
   reconciles,
   type BranchStatus,
-  type CostCenterKind,
+  type SpendKind,
   type MaturityStage,
 } from '@/lib/branch-economics';
 import { fiscalMonth } from '@/lib/accounting';
@@ -218,7 +218,7 @@ export default async function BranchAccountingPage({
                 key={k.kind}
                 className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
               >
-                {COST_CENTER_KINDS[k.kind as CostCenterKind] ?? k.kind}:{' '}
+                {SPEND_KINDS[k.kind as SpendKind] ?? k.kind}:{' '}
                 <span className="nums font-medium">{money(k.amount)}</span>
               </span>
             ))}

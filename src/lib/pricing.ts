@@ -68,6 +68,39 @@ export async function lookupUnitPrice(params: {
   };
 }
 
+/**
+ * قائمة الأسعار السارية اليوم — بندٌ واحد لكل (خط خدمة، زوج لغات).
+ *
+ * تُرسَل إلى شاشة المشروع ليظهر سعر الصفحة **قبل الحفظ لا بعده**. والخادم
+ * يبقى هو من يقرّر عند الحفظ: هذه نسخةٌ للعرض، ولذلك لا يضرّ أن تتقادم بين
+ * فتح الشاشة وحفظها.
+ */
+export async function activePriceList(asOf = new Date()): Promise<
+  { serviceLine: string; langFrom: string; langTo: string; unitPrice: number }[]
+> {
+  const items = await db.priceListItem.findMany({
+    where: { active: true, effectiveFrom: { lte: asOf } },
+    select: {
+      serviceLine: true,
+      langFrom: true,
+      langTo: true,
+      unitPrice: true,
+    },
+    // الأحدث سريانًا أولًا — ثم يُؤخذ أول ظهور لكل مفتاح، كما في `lookupUnitPrice`
+    orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
+  });
+
+  const seen = new Set<string>();
+  const latest: typeof items = [];
+  for (const item of items) {
+    const key = `${item.serviceLine}|${item.langFrom}|${item.langTo}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    latest.push(item);
+  }
+  return latest;
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  الخصومات (§١٠ بند ٣)
 // ═══════════════════════════════════════════════════════════════

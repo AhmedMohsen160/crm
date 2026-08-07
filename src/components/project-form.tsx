@@ -2,7 +2,7 @@ import Link from '@/components/link';
 import { FormField, SelectField, TextAreaField } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
 import ExpressDeadline from '@/components/express-deadline';
-import LiveTotal from '@/components/live-total';
+import LiveTotal, { type PriceListEntry } from '@/components/live-total';
 import { toDateInput } from '@/lib/utils';
 import type { Option } from '@/lib/reference';
 
@@ -57,6 +57,7 @@ export default function ProjectForm({
   discountTypes,
   discountHint,
   cancelHref,
+  priceList,
 }: {
   recordId?: string;
   backPath: string;
@@ -72,6 +73,8 @@ export default function ProjectForm({
   discountTypes: { value: string; label: string }[];
   discountHint: string;
   cancelHref: string;
+  /** قائمة الأسعار السارية — ليظهر سعر الصفحة قبل الحفظ لا بعده */
+  priceList?: PriceListEntry[];
 }) {
   const asOptions = (items: Option[]) =>
     items.map((i) => ({ value: i.value, label: i.label }));
@@ -159,6 +162,7 @@ export default function ProjectForm({
             discountHint={discountHint}
             showPrice={showPrice}
             canDiscount={canDiscount}
+            priceList={priceList}
           />
           {showPrice && (
             <>

@@ -1409,9 +1409,13 @@ const notifCount = await page.locator('main article').count();
 check(notifCount > 0, `التنبيهات وصلت (${notifCount} بطاقة)`);
 
 // **القاعدة المنصوصة**: ملخص واحد لكل حدث لا بطاقة لكل سجل
+//
+// والعنوان **السطر الثاني** لا الأول: الأول شارةُ أهمية («يحتاج انتباهًا» ·
+// «للعلم») يتقاسمها حدثان مختلفان. وقراءته عنوانًا تُسقط الاختبار كلما وصل
+// تنبيهٌ جديد بنفس الأهمية — إخفاقٌ لا يدلّ على خلل.
 const digestShape = await page.evaluate(() => {
   const cards = [...document.querySelectorAll('main article')];
-  const titles = cards.map((c) => c.innerText.split('\n')[0] ?? '');
+  const titles = cards.map((c) => c.innerText.split('\n')[1] ?? '');
   const withCounts = cards
     .map((c) => {
       const m = c.innerText.match(/\((\d+)\)/);
@@ -1775,7 +1779,10 @@ await loginAs('admin@fasttrans.local');
 // المُختبَر هنا **القاعدتان ٥ و٦**: المؤشران معًا دائمًا، وقرار الإغلاق على
 // المساهمة حصرًا — وهو ما يمنع «دوامة الإغلاق» التي تُهلك الشركة.
 await go('/finance/branches/settings', '21-branch-settings');
-check(await waitForText('فئة كل مركز تكلفة'), 'شاشة إعداد محاسبة الفروع تفتح (اختبار ٢١)');
+check(
+  await waitForText('تصنيف كل حساب مصروف'),
+  'شاشة إعداد محاسبة الفروع تفتح (اختبار ٢١)'
+);
 
 // زرع الفروع من القائمة القائمة بمفاتيحها نفسها
 if (await page.locator('button:has-text("ازرعها من قائمة الفروع")').count()) {
@@ -1923,8 +1930,8 @@ await loginAs('admin@fasttrans.local');
 await go('/finance/journal', '24-journal');
 const journalText = await page.locator('body').innerText();
 check(
-  journalText.includes('البيان والحسابان') && journalText.includes('أدمن المبيعات'),
-  'دفتر اليومية يعرض الحسابين والعميل وأدمن المبيعات في الصف (اختبار ٢٤)'
+  journalText.includes('البيان والحسابان') && journalText.includes('الموظف المسؤول'),
+  'دفتر اليومية يعرض الحسابين والعميل والموظف المسؤول في الصف (اختبار ٢٤)'
 );
 const draftButtons = await page.locator('[data-testid=post-entry]').count();
 if (draftButtons > 0) {
@@ -2341,6 +2348,46 @@ check(
   (await page.locator('body').innerText()).includes('أعطال النظام'),
   'وسجل الأعطال يفتح لمن يملك الإعدادات'
 );
+
+// ── 33. لوحة المحاسب · تصنيف الإنفاق · ربحية المشاريع ───────
+
+// المحاسب يفتح النظام فيجد لوحته هو لا لوحة المبيعات
+await loginAs('accountant@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/', '33-finance-home');
+const financeHome = await page.locator('body').innerText();
+check(
+  financeHome.includes('أعمار الذمم') && financeHome.includes('ما ينتظر يدك'),
+  '★ **المحاسب يفتح لوحته هو** — النقد والذمم وطابور عمله (اختبار ٣٣)'
+);
+check(
+  !financeHome.includes('مسار المبيعات') && !financeHome.includes('ترتيب الفريق'),
+  'ولا مسارَ مبيعات ولا ترتيبَ بائعين — أرقامٌ لا قرار له فيها'
+);
+check(
+  financeHome.includes('النقد والبنوك') && financeHome.includes('لنا عند العملاء'),
+  'وأسئلته هو: كم عندنا نقدًا وكم لنا عند العملاء'
+);
+
+// وتصنيف الإنفاق صار على الحساب لا على مركز التكلفة
+await go('/finance/branches/settings', '33-spend-kinds');
+const settingsText = await page.locator('body').innerText();
+check(
+  settingsText.includes('تصنيف كل حساب مصروف'),
+  '★ **تصنيف الإنفاق على الحساب** — يُصنَّف «الإيجار» مرة ولا يُسأل عنه في كل قيد'
+);
+check(
+  settingsText.includes('مصاريف الفرع الذاتية') && settingsText.includes('التسويق المؤسسي'),
+  'والتصنيفات الأربعة معروضة بشرح كلٍّ منها بلغة العمل'
+);
+
+// ومركز التكلفة عاد لمعناه: مشروع تُقاس ربحيته
+await go('/finance/profit-centers', '33-profit-centers');
+check(
+  (await page.locator('body').innerText()).includes('ربحية المشاريع'),
+  'وشاشة ربحية المشاريع تفتح — وهي ما أنشأ المحاسب المراكز من أجله'
+);
+
+await loginAs('admin@fasttrans.local');
 
 // ── 32. المهام المجدولة تقول حال تهيئتها ────────────────────
 // جهاز التطوير بلا `CRON_SECRET`، فالشاشة يجب أن تقول «معطّلة» وتُملي الخطوات
