@@ -64,6 +64,7 @@ import {
   closeFiscalPeriod,
   saveBudget,
   saveBudgetLines,
+  saveBudgetGrid,
   saveFixedAsset,
   generateDraftEntries,
   fillBudgetFromHistory,
@@ -81,6 +82,8 @@ import {
   saveSettings,
   markErrorsSeen,
   saveTargets,
+  saveYearTargets,
+  spreadYearTargets,
   changeOwnPassword,
 } from '@/lib/mutations';
 
@@ -312,6 +315,9 @@ export async function POST(request: NextRequest) {
       case 'budget':
         destination = await saveBudget(fd, user, id);
         break;
+      case 'budget.grid':
+        destination = await saveBudgetGrid(fd, user);
+        break;
       case 'budgetLines':
         destination = await saveBudgetLines(fd, user);
         break;
@@ -362,6 +368,12 @@ export async function POST(request: NextRequest) {
         break;
       case 'errors.seen':
         destination = await markErrorsSeen(fd, user);
+        break;
+      case 'targets.year':
+        destination = await saveYearTargets(fd, user);
+        break;
+      case 'targets.spread':
+        destination = await spreadYearTargets(fd, user);
         break;
       case 'targets':
         destination = await saveTargets(fd, user);

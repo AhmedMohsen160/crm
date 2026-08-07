@@ -48,6 +48,8 @@ export {
   saveSettings,
   markErrorsSeen,
   saveTargets,
+  saveYearTargets,
+  spreadYearTargets,
   saveStaffCost,
   changeOwnPassword,
 } from './admin';
@@ -74,6 +76,7 @@ export {
   closeFiscalPeriod,
   saveBudget,
   saveBudgetLines,
+  saveBudgetGrid,
   saveFixedAsset,
   generateDraftEntries,
   fillBudgetFromHistory,

@@ -442,6 +442,81 @@ export async function saveBudgetLines(fd: FormData, user: SessionUser) {
   return `/finance/budget?year=${budget.year}&account=${accountId}`;
 }
 
+/**
+ * الموازنة كلها من الجدول الواحد.
+ *
+ * **ومعرّف الحساب في اسم الخانة لا في حقل مخفيّ.** كانت الشاشة القديمة تحمل
+ * الحساب في حقل مخفيّ واحد بينما تختاره من قائمةٍ في نموذجٍ آخر — فمن غيّر
+ * القائمة ثم حفظ كتب أرقامًا جديدةً فوق الحساب القديم. وهنا لا يمكن ذلك:
+ * كل خانة تحمل حسابها في اسمها.
+ *
+ * **ولا يُمسّ حسابٌ لم يُرسَل** — فصفحةٌ تعرض المصروفات وحدها لا تمحو
+ * مستهدفات الإيرادات.
+ */
+export async function saveBudgetGrid(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');
+
+  const budgetId = str(fd, 'budgetId');
+  if (!budgetId) throw new MutationError('الموازنة مفقودة');
+
+  const budget = await db.budget.findUnique({ where: { id: budgetId } });
+  if (!budget) throw new MutationError('الموازنة غير موجودة');
+  if (budget.status === 'approved') {
+    throw new MutationError('الموازنة معتمدة — أعِدها إلى «قيد الإعداد» لتعديلها');
+  }
+
+  // الشهور المرسَلة لكل حساب، والرقم السنويّ إن كُتب
+  const monthsOf = new Map<string, number[]>();
+  const annualOf = new Map<string, number>();
+
+  for (const [key, raw] of fd.entries()) {
+    const monthMatch = key.match(/^m_(.+)_(\d{1,2})$/);
+    if (monthMatch) {
+      const [, accountId, month] = monthMatch;
+      const index = Number(month) - 1;
+      if (index < 0 || index > 11) continue;
+      const value = Number(String(raw).trim() || 0);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new MutationError('المستهدف يجب أن يكون رقمًا موجبًا');
+      }
+      const list = monthsOf.get(accountId) ?? Array(12).fill(0);
+      list[index] = value;
+      monthsOf.set(accountId, list);
+      continue;
+    }
+
+    const annualMatch = key.match(/^a_(.+)$/);
+    if (annualMatch) {
+      const text = String(raw).trim();
+      if (text === '') continue;
+      const value = Number(text);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new MutationError('الرقم السنويّ يجب أن يكون موجبًا');
+      }
+      annualOf.set(annualMatch[1], value);
+    }
+  }
+
+  let changed = 0;
+  for (const [accountId, months] of monthsOf) {
+    // السنويّ يعلو على الشهور — يُقسَّم والقرش الأخير على ديسمبر
+    const amounts = annualOf.has(accountId)
+      ? spreadAnnual(annualOf.get(accountId)!)
+      : months;
+
+    await db.budgetLine.deleteMany({ where: { budgetId, accountId, branch: null } });
+    const rows = amounts
+      .map((amount, i) => ({ budgetId, accountId, month: i + 1, branch: null, amount }))
+      // المستهدف صفر ومستهدف غير مضبوط شيء واحد — فلا يُخزَّن
+      .filter((row) => row.amount !== 0);
+    if (rows.length > 0) await db.budgetLine.createMany({ data: rows });
+    changed += 1;
+  }
+
+  await auditEvent(user.id, 'update', 'Budget', budgetId, `جدول الموازنة: ${changed} حسابًا`);
+  return `/finance/budget/grid?year=${budget.year}&type=${str(fd, 'type') ?? 'expense'}&saved=${changed}`;
+}
+
 /** أصل ثابت — تكلفته ونسبته وشهر بدء إهلاكه */
 export async function saveFixedAsset(fd: FormData, user: SessionUser, id?: string) {
   if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');

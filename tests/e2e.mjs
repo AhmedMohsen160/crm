@@ -2389,6 +2389,58 @@ check(
 
 await loginAs('admin@fasttrans.local');
 
+// ── 34. المرونة: خانات الشركة · تارجت السنة · جدول الموازنة ──
+
+// الدولة قائمةٌ تُختار لا خانةٌ تُكتب، والمدينة تتبعها
+await go('/companies/new', '34-company-form');
+const companyForm = await page.locator('body').innerText();
+check(
+  (await page.locator('select[name="country"]').count()) === 1,
+  '★ **الدولة تُختار من قائمة** — والكتابة الحرّة تُنتج «مصر» و«Egypt» صفّين لشيء واحد (اختبار ٣٤)'
+);
+check(
+  (await page.locator('select[name="country"] option[value="مصر"]').count()) === 1,
+  'وفيها مصر — أغلب البيع'
+);
+check(
+  companyForm.includes('ممثّل الشركة') && companyForm.includes('اسم الممثّل'),
+  'وخانتا ممثّل الشركة واسمه ورقمه'
+);
+check(
+  companyForm.includes('السجل التجاري') && companyForm.includes('البطاقة الضريبية'),
+  'ورفع السجل التجاري والبطاقة الضريبية — اختياريان'
+);
+check(
+  (await page.locator('input[name="commercialRegFile"][type="file"]').count()) === 1,
+  'وحقل الرفع حقلُ ملفٍّ فعلًا'
+);
+
+// تارجت السنة كاملة في صفحة واحدة
+await go('/settings/targets/year', '34-year-targets');
+const yearTargets = await page.locator('body').innerText();
+check(
+  yearTargets.includes('وزّع رقمًا سنويًّا') && yearTargets.includes('يناير') && yearTargets.includes('ديسمبر'),
+  '★ **السنة كاملة في صفحة واحدة** — كانت ٧٢ خانة في ٢٤ رحلة (اختبار ٣٤)'
+);
+check(
+  (await page.locator('input[name^="t_"]').count()) >= 12,
+  'وخانةٌ لكل شهر لكل فرع في الجدول نفسه'
+);
+
+// جدول الموازنة: كل الحسابات في صفحة واحدة، ومعرّف الحساب في اسم الخانة
+await go('/finance/budget/grid', '34-budget-grid');
+const budgetGrid = await page.locator('body').innerText();
+check(
+  budgetGrid.includes('جدول الموازنة'),
+  'وجدول الموازنة يفتح'
+);
+if (!budgetGrid.includes('لا موازنة لسنة')) {
+  check(
+    (await page.locator('input[name^="m_"]').count()) >= 12,
+    '★ **ومعرّف الحساب في اسم الخانة لا في حقل مخفيّ** — فلا يُكتب فوق حسابٍ آخر'
+  );
+}
+
 // ── 32. المهام المجدولة تقول حال تهيئتها ────────────────────
 // جهاز التطوير بلا `CRON_SECRET`، فالشاشة يجب أن تقول «معطّلة» وتُملي الخطوات
 await go('/settings/jobs', '32-jobs');

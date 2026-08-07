@@ -227,9 +227,25 @@ model Company {
   country      String?
   city         String?
   address      String?
-  taxNumber    String? // الرقم الضريبي / السجل التجاري
+  taxNumber    String? // الرقم الضريبي
   paymentTerms String? // شروط الدفع: فوري، 30 يوم...
   notes        String?
+
+  /// رقم السجل التجاري — كان يُحشر مع الرقم الضريبي في خانة واحدة، وهما
+  /// رقمان مختلفان تطلبهما الفاتورة كلاهما
+  commercialRegNo String?
+
+  /// **ممثّل الشركة** — الشخص الذي يُوقّع ويُتابع. غير جهة الاتصال: تلك قد
+  /// تكون موظف تنسيق، وهذا من يُخاطَب في الالتزامات
+  repName  String?
+  repPhone String?
+
+  /// صورة السجل التجاري والبطاقة الضريبية — **اختياريتان**، ترفعهما المبيعات
+  /// مرة فيجدهما المحاسب عند إصدار الفاتورة بلا أن يطلبهما من العميل ثانيةً
+  commercialRegFileId String?      @unique
+  commercialRegFile   StoredFile?  @relation("CompanyCommercialReg", fields: [commercialRegFileId], references: [id], onDelete: SetNull)
+  taxCardFileId       String?      @unique
+  taxCardFile         StoredFile?  @relation("CompanyTaxCard", fields: [taxCardFileId], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1734,6 +1750,9 @@ model StoredFile {
   uploadedBy   User?   @relation("FileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
 
   freelancerCv Freelancer? @relation("FreelancerCv")
+
+  companyCommercialReg Company? @relation("CompanyCommercialReg")
+  companyTaxCard       Company? @relation("CompanyTaxCard")
 
   createdAt DateTime @default(now())
 

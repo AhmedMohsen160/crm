@@ -9,6 +9,7 @@ import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
 import { normalizePhone } from '@/lib/phone';
+import { checkUpload } from '@/lib/files';
 import {
   nextLeadCode,
   nextClientCode,
@@ -440,6 +441,11 @@ export async function saveCompany(fd: FormData, user: SessionUser, id?: string) 
     city: str(fd, 'city'),
     address: str(fd, 'address'),
     taxNumber: str(fd, 'taxNumber'),
+    // رقمان مختلفان تطلبهما الفاتورة كلاهما — كانا في خانة واحدة
+    commercialRegNo: str(fd, 'commercialRegNo'),
+    // ممثّل الشركة: من يُوقّع ويُتابع، غير جهة الاتصال
+    repName: str(fd, 'repName'),
+    repPhone: str(fd, 'repPhone'),
     paymentTerms: str(fd, 'paymentTerms'),
     notes: str(fd, 'notes'),
   };
@@ -449,6 +455,7 @@ export async function saveCompany(fd: FormData, user: SessionUser, id?: string) 
     const company = await db.company.create({
       data: { ...data, ownerId: str(fd, 'ownerId') ?? user.id },
     });
+    await storeCompanyDocs(fd, user, company.id, null, null);
     await logActivity({
       type: 'CREATED',
       title: 'تمت إضافة شركة',
@@ -467,7 +474,74 @@ export async function saveCompany(fd: FormData, user: SessionUser, id?: string) 
     where: { id },
     data: { ...data, ownerId: str(fd, 'ownerId') ?? existing.ownerId },
   });
+  await storeCompanyDocs(
+    fd,
+    user,
+    id,
+    existing.commercialRegFileId,
+    existing.taxCardFileId
+  );
   return `/companies/${id}`;
+}
+
+/**
+ * مستندا الشركة: السجل التجاري والبطاقة الضريبية.
+ *
+ * **اختياريان دائمًا** — من لا يملكهما اليوم يحفظ الشركة ويرفعهما غدًا.
+ * ويُخزَّنان في القاعدة لا على القرص: النشر بلا قرص دائم، فملفٌ يُكتب اليوم
+ * يختفي مع أول إعادة نشر.
+ *
+ * والقديم يُحذف عند الاستبدال — هو نسخة من ورقةٍ عند صاحبها لا سجلٌّ تشغيلي
+ * يسري عليه «لا شيء يُمحى».
+ */
+async function storeCompanyDocs(
+  fd: FormData,
+  user: SessionUser,
+  companyId: string,
+  previousRegId: string | null,
+  previousTaxId: string | null
+) {
+  const slots = [
+    { field: 'commercialRegFile', column: 'commercialRegFileId', previous: previousRegId, label: 'السجل التجاري' },
+    { field: 'taxCardFile', column: 'taxCardFileId', previous: previousTaxId, label: 'البطاقة الضريبية' },
+  ] as const;
+
+  for (const slot of slots) {
+    if (fd.get(`${slot.field}Remove`) === 'on' && slot.previous) {
+      await db.company.update({
+        where: { id: companyId },
+        data: { [slot.column]: null },
+      });
+      await db.storedFile.delete({ where: { id: slot.previous } }).catch(() => {});
+      await auditEvent(user.id, 'delete', 'StoredFile', slot.previous, `حذف ${slot.label}`);
+      continue;
+    }
+
+    const upload = fd.get(slot.field);
+    if (!(upload instanceof File) || upload.size === 0) continue;
+
+    const check = checkUpload(upload);
+    if (!check.ok) throw new MutationError(`${slot.label}: ${check.error}`);
+
+    const stored = await db.storedFile.create({
+      data: {
+        name: check.name,
+        mimeType: check.mimeType,
+        size: check.size,
+        data: Buffer.from(await upload.arrayBuffer()),
+        purpose: 'company_doc',
+        uploadedById: user.id,
+      },
+    });
+    await db.company.update({
+      where: { id: companyId },
+      data: { [slot.column]: stored.id },
+    });
+    if (slot.previous) {
+      await db.storedFile.delete({ where: { id: slot.previous } }).catch(() => {});
+    }
+    await auditEvent(user.id, 'create', 'StoredFile', stored.id, `${slot.label}: ${check.name}`);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
