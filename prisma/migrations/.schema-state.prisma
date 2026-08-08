@@ -217,7 +217,7 @@ model AuditLog {
 // ───────────────────────────────────────────────
 
 model Company {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   name         String
   nameAr       String?
   industry     String? // القطاع: محاماة، طبي، حكومي...
@@ -242,12 +242,12 @@ model Company {
 
   /// صورة السجل التجاري والبطاقة الضريبية — **اختياريتان**، ترفعهما المبيعات
   /// مرة فيجدهما المحاسب عند إصدار الفاتورة بلا أن يطلبهما من العميل ثانيةً
-  commercialRegFileId String?      @unique
-  commercialRegFile   StoredFile?  @relation("CompanyCommercialReg", fields: [commercialRegFileId], references: [id], onDelete: SetNull)
-  taxCardFileId       String?      @unique
-  taxCardFile         StoredFile?  @relation("CompanyTaxCard", fields: [taxCardFileId], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  commercialRegFileId String?     @unique
+  commercialRegFile   StoredFile? @relation("CompanyCommercialReg", fields: [commercialRegFileId], references: [id], onDelete: SetNull)
+  taxCardFileId       String?     @unique
+  taxCardFile         StoredFile? @relation("CompanyTaxCard", fields: [taxCardFileId], references: [id], onDelete: SetNull)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   ownerId String?
   owner   User?   @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -357,6 +357,10 @@ model Client {
   accounts  Account[]
   proposals Proposal[]
   emails    EmailMessage[]
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag String?
 
   @@index([phoneNormalized])
   @@index([phoneAltNormalized])
@@ -937,6 +941,10 @@ model Project {
   freelancerPayments FreelancerPayment[]
   journalEntries     JournalEntry[]
   emails             EmailMessage[]
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag          String?
 
   @@index([status])
   @@index([ownerId])
@@ -1211,6 +1219,10 @@ model Account {
   /// المحاسب مشروعٌ تُقاس ربحيته (جمعية التبيان)، لا وعاءٌ لتصنيف الإنفاق.
   /// وصار على الحساب: يُصنَّف «الإيجار» مرة واحدة فلا يُسأل عنه في كل قيد.
   spendKind String?
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag String?
 
   @@index([type])
   @@index([parentId])
@@ -1244,7 +1256,11 @@ model CostCenter {
   /// العميل صاحب المشروع، إن كان مركز الربحية عميلًا بعينه
   clientId String?
 
-  notes String?
+  notes     String?
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag String?
 
   @@unique([name, project])
   @@index([active])
@@ -1284,7 +1300,11 @@ model JournalEntry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lines JournalLine[]
+  lines     JournalLine[]
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag String?
 
   @@index([period, status])
   @@index([date])
