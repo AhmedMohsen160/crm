@@ -63,6 +63,67 @@ export function clientNameOfCenter(center: string): string {
   return center.replace(/^\s*مشروع\s+/, '').trim() || center.trim();
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  المركز مشروعٌ، والعميل فوقه
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * **ومركزُ الربحية مشروعٌ لا عميلًا بالضرورة.**
+ *
+ * قالها أحمد: «أسورة اليقين مشروع للعميل سلام أيضًا»، و«مع المصطفى مشروع
+ * تابع لأكاديمية الأسرة للدكتور علي الشبيلي». فالعميل الواحد قد يكون له
+ * عدة مشاريع، ولكلٍّ مركزُ ربحيةٍ في دفتر المحاسب.
+ *
+ * وبلا هذه الخريطة يصير العميلُ الواحد ثلاثةَ عملاء في سجلٍّ واحد: تنكسر
+ * قيمتُه العمرية، ويسقط تصنيفُه، ويظهر ثلاث مرات في أي ترتيب.
+ *
+ * **وهي خريطةٌ تُكتب في الشاشة لا قاعدةٌ في الكود** — أحمد وحده يعرف أيّ
+ * مشروعٍ لأيّ عميل، ولا يُستنتج ذلك من الأسماء. والتقريب هنا يخلط مالَ
+ * عميلٍ بمالِ غيره.
+ */
+export const DEFAULT_CENTER_CLIENTS: [center: string, client: string][] = [
+  ['أسورة اليقين', 'مركز سلام'],
+  ['مع المصطفي', 'أكاديمية الأسرة — د. علي الشبيلي'],
+];
+
+/** يقرأ الخريطة كما تُكتب في الشاشة: `اسم المركز = اسم العميل` سطرًا سطرًا */
+export function parseCenterClients(text: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const line of (text ?? '').split(/\r?\n/)) {
+    const at = line.indexOf('=');
+    if (at < 0) continue;
+    const center = clientNameOfCenter(line.slice(0, at).trim());
+    const client = line.slice(at + 1).trim();
+    // **والطرفان لازمان**: سطرٌ ناقصٌ يُتخطّى ولا يُنشئ عميلًا بلا اسم
+    if (!center || !client) continue;
+    map.set(centerKey(center), client);
+  }
+  return map;
+}
+
+/** مفتاح المطابقة: بلا تطويلٍ ولا فراغاتٍ زائدة — والحروف كما هي */
+export function centerKey(name: string): string {
+  return (name ?? '').replace(/ـ+/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * العميل صاحبُ هذا المركز.
+ *
+ * **والمطابقة بالاسم الصريح لا بالتقريب**: من كتب السطر يعرف ما يقصد،
+ * وتخمينُ النظام على اسمٍ قريب يضمّ عميلًا إلى غيره بلا أن يطلب أحد.
+ */
+export function clientOfCenter(center: string, map: Map<string, string>): string {
+  const name = clientNameOfCenter(center);
+  return map.get(centerKey(name)) ?? name;
+}
+
+/** نصُّ الخريطة الابتدائيّ كما يُعرض في الشاشة */
+export function centerClientsText(
+  pairs: [string, string][] = DEFAULT_CENTER_CLIENTS
+): string {
+  return pairs.map(([center, client]) => `${center} = ${client}`).join('\n');
+}
+
 /** أسماء الشهور — تدخل اسم العميل المجمَّع فيقرؤه المالك بلا مفتاح */
 export const MONTH_NAMES = [
   'يناير',

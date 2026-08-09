@@ -94,13 +94,22 @@ console.log('\n── ٥ · الملكية ────────────�
 
 const rule = { defaultOwnerId: 'megaly', executiveOwnerId: 'ahmed' };
 
-eq(EXECUTIVE_CLIENT_NAMES.length, 5, 'خمسة عملاء للمدير التنفيذي');
-check(isExecutiveClient('مركز سلام للدعوة والحوار'), '«مركز سلام للدعوة والحوار» منهم');
+/**
+ * **والعدد ليس ثابتًا فلا يُختبر برقم.** أحمد يتذكّر عميلًا فيضيفه من
+ * الشاشة، واختبارٌ يفحص «خمسة» يسقط كلما تذكّر — والمقصود أن كل اسمٍ في
+ * القائمة يُلتقط بصياغاته لا أن يبقى عددُها كما كان.
+ */
+for (const name of EXECUTIVE_CLIENT_NAMES) {
+  check(isExecutiveClient(name), `«${name}» من عملاء المدير التنفيذي`);
+}
+check(isExecutiveClient('مركز سلام للدعوة والحوار'), 'و«مركز سلام للدعوة والحوار» بصياغته الكاملة');
 check(isExecutiveClient('أكاديمية قرآن هاوس'), 'وقرآن هاوس');
 check(isExecutiveClient('مؤسسة البصيرة الإسلامية'), 'والبصيرة');
 check(isExecutiveClient('شركة ترانسليشن هوم للترجمة'), 'وترانسليشن هوم');
 check(isExecutiveClient('د.علي الشبيلي'), 'وعلي الشبيلي');
+check(isExecutiveClient('مشروع دار يتخيلون'), 'ودار يتخيلون');
 check(!isExecutiveClient('شركة سوليد للإنشاءات'), 'وسوليد ليس منهم');
+check(!isExecutiveClient('فضة'), 'ولا فضة — هي لأحمد مجلي');
 
 eq(ownerFor('مركز سلام', rule), 'ahmed', 'فيُنسب سلام للمدير التنفيذي');
 eq(

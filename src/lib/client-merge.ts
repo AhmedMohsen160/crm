@@ -230,6 +230,7 @@ export const EXECUTIVE_CLIENT_NAMES = [
   'بصيرة',
   'سلام',
   'ترانزليشن هوم',
+  'دار يتخيلون',
 ];
 
 const EXECUTIVE_KEYS = new Set(EXECUTIVE_CLIENT_NAMES.map(mergeKey));

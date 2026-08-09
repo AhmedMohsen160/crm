@@ -6,6 +6,7 @@ import { listOptions } from '@/lib/reference';
 import { PageHeader, SelectField, FormField, ErrorAlert } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
 import { EXECUTIVE_CLIENT_NAMES } from '@/lib/client-merge';
+import { centerClientsText } from '@/lib/settlement';
 import { formatMoney } from '@/lib/utils';
 import { previewReset, protectedCounts } from '@/lib/reset-engine';
 import { RESET_PHRASE } from '@/lib/mutations';
@@ -396,6 +397,26 @@ export default async function HistoryImportPage({
                 defaultValue="mokattam"
                 hint="حين لا يرصد الشيت شيئًا في الشهر فلا يُعرف فرعه"
               />
+              <div className="sm:col-span-2">
+                <label className="label" htmlFor="centerClients">
+                  مراكز الربحية التي هي مشاريعُ عميلٍ آخر
+                </label>
+                <textarea
+                  id="centerClients"
+                  name="centerClients"
+                  rows={5}
+                  defaultValue={centerClientsText()}
+                  className="input font-mono text-xs"
+                  dir="rtl"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  سطرٌ لكلٍّ بالصيغة <b>اسم المركز = اسم العميل</b>. فالمركز في الدفتر
+                  <b> مشروعٌ لا عميلًا بالضرورة</b>: «أسورة اليقين» مشروعٌ للعميل «مركز سلام».
+                  والمشروع يحتفظ باسمه ويقع تحت عميله، فلا ينكسر سجلّ العميل إلى عدة سجلات.
+                  <b> والمطابقة بالاسم الصريح لا بالتقريب</b> — فلا يُضمّ عميلٌ إلى غيره بلا
+                  أن تطلبه أنت.
+                </p>
+              </div>
             </div>
             <div className="mt-4">
               <SaveButton>سوِّ على الدفتر</SaveButton>

@@ -36,9 +36,14 @@ const RUN_DIGITS = String(Date.now()).slice(-6);
 console.log('معرّف التشغيل:', RUN);
 
 const results = [];
-const check = (ok, label) => {
-  results.push({ ok, label });
-  console.log(`${ok ? '✓' : '✗'} ${label}`);
+/**
+ * **والتفصيل يُطبع عند الإخفاق.** كان الوسيط الثالث يُهمَل، فيقول اختبارُ
+ * مصفوفة الوصول «فلانٌ لم يُحجب» ولا يقول عن أيّ مسار — فلا يُعرف أهو خللٌ
+ * في الصلاحية أم في الاختبار نفسه، ولا يُعاد إنتاجه.
+ */
+const check = (ok, label, detail = '') => {
+  results.push({ ok, label, detail });
+  console.log(`${ok ? '✓' : '✗'} ${label}${ok || !detail ? '' : ` — ${detail}`}`);
 };
 
 async function go(path, name) {
@@ -2500,6 +2505,10 @@ check(true, 'العرض على الجوال');
 console.log('\n═══ أخطاء المتصفح ═══');
 console.log(errors.length ? errors.join('\n') : 'لا توجد ✓');
 const failed = results.filter((r) => !r.ok);
+if (failed.length) {
+  console.log('\n═══ ما أخفق ═══');
+  for (const f of failed) console.log(`✗ ${f.label}${f.detail ? ` — ${f.detail}` : ''}`);
+}
 console.log(`\n═══ النتيجة: ${results.length - failed.length}/${results.length} نجحت ═══`);
 await browser.close();
 process.exit(failed.length ? 1 : 0);

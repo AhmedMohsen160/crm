@@ -9,7 +9,7 @@ import { importLedgerWorkbook, ledgerTag, rollbackTag } from '@/lib/import-histo
 import { importSalesWorkbook, rollbackSalesTag } from '@/lib/import-sales-engine';
 import { settleYears, rollbackSettlement } from '@/lib/settle-engine';
 import { salesTag, isImportTag } from '@/lib/import-sales';
-import { settleTag } from '@/lib/settlement';
+import { settleTag, parseCenterClients } from '@/lib/settlement';
 import { wipeDemoData } from '@/lib/reset-engine';
 
 /**
@@ -158,6 +158,8 @@ export async function runHistorySettlement(fd: FormData, user: SessionUser) {
     actorId: user.id,
     rule,
     fallbackBranch: str(fd, 'fallbackBranch') ?? 'mokattam',
+    // خريطة «مركز الربحية ← عميله»: المركز مشروعٌ، والعميل فوقه
+    centerClients: parseCenterClients(str(fd, 'centerClients') ?? ''),
   });
 
   await auditEvent(

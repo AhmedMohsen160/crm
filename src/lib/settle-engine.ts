@@ -9,6 +9,7 @@ import {
   settleTag,
   isGenericCenter,
   clientNameOfCenter,
+  clientOfCenter,
   type MonthSettlement,
 } from './settlement';
 import { ownerFor, type OwnerRule } from './client-merge';
@@ -214,7 +215,10 @@ export async function settleYears(params: {
   rule: OwnerRule;
   /** فرعُ العميل الشهريّ المجمَّع حين لا يرصد الشيت أحدًا */
   fallbackBranch?: string;
+  /** خريطة «مركز الربحية ← عميله» — تُكتب في الشاشة سطرًا سطرًا */
+  centerClients?: Map<string, string>;
 }): Promise<SettlementReport> {
+  const centerClients = params.centerClients ?? new Map<string, string>();
   const branchOptions = await listOptions('branch');
   const branchLabel = (value: string | null) =>
     branchOptions.find((b) => b.value === value)?.label ?? 'فاست ترانس';
@@ -262,9 +266,15 @@ export async function settleYears(params: {
       const rows = byMonth.get(period) ?? [];
 
       // ── الطبقة الأولى: العميل الذي سمّاه المحاسب يأخذ رقمه بالضبط ──
-      for (const [name, cell] of book?.named ?? []) {
-        const owner = ownerFor(name, params.rule);
-        const client = await clientByName(name, owner, params.actorId, tag, null, 'company');
+      for (const [center, cell] of book?.named ?? []) {
+        /**
+         * **والمركز مشروعٌ، والعميل فوقه.** «أسورة اليقين» مشروعٌ للعميل
+         * «مركز سلام»، و«مع المصطفي» مشروعٌ لأكاديمية الأسرة. فالمشروع
+         * يحتفظ باسم المركز — وهو اسمُه فعلًا — ويقع تحت عميله.
+         */
+        const clientName = clientOfCenter(center, centerClients);
+        const owner = ownerFor(clientName, params.rule);
+        const client = await clientByName(clientName, owner, params.actorId, tag, null, 'company');
         if (client.created) report.namedClients += 1;
 
         // مركز الربحية يشير إلى عميله — وهو ما أُنشئ الحقل من أجله
@@ -279,7 +289,7 @@ export async function settleYears(params: {
         await db.project.create({
           data: {
             code: await nextProjectCode(date),
-            title: `${name} — ${periodLabel(period)}`,
+            title: `${center} — ${periodLabel(period)}`,
             status: 'collected',
             netTotal: round2(cell.amount),
             collectedAmount: round2(cell.amount),
@@ -293,7 +303,9 @@ export async function settleYears(params: {
             revenueMonth: period,
             importTag: tag,
             description:
-              'إيراد الشهر كما رصده دفتر المحاسب على مركز ربحية هذا العميل — لا تقديرَ فيه',
+              center === clientName
+                ? 'إيراد الشهر كما رصده دفتر المحاسب على مركز ربحية هذا العميل — لا تقديرَ فيه'
+                : `إيراد الشهر على مركز ربحية «${center}» — وهو مشروعٌ للعميل «${clientName}»`,
           },
         });
         report.namedProjects += 1;
