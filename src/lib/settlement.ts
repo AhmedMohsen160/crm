@@ -32,6 +32,37 @@ export function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+/** وسم التسوية لسنةٍ — يُسحب فتعود الأرقام كما رصدها الشيت */
+export function settleTag(year: number): string {
+  return `settle-${year}`;
+}
+
+/**
+ * مراكز الربحية العامّة — ما وقع عليها ليس لعميل بعينه.
+ *
+ * **وأهمّ ما في التسوية أنّ مراكز الربحية في الدفتر أسماءُ عملاء**: «مشروع
+ * دار يتخيلون»، «مشروع قرآن هاوس»، «مشروع مركز سلام». وهذه ثلثا الإيراد —
+ * تدخل بأرقامها كما كتبها المحاسب لا بتوزيعٍ بالتناسب. ولا يُوزَّع إلا ما
+ * وقع على مركزٍ عامّ: المقرّ الإداري ونشاط الترجمة والمشروع العامّ.
+ */
+const GENERIC_CENTERS = [/^مشروع عام/, /^المقر الإداري/, /^نشاط الترجمة/, /^مركز التكلفة/];
+
+export function isGenericCenter(name: string | null | undefined): boolean {
+  /**
+   * **والتطويل يُنزع هنا أيضًا** ولو نُزع عند الحفظ: المحاسب يكتب
+   * «نشــــــــــاط الترجمة»، ومطابقةٌ تعتمد على أن غيرها نظّف النصّ
+   * تنكسر أول مرة يُقرأ فيها الاسم من مصدرٍ آخر.
+   */
+  const text = (name ?? '').replace(/ـ+/g, '').trim();
+  if (!text) return true;
+  return GENERIC_CENTERS.some((pattern) => pattern.test(text));
+}
+
+/** «مشروع دار يتخيلون» ← «دار يتخيلون» — والباقي كما كتبه المحاسب */
+export function clientNameOfCenter(center: string): string {
+  return center.replace(/^\s*مشروع\s+/, '').trim() || center.trim();
+}
+
 /** أسماء الشهور — تدخل اسم العميل المجمَّع فيقرؤه المالك بلا مفتاح */
 export const MONTH_NAMES = [
   'يناير',

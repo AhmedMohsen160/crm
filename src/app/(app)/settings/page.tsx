@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   DatabaseBackup,
   Clock,
+  History,
 } from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -128,6 +129,13 @@ export default async function SettingsPage() {
       title: 'ترحيل الملفات القديمة',
       description: 'سجل الليدز وملف المبيعات — لا يُحذف صف ولا يُخمَّن',
       permission: 'canManageSettings',
+    },
+    {
+      href: '/settings/import/history',
+      icon: History,
+      title: 'ترحيل تاريخ المكتب',
+      description: 'دفاتر المحاسب وشيت المبيعات والتسوية بينهما — ليجد الموظفون تاريخهم كاملًا',
+      permission: 'canManageAccounting',
     },
     {
       href: '/settings/system',

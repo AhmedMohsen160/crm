@@ -56,6 +56,11 @@ import {
   runNotifications,
   importLegacySheet,
   importAccountingLedger,
+  importHistoryLedger,
+  importHistorySales,
+  runHistorySettlement,
+  rollbackImportTag,
+  wipeDemoRecords,
   resolveMigrationRow,
   saveAccount,
   saveCostCenter,
@@ -293,6 +298,23 @@ export async function POST(request: NextRequest) {
         break;
       case 'legacy.import':
         destination = await importLegacySheet(fd, user);
+        break;
+
+      // ترحيل تاريخ المكتب — الدفتر ثم الشيت ثم التسوية فوقهما
+      case 'history.ledger':
+        destination = await importHistoryLedger(fd, user);
+        break;
+      case 'history.sales':
+        destination = await importHistorySales(fd, user);
+        break;
+      case 'history.settle':
+        destination = await runHistorySettlement(fd, user);
+        break;
+      case 'history.rollback':
+        destination = await rollbackImportTag(fd, user);
+        break;
+      case 'history.reset':
+        destination = await wipeDemoRecords(fd, user);
         break;
       case 'migrationReview':
         destination = await resolveMigrationRow(fd, user, id);

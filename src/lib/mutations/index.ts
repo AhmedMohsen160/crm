@@ -124,4 +124,14 @@ export {
 } from './hr';
 
 export { importLegacySheet, importAccountingLedger, resolveMigrationRow } from './migration';
+
+// ترحيل تاريخ المكتب: دفاتر المحاسب · شيت المبيعات · التسوية بينهما
+export {
+  importHistoryLedger,
+  importHistorySales,
+  runHistorySettlement,
+  rollbackImportTag,
+  wipeDemoRecords,
+  RESET_PHRASE,
+} from './history';
 export { markNotificationsRead, runNotifications } from './alerts';

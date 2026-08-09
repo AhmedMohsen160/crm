@@ -35,12 +35,26 @@ async function tuneSqlite() {
   // على السيرفر نستخدم PostgreSQL، وهذه الإعدادات خاصة بـ SQLite فقط
   if (isPostgres()) return;
 
-  try {
-    await db.$executeRawUnsafe('PRAGMA journal_mode = WAL;');
-    await db.$executeRawUnsafe('PRAGMA busy_timeout = 5000;');
-    await db.$executeRawUnsafe('PRAGMA synchronous = NORMAL;');
-  } catch (error) {
-    console.error('تعذّر ضبط إعدادات SQLite:', error);
+  /**
+   * **وتُنفَّذ بـ`$queryRawUnsafe` لا بـ`$executeRawUnsafe`.**
+   *
+   * `PRAGMA journal_mode = WAL` **يُعيد صفًّا** فيه الوضع الجديد، و
+   * `$executeRawUnsafe` يرفض كل ما يُعيد صفوفًا في SQLite. فكانت الثلاثة
+   * تسقط عند أولها في `catch` واحد: لا WAL ولا مهلة انتظار — والحارس الذي
+   * وُضع لمنع تجمّد الحفظ في التطوير كان معطَّلًا وهو يُطبع رسالته كل مرة.
+   *
+   * **وكلٌّ في محاولته**: فشلُ واحدةٍ لا يُسقط اللتين بعدها.
+   */
+  for (const pragma of [
+    'PRAGMA journal_mode = WAL;',
+    'PRAGMA busy_timeout = 5000;',
+    'PRAGMA synchronous = NORMAL;',
+  ]) {
+    try {
+      await db.$queryRawUnsafe(pragma);
+    } catch (error) {
+      console.error(`تعذّر ضبط ${pragma}`, error);
+    }
   }
 }
 

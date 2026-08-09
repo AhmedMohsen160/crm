@@ -765,6 +765,9 @@ model Lead {
 
   /// مفتاح الصف في الملف القديم — يمنع تكرار الترحيل (§١٤)
   legacyKey String? @unique
+  /// **وسمُ الترحيل** — «sales-2022». كل ما يدخل من ملفات المكتب القديمة
+  /// يحمله، فتُسحب سنةٌ كاملة بضغطة بلا أن تمسّ ما أُدخل من الشاشات.
+  importTag String?
 
   clientId String?
   client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
@@ -911,6 +914,14 @@ model Project {
 
   /// مفتاح الصف في الملف القديم — يمنع تكرار الترحيل (§١٤)
   legacyKey String? @unique
+
+  /// **المبلغ قبل التسوية على دفتر المحاسب.**
+  ///
+  /// شيت المبيعات ناقصٌ لا خاطئ: مشترياتٌ متكرّرة لم تُسجَّل، وعملاءُ لم
+  /// يُرصدوا. فتُوسَّع مبالغُه بالتناسب حتى تطابق الدفتر. ويُحفظ الأصل هنا
+  /// لأن **ما يُسوَّى يجب أن يُرَدّ**: تسويةٌ لا تُعكَس تصير طبقةً فوق طبقة
+  /// كلما رُفع الشيت مرة أخرى.
+  preSettleTotal Float?
 
   leadId String?
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)

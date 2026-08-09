@@ -14,6 +14,9 @@ import {
   buildPlan,
   bucketClientName,
   periodLabel,
+  settleTag,
+  isGenericCenter,
+  clientNameOfCenter,
 } from '../src/lib/settlement.ts';
 
 const results = [];
@@ -167,6 +170,27 @@ console.log('\n── ٦ · الأسماء ────────────�
 eq(periodLabel('2022-01'), 'يناير 2022', 'اسم الشهر عربيّ');
 eq(periodLabel('2022-12'), 'ديسمبر 2022', 'وديسمبر');
 eq(bucketClientName('الرياض', '2023-07'), 'عملاء الرياض — يوليو 2023', 'واسم المجمَّع يحمل فرعه وشهره');
+eq(settleTag(2024), 'settle-2024', 'ووسم التسوية بسنته — يُسحب فتعود الأرقام كما رُصدت');
+
+console.log('\n── ٧ · مركز الربحية اسمُ عميل ───────────────────────\n');
+
+/**
+ * أهمّ ما في التسوية: **ثلثا الإيراد على مراكز ربحيةٍ هي أسماء عملاء** —
+ * تدخل بأرقامها كما كتبها المحاسب، ولا يُوزَّع بالتناسب إلا ما بقي.
+ */
+for (const generic of ['مشروع عام', 'المقر الإداري للشركة', 'نشــــاط الترجمة', '', null]) {
+  check(isGenericCenter(generic), `«${generic ?? 'بلا مركز'}» مركزٌ عامّ — ما عليه يُوزَّع`);
+}
+for (const named of ['مشروع دار يتخيلون', 'مشروع قرآن هاوس', 'مشروع مركز سلام', 'مشروع أبو الهيثم']) {
+  check(!isGenericCenter(named), `و«${named}» اسمُ عميل — يأخذ رقمه بالضبط`);
+}
+eq(
+  clientNameOfCenter('مشروع دار يتخيلون'),
+  'دار يتخيلون',
+  '★ **وبادئة «مشروع» تُنزع للعرض** — العميل «دار يتخيلون» لا «مشروع دار يتخيلون»'
+);
+eq(clientNameOfCenter('مركز سلام'), 'مركز سلام', 'وما ليس عليه بادئة يبقى كما كتبه المحاسب');
+eq(clientNameOfCenter('مشروع'), 'مشروع', 'واسمٌ ليس فيه غير البادئة يبقى — فلا يُفرَّغ');
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n═══ النتيجة: ${results.length - failed.length}/${results.length} نجحت ═══`);
