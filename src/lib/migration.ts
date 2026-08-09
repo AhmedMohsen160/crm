@@ -278,7 +278,15 @@ export const ADMIN_ALIASES: Record<string, string[]> = {
   'نورا': ['nora', 'noura', 'noura anwer', 'نورا', 'نورا أنور'],
   'يحيى': ['yahia', 'yahia nasser', 'yahya', 'يحيي', 'يحيى'],
   'محمد بكري': ['mohamed bakry', 'bakry', 'بكري'],
-  'أحمد السوهاجي': ['ahmed alsohagyy', 'ahmed elsohagy', 'alsohagy', 'السوهاجي'],
+  /**
+   * **«Ahmad Alsohagy» هو المدير التنفيذي نفسه** — أحمد محسن، الشريك.
+   *
+   * قالها بنفسه: «هو المدير التنفيذي (أنا) الشريك… وليس لي نسبة من المبيعات
+   * لكن اتفقنا أن نحسبها بحيث أراها كأداء أمامي». فصفوفُه تُنسب إليه ليراها
+   * في شاشة أدائه، **ولا نسبة عليها**: النسبة تُحسب على من له إسنادُ خطة
+   * نسب، وهو بلا إسناد.
+   */
+  'أحمد محسن': ['ahmed alsohagyy', 'ahmad alsohagy', 'ahmed elsohagy', 'alsohagy', 'السوهاجي', 'أحمد السوهاجي', 'ahmed mohsen', 'ahmad mohsen'],
   'سارة': ['sara', 'sarah', 'ساره'],
 };
 

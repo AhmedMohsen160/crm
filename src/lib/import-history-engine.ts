@@ -209,14 +209,35 @@ export async function importLedgerWorkbook(params: {
   const tag = ledgerTag(params.year);
   const workbook = readWorkbook(params.buffer);
 
-  const sheetName =
-    params.sheetName ??
-    workbook.sheetNames.find((n) => matchKey(n).includes(matchKey('قيود اليومية'))) ??
-    workbook.sheetNames[0];
+  /**
+   * **الورقة تُختار بترويستها لا باسمها.**
+   *
+   * دفتر ٢٠٢٢ ورقتُه «القيود» وما بعده «قيود اليومية»، وفي الملف الواحد
+   * إحدى عشرة ورقة (إهلاك · تدفقات · حقوق ملكية). فيُبحث بالاسم أولًا، ثم
+   * تُؤخذ **أكبر ورقةٍ فيها ترويسةُ قيودٍ صالحة** — وهذا يصيب مهما سُمّيت.
+   */
+  const findSheet = (): { name: string; rows: CellValue[][]; header: NonNullable<ReturnType<typeof findHeader>> } => {
+    const candidates = params.sheetName
+      ? [params.sheetName]
+      : [
+          ...workbook.sheetNames.filter((n) => matchKey(n).includes(matchKey('قيود'))),
+          ...workbook.sheetNames,
+        ];
 
-  const rows = workbook.sheet(sheetName) as CellValue[][];
-  const header = findHeader(rows as unknown as (string | null | undefined)[][]);
-  if (!header) throw new Error(`لم تُوجد ترويسة القيود في ورقة «${sheetName}»`);
+    let best: { name: string; rows: CellValue[][]; header: NonNullable<ReturnType<typeof findHeader>> } | null = null;
+    for (const name of candidates) {
+      const rows = workbook.sheet(name) as CellValue[][];
+      const header = findHeader(rows as unknown as (string | null | undefined)[][]);
+      if (!header) continue;
+      if (!best || rows.length > best.rows.length) best = { name, rows, header };
+      // ورقةٌ اسمها «قيود» وفيها ترويسة: هي المقصودة بلا بحثٍ أبعد
+      if (matchKey(name).includes(matchKey('قيود'))) return best;
+    }
+    if (!best) throw new Error('لم تُوجد ورقةٌ فيها ترويسة قيود في هذا الملف');
+    return best;
+  };
+
+  const { rows, header } = findSheet();
 
   // إعادة الترحيل تمسح ما وسمَته أولًا — فلا يتضاعف قيدٌ برفعٍ ثانٍ
   await rollbackTag(tag);
