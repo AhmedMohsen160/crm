@@ -108,16 +108,26 @@ export async function importHistorySales(fd: FormData, user: SessionUser) {
   const buffer = await readSheet(fd, 'file');
   const rule = await readOwnerRule(fd, user);
 
+  /**
+   * **والسنوات لازمة لا اختيارية.**
+   *
+   * كانت الخانة الفارغة تعني «كل ما في الملف»، فدخلت ٢٠٢٦ مع أنها مؤجَّلة
+   * باتفاق — سنةٌ لا دفتر لها فلا تسوية عليها. والفارغُ لا يُرى قبل الضغط،
+   * والمكتوبُ يُراجَع.
+   */
   const only = (str(fd, 'years') ?? '')
     .split(/[,\s]+/)
     .map((y) => Number(y))
-    .filter((y) => Number.isInteger(y) && y > 2000);
+    .filter((y) => Number.isInteger(y) && y > 2000 && y < 2100);
+  if (!only.length) {
+    throw new MutationError('اكتب السنوات التي تدخل — مثال: 2022 2023 2024 2025');
+  }
 
   const summary = await importSalesWorkbook({
     buffer,
     actorId: user.id,
     rule,
-    onlyYears: only.length ? only : undefined,
+    onlyYears: only,
   });
 
   await auditEvent(

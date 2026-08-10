@@ -7,6 +7,9 @@ import { PageHeader, SelectField, FormField, ErrorAlert } from '@/components/ui'
 import { SaveButton } from '@/components/forms';
 import { EXECUTIVE_CLIENT_NAMES } from '@/lib/client-merge';
 import { centerClientsText } from '@/lib/settlement';
+
+/** السنوات التي تدخل الآن — و٢٠٢٦ مؤجَّلة باتفاق حتى تستقرّ هذه */
+const HISTORY_YEARS = '2022 2023 2024 2025';
 import { formatMoney } from '@/lib/utils';
 import { previewReset, protectedCounts } from '@/lib/reset-engine';
 import { RESET_PHRASE } from '@/lib/mutations';
@@ -68,7 +71,6 @@ export default async function HistoryImportPage({
     tag.startsWith('ledger') ? 'دفتر المحاسب' : tag.startsWith('sales') ? 'شيت المبيعات' : 'تسوية';
 
   const magly = users.find((u) => u.name.includes('مجلي'));
-  const owner = users.find((u) => u.name.includes('محسن')) ?? users[0];
   const userOptions = users.map((u) => ({
     value: u.id,
     label: u.jobTitle ? `${u.name} — ${u.jobTitle}` : u.name,
@@ -358,12 +360,7 @@ export default async function HistoryImportPage({
               <b>ليدًا خاسرًا لا مشروعًا</b> — استفسارٌ لم يُبَع. والصفّ بلا رقم هاتف لا يُردّ بل
               يُجمَّع باسمه.
             </p>
-            <OwnerFields
-              userOptions={userOptions}
-              defaultOwner={magly?.id}
-              executiveOwner={owner?.id}
-            />
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="label" htmlFor="salesFile">
                   ملف الشيت <span className="text-rose-500">*</span>
@@ -377,14 +374,25 @@ export default async function HistoryImportPage({
                   className="block w-full text-sm text-slate-600 file:ml-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700"
                 />
               </div>
+              {/**
+                * **والسنوات مكتوبةٌ لا فارغة.** خانةٌ فارغة تعني «كل ما في
+                * الملف» — فدخلت ٢٠٢٦ مع أنها مؤجَّلة باتفاق. والمكتوب يُرى
+                * ويُراجَع قبل الضغط، والفارغ لا يُرى.
+                */}
               <FormField
-                label="سنوات بعينها (اختياري)"
+                label="السنوات التي تدخل"
                 name="years"
-                placeholder="2026"
+                required
+                defaultValue={HISTORY_YEARS}
                 dir="ltr"
-                hint="اتركها فارغة ليدخل الشيت كلّه — واكتب سنةً لتُعاد وحدها"
+                hint="٢٠٢٦ ليست هنا عمدًا — تُرفع وحدها حين يحين وقتها"
               />
             </div>
+            <AdvancedOwners
+              userOptions={userOptions}
+              defaultOwner={magly?.id}
+              executiveOwner={user.id}
+            />
             <div className="mt-4">
               <SaveButton>رحّل شيت المبيعات</SaveButton>
             </div>
@@ -419,26 +427,27 @@ export default async function HistoryImportPage({
                 وتُعاد التسوية كلّما أُعيد ترحيل الدفتر أو الشيت — فهي مبنيّة فوقهما.
               </p>
             </div>
-            <OwnerFields
-              userOptions={userOptions}
-              defaultOwner={magly?.id}
-              executiveOwner={owner?.id}
-            />
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 label="السنوات"
                 name="years"
                 required
-                defaultValue="2022 2023 2024 2025"
+                defaultValue={HISTORY_YEARS}
                 dir="ltr"
                 hint="سنةٌ بلا دفترٍ تبقى كما رصدها الشيت — الصمت ليس رقمًا"
               />
+            </div>
+            <AdvancedOwners
+              userOptions={userOptions}
+              defaultOwner={magly?.id}
+              executiveOwner={user.id}
+            >
               <SelectField
                 label="اسم الفرع في تسمية العميل الشهريّ المجمَّع"
                 name="fallbackBranch"
                 options={branches}
                 defaultValue="mokattam"
-                hint="اسمٌ يُقرأ فقط («عملاء المقطم — مارس ٢٠٢٢») — وما جاء من الدفتر يبقى بلا فرع، فالفروع بدأت ٢٠٢٦"
+                hint="اسمٌ يُقرأ فقط — وما جاء من الدفتر يبقى بلا فرع، فالفروع بدأت ٢٠٢٦"
               />
               <div className="sm:col-span-2">
                 <label className="label" htmlFor="centerClients">
@@ -447,20 +456,18 @@ export default async function HistoryImportPage({
                 <textarea
                   id="centerClients"
                   name="centerClients"
-                  rows={5}
+                  rows={4}
                   defaultValue={centerClientsText()}
                   className="input font-mono text-xs"
                   dir="rtl"
                 />
                 <p className="mt-1 text-xs text-slate-400">
-                  سطرٌ لكلٍّ بالصيغة <b>اسم المركز = اسم العميل</b>. فالمركز في الدفتر
-                  <b> مشروعٌ لا عميلًا بالضرورة</b>: «أسورة اليقين» مشروعٌ للعميل «مركز سلام».
-                  والمشروع يحتفظ باسمه ويقع تحت عميله، فلا ينكسر سجلّ العميل إلى عدة سجلات.
-                  <b> والمطابقة بالاسم الصريح لا بالتقريب</b> — فلا يُضمّ عميلٌ إلى غيره بلا
-                  أن تطلبه أنت.
+                  سطرٌ لكلٍّ بالصيغة <b>اسم المركز = اسم العميل</b>: «أسورة اليقين» مشروعٌ
+                  للعميل «مركز سلام». والمشروع يحتفظ باسمه ويقع تحت عميله، فلا ينكسر سجلّ
+                  العميل إلى عدة سجلات.
                 </p>
               </div>
-            </div>
+            </AdvancedOwners>
             <div className="mt-4">
               <SaveButton>سوِّ على الدفتر</SaveButton>
             </div>
@@ -553,53 +560,70 @@ function Result({ title, children }: { title: string; children: React.ReactNode 
 }
 
 /**
- * مالكا العملاء — ويظهران في الترحيل والتسوية معًا.
+ * ما لا يُسأل عنه إلا نادرًا — مطويٌّ خلف «إعدادات متقدّمة».
  *
- * **والأسماء تُعدَّل من الشاشة لا من الكود**: أحمد قال خمسةً وسيتذكّر
- * غيرهم، وقاعدةٌ في الكود تحتاج نشرًا لكل اسمٍ يتذكّره.
+ * **الشاشة كانت تسأل ستة أسئلة قبل أول ضغطة**، فقال أحمد: «متداخلة وفيها
+ * بيانات كثيرة وصعبة». ولكلّ سؤالٍ منها جوابٌ صحيحٌ سلفًا — فطُويت، ومن
+ * أرادها فتحها.
+ *
+ * **ويُطوى بـ`<details>` لا بجافاسكربت** — فالنظام يعمل كاملًا بلا جافاسكربت.
  */
-function OwnerFields({
+function AdvancedOwners({
   userOptions,
   defaultOwner,
   executiveOwner,
+  children,
 }: {
   userOptions: { value: string; label: string }[];
   defaultOwner?: string;
   executiveOwner?: string;
+  children?: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <SelectField
-        label="مالك عملاء التجزئة"
-        name="defaultOwnerId"
-        options={userOptions}
-        defaultValue={defaultOwner}
-        required
-        hint="من لم يُذكر له بائع في الشيت يتبعه — وما قاله الشيت يعلو على هذا"
-      />
-      <SelectField
-        label="مالك العملاء القدامى"
-        name="executiveOwnerId"
-        options={userOptions}
-        defaultValue={executiveOwner}
-        required
-        hint="العملاء أدناه يتبعونه مهما قال الشيت"
-      />
-      <div className="sm:col-span-2">
-        <label className="label" htmlFor="executiveNames">
-          عملاء المدير التنفيذي — سطرٌ لكل اسم
-        </label>
-        <textarea
-          id="executiveNames"
-          name="executiveNames"
-          rows={5}
-          defaultValue={EXECUTIVE_CLIENT_NAMES.join('\n')}
-          className="input font-mono text-xs"
+    <details className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+      <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+        إعدادات متقدّمة — مضبوطة سلفًا، لا تفتحها إلا لتغيّرها
+      </summary>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <SelectField
+          label="مالك عملاء التجزئة"
+          name="defaultOwnerId"
+          options={userOptions}
+          defaultValue={defaultOwner}
+          required
+          hint="من لم يُذكر له بائع في الشيت يتبعه — وما قاله الشيت يعلو على هذا"
         />
-        <p className="mt-1 text-xs text-slate-400">
-          المطابقة على لبّ الاسم، فـ«سلام» تلتقط «مركز سلام للدعوة والحوار» و«مشروع سلام».
-        </p>
+        {/**
+          * **والمدير التنفيذي هو من يفتح الشاشة.** قالها أحمد: «المدير
+          * التنفيذي هو مالك النظام هو أحمد السوهاجي هو أحمد محسن» — شخصٌ
+          * واحد بأربعة أسماء. فالافتراضيّ حسابُ من يُرحّل لا اسمٌ يُبحث عنه
+          * في القائمة، وإلا وقع العملاء على حسابٍ آخر لا يدخل به.
+          */}
+        <SelectField
+          label="مالك العملاء القدامى — وهو أنت"
+          name="executiveOwnerId"
+          options={userOptions}
+          defaultValue={executiveOwner}
+          required
+          hint="الحساب الذي تدخل به الآن — فالعملاء أدناه يتبعونك مهما قال الشيت"
+        />
+        <div className="sm:col-span-2">
+          <label className="label" htmlFor="executiveNames">
+            عملاؤك القدامى — سطرٌ لكل اسم
+          </label>
+          <textarea
+            id="executiveNames"
+            name="executiveNames"
+            rows={4}
+            defaultValue={EXECUTIVE_CLIENT_NAMES.join('\n')}
+            className="input font-mono text-xs"
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            المطابقة على لبّ الاسم، فـ«سلام» تلتقط «مركز سلام للدعوة والحوار».
+          </p>
+        </div>
+        {children}
       </div>
-    </div>
+    </details>
   );
 }
