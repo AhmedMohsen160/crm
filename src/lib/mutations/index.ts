@@ -81,6 +81,7 @@ export {
   generateDraftEntries,
   fillBudgetFromHistory,
   saveAccountBehaviour,
+  saveAdChannels,
   saveBudgetPlanSettings,
 } from './accounting';
 

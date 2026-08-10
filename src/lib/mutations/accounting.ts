@@ -10,6 +10,7 @@ import { checkClassification, effectiveSpendKind } from '@/lib/branch-economics'
 import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
+import { SPEND_CHANNELS, mayCarryChannel } from '@/lib/acquisition';
 import { normalizePhone } from '@/lib/phone';
 import {
   nextLeadCode,
@@ -658,6 +659,51 @@ export async function saveAccountBehaviour(fd: FormData, user: SessionUser) {
 
   await auditEvent(user.id, 'update', 'Account', 'behaviour', `تصنيف ${changed} حسابًا`);
   return `/finance/budget/plan?year=${year}&classified=${changed}`;
+}
+
+/**
+ * يُسند قناةَ الإنفاق التسويقي إلى الحسابات — دفعةً واحدة.
+ *
+ * **مرة واحدة على الحساب لا في كل قيد.** «إعلانات جوجل» جوجلُ في كل قيد
+ * يقع عليه، وسؤالُ المحاسب عنه مئات المرات يُنتج مئات الفرص للخطأ.
+ *
+ * **ومعرّفُ الحساب في اسم الخانة** (`ch_<id>`) لا في حقل مخفيّ — القاعدة
+ * التي أنقذت شاشة الموازنة: قائمةٌ في نموذجٍ وحفظٌ في آخر تكتب فوق حسابٍ
+ * لم يُقصد.
+ *
+ * **والقناة لا تُوضع إلا على مصروفٍ بيعيّ وتسويقيّ.** قناةٌ على حساب
+ * الإيجار تقسم إيجارَ المكتب على ليدز جوجل — رقمٌ لا معنى له يُبنى عليه
+ * قرارُ إنفاق.
+ */
+export async function saveAdChannels(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageAccounting')) {
+    throw new MutationError('ضبط قنوات الإنفاق للمحاسب ومدير النظام');
+  }
+
+  const allowed = new Set(SPEND_CHANNELS.map((c) => c.value));
+  let changed = 0;
+
+  for (const [key, value] of fd.entries()) {
+    const match = key.match(/^ch_(.+)$/);
+    if (!match) continue;
+    const raw = String(value).trim();
+    // الفراغ قيمةٌ صالحة: «لا قناة» — ويُعرض في «غير منسوب» ولا يُخمَّن
+    const channel = allowed.has(raw) ? raw : null;
+
+    const account = await db.account.findUnique({
+      where: { id: match[1] },
+      select: { id: true, type: true, expenseGroup: true, adChannel: true },
+    });
+    if (!account) continue;
+    if (!mayCarryChannel(account.type, account.expenseGroup)) continue;
+    if (account.adChannel === channel) continue;
+
+    await db.account.update({ where: { id: account.id }, data: { adChannel: channel } });
+    changed += 1;
+  }
+
+  await auditEvent(user.id, 'update', 'Account', 'ad-channels', `قناة الإنفاق لـ${changed} حسابًا`);
+  return `/analytics/acquisition?mapped=${changed}`;
 }
 
 /** نسبة الطوارئ وملاحظات المنهج (الخطوة ٦) */

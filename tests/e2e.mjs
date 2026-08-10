@@ -1382,6 +1382,44 @@ check(
 );
 check(await waitForText('الاتجاه على أربع سنوات'), 'والاتجاه السنوي');
 
+/**
+ * ★ **شاشة تكلفة الاكتساب الكاملة.**
+ *
+ * كانت القسمة تربط القناة **برمز الحساب**، ورموزُ الشجرة المزروعة وحدها —
+ * وحسابات المحاسب المرحَّلة بلا رموز. فوقع إنفاق المكتب كلُّه في «غير
+ * منسوب» ولم تظهر تكلفةُ عميلٍ واحد رغم أن الإنفاق مقيَّد في الدفتر.
+ */
+await go('/analytics/acquisition', '32b-acquisition');
+const cac = await page.locator('body').innerText();
+check(
+  cac.includes('تكلفة اكتساب العميل'),
+  '★ **شاشة تكلفة اكتساب العميل تفتح** — الإنفاق من الدفتر مقسومًا على من جاء'
+);
+check(
+  cac.includes('تكلفة الليد') && cac.includes('تكلفة العميل المكتسب'),
+  'ومؤشّراها: تكلفةُ من تواصل وتكلفةُ من دفع'
+);
+check(
+  cac.includes('لا على من اشترى وحده'),
+  '★ **والقسمة على كل من تواصل** — وإلا بدا الإعلان أرخص ممّا هو'
+);
+check(
+  cac.includes('قناة كل حساب') && cac.includes('مرة واحدة'),
+  '★ **وجدول ضبط القناة في الشاشة نفسها** — تُضبط مرة واحدة على الحساب لا في كل قيد'
+);
+check(
+  (await page.locator('select[name^="ch_"]').count()) >= 1,
+  '★ **ومعرّفُ الحساب في اسم الخانة** — لا في حقل مخفيّ يكتب فوق حسابٍ لم يُقصد',
+  `وُجد ${await page.locator('select[name^="ch_"]').count()} منتقيًا`
+);
+check(
+  cac.includes('حساب الإيجار'),
+  'وتقول لماذا لا تظهر إلا حسابات المصروف البيعي والتسويقي'
+);
+
+// نعود إلى شاشة التحليلات — ما بعده يقرأ صفحتها هي
+await go('/analytics', '32c-analytics-back');
+
 // ٢٠٢٤ معلَّمة ناقصة — لا تصلح خط أساس (§١٤)
 const trendText = await page.evaluate(() => document.body.innerText);
 check(
@@ -2468,6 +2506,32 @@ check(
   !jobsText.includes('في انتظار أول دورة'),
   'ولا تخلط الحالين: انتظارُ الدورة جوابُ سرٍّ ضُبط لا سرٍّ غاب'
 );
+
+/**
+ * ★ **ملكية بطاقة العميل تُعدَّل — ولم تكن تُعدَّل من أي مكان.**
+ *
+ * كان `ownerId` يُكتب عند الإنشاء وحده ولا يمسّه التحديث، فبطاقةٌ وقعت على
+ * الحساب الخطأ تبقى عليه للأبد. وبيانات المكتب استُوردت كلها بحسابٍ واحد.
+ */
+await go('/clients', '35b-clients');
+const clientLink = page.locator('a[href^="/clients/"]').filter({ hasNotText: 'عميل جديد' }).first();
+const clientHref = (await clientLink.count()) ? await clientLink.getAttribute('href') : null;
+if (clientHref && /^\/clients\/[^/]+$/.test(clientHref)) {
+  await go(`${clientHref}/edit`, '35b-client-owner');
+  const form = await page.locator('body').innerText();
+  check(
+    (await page.locator('select[name="ownerId"]').count()) === 1,
+    '★ **خانةُ المالك الرئيسي في شاشة تعديل العميل**'
+  );
+  check(
+    (await page.locator('select[name="coOwnerId"]').count()) === 1,
+    '★ **وخانةُ المالك الفرعي معها** — «يظهر عند الحسابين ويستطيع كليهما قراءته»'
+  );
+  check(
+    form.includes('ولا تمسّ النسبة'),
+    '★ **والشاشة تقول إن الفرعيّ بابُ رؤيةٍ لا حصّةُ مال** — النسبة على مالك المشروع'
+  );
+}
 
 // ── 35. ترحيل تاريخ المكتب ──────────────────────────────────
 // الغاية: «لتكون كأن النظام مبنيّ من ٢٠٢٢» — دفتر المحاسب وشيت المبيعات

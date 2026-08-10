@@ -80,6 +80,7 @@ model User {
   quotes           Quote[]
   auditEntries     AuditLog[]
   ownedClients     Client[]      @relation("ClientOwner")
+  coOwnedClients   Client[]      @relation("ClientCoOwner")
   createdClients   Client[]      @relation("ClientCreator")
 
   commissionEntries CommissionEntry[]      @relation("CommissionBeneficiary")
@@ -347,6 +348,19 @@ model Client {
   ownerId String?
   owner   User?   @relation("ClientOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
+  /// **المالك الفرعي — للرؤية وحدها لا للنسبة.**
+  ///
+  /// قالها أحمد: «عميل قديم كان داخل لأحمد مجلي ولكن اشترى بعد ذلك مرة أخرى
+  /// من أدمن غير أحمد مجلي، ساعتها يُنسب لأحمد مجلي كمالك رئيسي والأدمن
+  /// الآخر مالك فرعي، بحيث يظهر عند الحسابين ويستطيع كليهما قراءته».
+  ///
+  /// **ولا تمسّ النسبة**: «العبرة بالشراء وليس المالك الرئيسي» — فمن نفّذ
+  /// الصفقة له ٣٪ ومديره ٢٪، وهي تُحسب على مالك **المشروع** لا على مالك
+  /// البطاقة. فالملكية المزدوجة الملغاة في المرحلة ١٦ كانت على الصفقة،
+  /// وهذه على بطاقة العميل: بابُ رؤيةٍ لا حصّةُ مال.
+  coOwnerId String?
+  coOwner   User?   @relation("ClientCoOwner", fields: [coOwnerId], references: [id], onDelete: SetNull)
+
   /// ربط اختياري بسجل الشركة (الرقم الضريبي وشروط الدفع)
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
@@ -366,6 +380,7 @@ model Client {
   @@index([phoneAltNormalized])
   @@index([name])
   @@index([ownerId])
+  @@index([coOwnerId])
   @@index([firstBranch])
 }
 
@@ -1196,6 +1211,17 @@ model Account {
   /// هل يقبل قيدًا مباشرًا؟ المستويات الأعلى للتجميع وحده
   isPostable Boolean @default(false)
   active     Boolean @default(true)
+
+  /// **قناة الإنفاق التسويقي** — google_ads | meta_ads | organic | …
+  ///
+  /// تُضبط **مرة واحدة على الحساب** لا في كل قيد: «إعلانات جوجل» جوجلُ في
+  /// كل قيد يقع عليه، وسؤالُ المحاسب عنه مئات المرات يُنتج مئات الفرص
+  /// للخطأ. وعليها تُقسَم تكلفةُ اكتساب العميل.
+  ///
+  /// **وتبقى فارغة في الغالب الأعمّ**: حسابُ الإيجار ليس قناةً تسويقية،
+  /// وما لا قناة له يُعرض في «غير منسوب» ولا يُخمَّن — النسبة الخاطئة أسوأ
+  /// من عدمها لأن عليها يُبنى قرار إنفاق.
+  adChannel String?
 
   /// حساب نظامي يربطه النظام بحدث تشغيلي (مثل: إيراد الترجمة التحريرية)
   systemKey String? @unique

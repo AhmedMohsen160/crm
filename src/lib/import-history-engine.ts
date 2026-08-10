@@ -18,6 +18,7 @@ import {
 } from './import-ledger-en';
 import { COST_CENTER_ALIASES } from './import-accounting';
 import { matchAdmin } from './migration';
+import { adChannelOfMemo } from './acquisition';
 import { groupBatches, settleRounding, round2 } from './ledger-batches';
 
 /**
@@ -463,7 +464,20 @@ export async function importLedgerWorkbook(params: {
          */
         branch: en?.branch ?? null,
         salesAdminId: adminIdOf(en?.salesAdmin ?? null),
-        trafficSource: en ? trafficKeyOf(en.trafficSource) : null,
+        /**
+         * **وقناةُ سطر المصروف تُقرأ من بيانه.**
+         *
+         * حسابُ الإعلان في ٢٠٢٦ يجمع جوجل وفيسبوك، والتمييز في البيان
+         * وحده — وبلا قراءته يبقى ٢١٣ ألفًا كتلةً لا تُقسَم على قناة،
+         * فلا تظهر تكلفةُ عميلٍ واحد. والمحاسب هو من كتب اسم المنصّة
+         * صريحًا، فهذه قراءةٌ لا تخمين.
+         *
+         * وقناةُ الوصول على سطر الإيراد تبقى كما وردت — لكلٍّ معناه.
+         */
+        trafficSource:
+          (type === 'expense' && row.expenseGroup === 'selling_marketing'
+            ? adChannelOfMemo(row.memo)
+            : null) ?? (en ? trafficKeyOf(en.trafficSource) : null),
         translationType: en?.translationType ?? null,
         sortOrder: index,
       });

@@ -270,14 +270,22 @@ export async function channelPerformance(range: Range): Promise<ChannelRow[]> {
         entry: { status: 'posted', date: { gte: range.from, lt: range.to } },
         account: { expenseGroup: 'selling_marketing' },
       },
-      include: { account: { select: { systemKey: true } } },
+      include: { account: { select: { systemKey: true, adChannel: true } } },
     }),
   ]);
   void projects;
 
   const spendByChannel: Record<string, number> = {};
   for (const line of adSpend) {
-    const key = channelOfAccount(line.account.systemKey);
+    /**
+     * **والقناة المضبوطة من الشاشة تعلو على المفتاح النظاميّ.**
+     *
+     * كان الربط بالمفتاح وحده، وهو لحسابات الشجرة المزروعة. وحسابات
+     * المحاسب المرحَّلة من دفاتره بلا مفاتيح — «م. إشتركات في مجلات
+     * وإعلانات» و`Paid Advertising via Platforms Expenses` — فوقع إنفاق
+     * المكتب كلُّه في «غير منسوب» ولم تظهر تكلفةُ عميلٍ واحد.
+     */
+    const key = channelOfAccount(line.account.systemKey, line.account.adChannel);
     spendByChannel[key] = round2(
       (spendByChannel[key] ?? 0) + line.debitBase - line.creditBase
     );

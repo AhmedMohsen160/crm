@@ -380,7 +380,12 @@ export default async function AnalyticsPage({
       {/* ══ القنوات والاكتساب ══════════════════════════════════ */}
       {seesCompany && channels.length > 0 && (
         <section>
-          <h2 className="mb-1 section-title">القنوات وتكلفة الاكتساب</h2>
+          <h2 className="mb-1 section-title">
+            القنوات وتكلفة الاكتساب{' '}
+            <Link href="/analytics/acquisition" className="link text-xs font-normal">
+              الشاشة الكاملة — شهرًا بشهر وضبط القنوات
+            </Link>
+          </h2>
           <p className="mb-3 text-xs text-slate-500">
             الإنفاق مقروء من <b>دفتر الأستاذ</b> — مجموعة «مصاريف بيعية وتسويقية»
             كاملةً لا من إدخال يدوي، فالرقم يطابق ما صُرف فعلًا ويُدخَل مرة واحدة.

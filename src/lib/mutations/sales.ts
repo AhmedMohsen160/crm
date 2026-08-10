@@ -384,6 +384,29 @@ export async function saveClient(fd: FormData, user: SessionUser, id?: string) {
     notes: str(fd, 'notes'),
   };
 
+  /**
+   * **الملكية تُعدَّل — ولم تكن تُعدَّل.**
+   *
+   * كان `ownerId` يُكتب عند الإنشاء وحده ولا يمسّه التحديث، فبطاقةٌ وقعت
+   * على الحساب الخطأ تبقى عليه للأبد. وبيانات المكتب استُوردت كلها بحسابٍ
+   * واحد — فبلا هذا لا تُصحَّح بطاقةٌ واحدة.
+   *
+   * **ولا يعيد الإسناد إلا من يرى أكثر من نفسه**: من لا يرى إلا سجلاته
+   * لا يملك أن ينقل بطاقةً من زميلٍ إليه.
+   */
+  const mayReassign =
+    can(user, 'canViewAllLeads') || can(user, 'canViewTeamLeads') || can(user, 'canManageUsers');
+  const ownership = mayReassign
+    ? {
+        ownerId: str(fd, 'ownerId') ?? null,
+        /**
+         * **والفرعيّ لا يكون هو الرئيسيّ.** شخصٌ واحد في الخانتين يعني
+         * مالكًا واحدًا كُتب مرتين — ويُظهر البطاقة مرتين في كل جرد.
+         */
+        coOwnerId: str(fd, 'coOwnerId') === (str(fd, 'ownerId') ?? null) ? null : (str(fd, 'coOwnerId') ?? null),
+      }
+    : {};
+
   // القيد الفريد في قاعدة البيانات هو الحارس الحقيقي؛ هذا الفحص يوجد
   // ليعطي رسالة مفهومة ورابطًا للعميل الموجود بدل خطأ تقني.
   const clash = await db.client.findUnique({
@@ -403,7 +426,8 @@ export async function saveClient(fd: FormData, user: SessionUser, id?: string) {
         code: await nextClientCode(),
         firstBranch: user.branch,
         createdById: user.id,
-        ownerId: str(fd, 'ownerId') ?? user.id,
+        ownerId: (mayReassign ? str(fd, 'ownerId') : null) ?? user.id,
+        coOwnerId: mayReassign ? (ownership.coOwnerId ?? null) : null,
       },
     });
     await auditEvent(
@@ -420,8 +444,8 @@ export async function saveClient(fd: FormData, user: SessionUser, id?: string) {
   if (!existing) throw new MutationError('العميل غير موجود');
   requireOwn(existing.ownerId, user, 'ليس لديك صلاحية تعديل هذا العميل');
 
-  await db.client.update({ where: { id }, data });
-  await auditDiff(user.id, 'Client', id, existing, data);
+  await db.client.update({ where: { id }, data: { ...data, ...ownership } });
+  await auditDiff(user.id, 'Client', id, existing, { ...data, ...ownership });
   return `/clients/${id}`;
 }
 

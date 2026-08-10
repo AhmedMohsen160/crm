@@ -75,6 +75,7 @@ import {
   generateDraftEntries,
   fillBudgetFromHistory,
   saveAccountBehaviour,
+  saveAdChannels,
   saveBudgetPlanSettings,
   saveCommissionScheme,
   saveCommissionTier,
@@ -355,6 +356,10 @@ export async function POST(request: NextRequest) {
         break;
       case 'budget.behaviour':
         destination = await saveAccountBehaviour(fd, user);
+        break;
+      // قنوات الإنفاق التسويقي — تُضبط مرة واحدة على الحساب
+      case 'account.adChannel':
+        destination = await saveAdChannels(fd, user);
         break;
       case 'budget.plan':
         destination = await saveBudgetPlanSettings(fd, user);
