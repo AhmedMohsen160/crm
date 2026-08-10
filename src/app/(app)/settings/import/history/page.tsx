@@ -434,11 +434,11 @@ export default async function HistoryImportPage({
                 hint="سنةٌ بلا دفترٍ تبقى كما رصدها الشيت — الصمت ليس رقمًا"
               />
               <SelectField
-                label="فرع العميل الشهريّ المجمَّع"
+                label="فرع الإيراد الذي لا يذكر الدفتر فرعه"
                 name="fallbackBranch"
                 options={branches}
                 defaultValue="mokattam"
-                hint="حين لا يرصد الشيت شيئًا في الشهر فلا يُعرف فرعه"
+                hint="الدفتر بلا بُعد فرع — وبلا هذا الاختيار يخرج أكثرُ الإيراد من تقرير الفروع"
               />
               <div className="sm:col-span-2">
                 <label className="label" htmlFor="centerClients">

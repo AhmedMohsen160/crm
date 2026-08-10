@@ -213,7 +213,16 @@ export async function settleYears(params: {
   years: number[];
   actorId: string;
   rule: OwnerRule;
-  /** فرعُ العميل الشهريّ المجمَّع حين لا يرصد الشيت أحدًا */
+  /**
+   * **فرعُ الإيراد الذي لا يذكر الدفتر فرعه.**
+   *
+   * دفتر المحاسب بلا بُعد فرعٍ أصلًا — فيه مراكز ربحية لا فروع. وما دخل منه
+   * بلا فرعٍ يخرج من تقرير الفروع كلَّه: كان **٥٧٪ من الإيراد** يقع في خانة
+   * «بلا فرع» فيصير التقرير أعرجَ لا يُقرأ.
+   *
+   * **فيُسأل عنه مرة واحدة في الشاشة** ولا يُخمَّن في الكود: المكتب بدأ في
+   * المقطم وحده، ومن يعرف أين كان يُنفَّذ عملُ عميلٍ بعينه هو أحمد لا النظام.
+   */
   fallbackBranch?: string;
   /** خريطة «مركز الربحية ← عميله» — تُكتب في الشاشة سطرًا سطرًا */
   centerClients?: Map<string, string>;
@@ -274,7 +283,7 @@ export async function settleYears(params: {
          */
         const clientName = clientOfCenter(center, centerClients);
         const owner = ownerFor(clientName, params.rule);
-        const client = await clientByName(clientName, owner, params.actorId, tag, null, 'company');
+        const client = await clientByName(clientName, owner, params.actorId, tag, fallbackBranch, 'company');
         if (client.created) report.namedClients += 1;
 
         // مركز الربحية يشير إلى عميله — وهو ما أُنشئ الحقل من أجله
@@ -295,6 +304,7 @@ export async function settleYears(params: {
             collectedAmount: round2(cell.amount),
             clientId: client.id,
             ownerId: owner,
+            branch: fallbackBranch,
             createdAt: date,
             convertedAt: date,
             deliveredAt: date,
