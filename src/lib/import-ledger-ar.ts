@@ -244,6 +244,20 @@ function build(year: number, month: number, day: number): Date | null {
 /** رقمٌ من خانة قد تحمل فاصلة آلاف أو فراغًا غير قابل للكسر */
 export function parseArabicAmount(raw: unknown): number {
   if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0;
+
+  /**
+   * **ومبلغٌ وصل تاريخًا يُردّ رقمًا.**
+   *
+   * دفتر ٢٠٢٦ يحمل على عمودَي المدين والدائن **تنسيق تاريخ** — خطأٌ في
+   * الملف لا في القراءة. فقرأ النظام «٢٣٢٬١٥٧» تاريخًا هو «٢٥٣٥-٠٨-١٥»،
+   * ولو تُرك لسقط رصيدُ افتتاح السنة كلُّه صفرًا.
+   *
+   * والردّ لا يخسر شيئًا: التاريخ في إكسل رقمٌ تسلسليّ أصلًا، فيُعاد إليه.
+   */
+  if (raw instanceof Date) {
+    const serial = raw.getTime() / 86_400_000 + 25_569;
+    return Number.isFinite(serial) && serial > 0 ? Math.round(serial * 100) / 100 : 0;
+  }
   const cleaned = String(raw ?? '')
     .replace(/[,\s ]/g, '')
     .replace(/[^\d.\-]/g, '');
