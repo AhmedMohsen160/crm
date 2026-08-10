@@ -50,13 +50,19 @@ export const EXPENSE_GROUPS: Record<string, string> = {
   'General and administrative expenses': 'general_admin',
 };
 
-/** أسماء الفروع في الدفتر ← مفاتيح قائمة `branch` */
+/**
+ * أسماء الفروع في الدفتر ← مفاتيح قائمة `branch`.
+ *
+ * **و«Saudi Arabia» هي الرياض**: هكذا كتبها المحاسب في دفتر ٢٠٢٦ ولم يكتب
+ * `Riyadh` مرة واحدة. وبلا هذا السطر تسقط ثلاثة عشر سطرًا سعوديًّا بلا فرع.
+ */
 export const BRANCH_KEYS: Record<string, string> = {
   Mokattam: 'mokattam',
   Mohandessin: 'mohandessin',
   Alexandria: 'alexandria',
   'Nasr City': 'nasr_city',
   Riyadh: 'riyadh',
+  'Saudi Arabia': 'riyadh',
   Buraidah: 'buraidah',
 };
 

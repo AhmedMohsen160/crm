@@ -50,6 +50,21 @@ async function readSheet(fd: FormData, field: string): Promise<Buffer> {
   return Buffer.from(await file.arrayBuffer());
 }
 
+/**
+ * تاريخ الوقف — لا يدخل ما بعده.
+ *
+ * قالها أحمد: «نغلق الداتا ونظبطها على نهاية يوليو بحيث من أول أغسطس تكون
+ * مدخلات لاحقة أو مستقلة». **والفراغ يعني بلا وقف** — وهي حالٌ مقصودة:
+ * دفاتر السنوات المقفلة تدخل كاملة.
+ */
+function readCutoff(fd: FormData): Date | undefined {
+  const raw = str(fd, 'until');
+  if (!raw) return undefined;
+  const date = new Date(`${raw}T23:59:59.999Z`);
+  if (Number.isNaN(date.getTime())) throw new MutationError('تاريخ الوقف غير مقروء');
+  return date;
+}
+
 /** أحمد مجلي مالك التجزئة، والمدير التنفيذي مالك العملاء القدامى */
 async function readOwnerRule(fd: FormData, user: SessionUser) {
   const defaultOwnerId = str(fd, 'defaultOwnerId') ?? user.id;
@@ -76,7 +91,14 @@ export async function importHistoryLedger(fd: FormData, user: SessionUser) {
   }
 
   const buffer = await readSheet(fd, 'file');
-  const summary = await importLedgerWorkbook({ buffer, year, actorId: user.id });
+  const summary = await importLedgerWorkbook({
+    buffer,
+    year,
+    actorId: user.id,
+    until: readCutoff(fd),
+    // «الشركة فقط مستمرة» — فأرصدة الافتتاح موجودة في دفاتر ما قبلها حركةً
+    skipOpeningBalances: str(fd, 'keepOpening') !== 'yes',
+  });
 
   await auditEvent(
     user.id,
@@ -98,6 +120,11 @@ export async function importHistoryLedger(fd: FormData, user: SessionUser) {
     accounts: String(summary.accountsCreated),
     centers: String(summary.costCentersCreated),
     unbalanced: String(summary.unbalanced.length),
+    dialect: summary.dialect,
+    opening: String(summary.openingSkipped),
+    after: String(summary.afterCutoff),
+    admins: summary.unknownAdmins.join('، '),
+    branches: summary.unknownBranches.join('، '),
   });
   return `/settings/import/history?${params}`;
 }
@@ -128,6 +155,7 @@ export async function importHistorySales(fd: FormData, user: SessionUser) {
     actorId: user.id,
     rule,
     onlyYears: only,
+    until: readCutoff(fd),
   });
 
   await auditEvent(

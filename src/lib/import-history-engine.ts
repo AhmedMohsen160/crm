@@ -10,6 +10,14 @@ import {
   parseArabicAmount,
   type ArabicLedgerRow,
 } from './import-ledger-ar';
+import {
+  findEnglishHeader,
+  parseEnglishLedgerRow,
+  trafficKeyOf,
+  type EnglishLedgerRow,
+} from './import-ledger-en';
+import { COST_CENTER_ALIASES } from './import-accounting';
+import { matchAdmin } from './migration';
 import { groupBatches, settleRounding, round2 } from './ledger-batches';
 
 /**
@@ -50,6 +58,16 @@ export type LedgerImportSummary = {
   problems: { reason: string; count: number }[];
   accountsCreated: number;
   costCentersCreated: number;
+  /** أيّ القارئين قرأ الملف — عربيّ أم إنجليزيّ */
+  dialect: 'ar' | 'en';
+  /** أرصدة افتتاحية أُسقطت عمدًا — الشركة واحدة مستمرّة لا دفتران */
+  openingSkipped: number;
+  /** صفوفٌ بعد تاريخ الوقف — تُترك لدفعةٍ لاحقة */
+  afterCutoff: number;
+  /** أسماء فروع وردت ولا تطابق قائمة الفروع */
+  unknownBranches: string[];
+  /** أسماء أدمنز وردت ولا تطابق مستخدمًا في النظام */
+  unknownAdmins: string[];
 };
 
 /** كم عنصرًا في الذاكرة أُنشئ فعلًا — لا كم مرة قُرئ */
@@ -77,7 +95,12 @@ async function ensureAccount(
   type: string,
   expenseGroup: string | null,
   cache: Map<string, AccountRef>,
-  tag: string
+  tag: string,
+  /**
+   * **والاسم الإنجليزي يُحفظ في خانته** — فيجد قارئُ الصفوف الملصوقة
+   * الحسابَ نفسه ولا يُنشئ له ثانيًا: ذاك يطابق بـ`nameEn` وهذا بالاسم.
+   */
+  english = false
 ): Promise<AccountRef | null> {
   let parentId: string | null = null;
   let ref: AccountRef | null = null;
@@ -93,12 +116,14 @@ async function ensureAccount(
     }
 
     // الموجود يُعاد استعماله — بمطابقةٍ على الاسم المطبَّع تحت الأب نفسه
-    const siblings: { id: string; name: string }[] = await db.account.findMany({
+    const siblings: { id: string; name: string; nameEn: string | null }[] = await db.account.findMany({
       where: { parentId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, nameEn: true },
     });
     const want = matchKey(name);
-    const found = siblings.find((s) => matchKey(s.name) === want);
+    const found = siblings.find(
+      (s) => matchKey(s.name) === want || (english && s.nameEn === name)
+    );
 
     if (found) {
       ref = { id: found.id, created: false };
@@ -107,11 +132,14 @@ async function ensureAccount(
       const created: { id: string } = await db.account.create({
         data: {
           name,
+          nameEn: english ? name : null,
           type,
           expenseGroup: type === 'expense' ? expenseGroup : null,
           level: level + 1,
           parentId,
           isPostable: isLeaf,
+          // الإهلاك مصروف غير نقدي — يُستبعد من التعادل النقدي (§١٠٫٢)
+          isCash: !/depreciation|إهلاك/i.test(name),
           importTag: tag,
         },
         select: { id: true },
@@ -205,6 +233,22 @@ export async function importLedgerWorkbook(params: {
   year: number;
   actorId: string;
   sheetName?: string;
+  /**
+   * **تاريخ الوقف** — لا يدخل ما بعده.
+   *
+   * قالها أحمد: «نغلق الداتا ونظبطها على نهاية يوليو بحيث من أول أغسطس
+   * تكون مدخلات لاحقة». والوقفُ في الترحيل لا في الملف: الدفتر ينمو كل
+   * يوم، ورفعُه غدًا يجب أن يبدأ من حيث وقف لا أن يعيد ما دخل.
+   */
+  until?: Date;
+  /**
+   * **إسقاط الأرصدة الافتتاحية.**
+   *
+   * دفتر ٢٠٢٦ يفتح بثمانية وستين سطرًا تحمل أرصدة ٢٠٢٥ المرحَّلة. وهي
+   * موجودة أصلًا في دفاتر ٢٠٢٢–٢٠٢٥ حركةً مفصّلة — «الشركة فقط مستمرة»،
+   * لا دفتران. وإدخالُها ثانيةً يحسب المال مرتين ويُضاعف الميزانية.
+   */
+  skipOpeningBalances?: boolean;
 }): Promise<LedgerImportSummary> {
   const tag = ledgerTag(params.year);
   const workbook = readWorkbook(params.buffer);
@@ -216,28 +260,52 @@ export async function importLedgerWorkbook(params: {
    * إحدى عشرة ورقة (إهلاك · تدفقات · حقوق ملكية). فيُبحث بالاسم أولًا، ثم
    * تُؤخذ **أكبر ورقةٍ فيها ترويسةُ قيودٍ صالحة** — وهذا يصيب مهما سُمّيت.
    */
-  const findSheet = (): { name: string; rows: CellValue[][]; header: NonNullable<ReturnType<typeof findHeader>> } => {
+  /**
+   * **واللهجتان تُجرَّبان على كل ورقة.**
+   *
+   * حتى ٢٠٢٥ كتب المحاسب دفتره بالعربية، وفي ٢٠٢٦ حوّله كلَّه إلى
+   * الإنجليزية (`Journal Entry 🧾`). فالورقة تُعرض على القارئين معًا،
+   * ويفوز من قرأ ترويستها — لا من طابق اسمَها.
+   */
+  type Found = {
+    name: string;
+    rows: CellValue[][];
+    header: NonNullable<ReturnType<typeof findHeader>>;
+    dialect: 'ar' | 'en';
+  };
+
+  const findSheet = (): Found => {
     const candidates = params.sheetName
       ? [params.sheetName]
       : [
-          ...workbook.sheetNames.filter((n) => matchKey(n).includes(matchKey('قيود'))),
+          ...workbook.sheetNames.filter(
+            (n) => matchKey(n).includes(matchKey('قيود')) || /journal\s*entry/i.test(n)
+          ),
           ...workbook.sheetNames,
         ];
 
-    let best: { name: string; rows: CellValue[][]; header: NonNullable<ReturnType<typeof findHeader>> } | null = null;
+    let best: Found | null = null;
     for (const name of candidates) {
       const rows = workbook.sheet(name) as CellValue[][];
-      const header = findHeader(rows as unknown as (string | null | undefined)[][]);
+      const plain = rows as unknown as (string | null | undefined)[][];
+      const arabic = findHeader(plain);
+      const english = arabic ? null : findEnglishHeader(plain);
+      const header = arabic ?? english;
       if (!header) continue;
-      if (!best || rows.length > best.rows.length) best = { name, rows, header };
-      // ورقةٌ اسمها «قيود» وفيها ترويسة: هي المقصودة بلا بحثٍ أبعد
-      if (matchKey(name).includes(matchKey('قيود'))) return best;
+      const found: Found = { name, rows, header, dialect: arabic ? 'ar' : 'en' };
+      if (!best || rows.length > best.rows.length) best = found;
+      // ورقةٌ باسم القيود وفيها ترويسة: هي المقصودة بلا بحثٍ أبعد
+      if (matchKey(name).includes(matchKey('قيود')) || /journal\s*entry/i.test(name)) return best;
     }
     if (!best) throw new Error('لم تُوجد ورقةٌ فيها ترويسة قيود في هذا الملف');
     return best;
   };
 
-  const { rows, header } = findSheet();
+  const { rows, header, dialect } = findSheet();
+  const parseRow = (cells: CellValue[], line: number) =>
+    dialect === 'en'
+      ? parseEnglishLedgerRow(cells, header.columns, line)
+      : parseArabicLedgerRow(cells, header.columns, line);
 
   // إعادة الترحيل تمسح ما وسمَته أولًا — فلا يتضاعف قيدٌ برفعٍ ثانٍ
   await rollbackTag(tag);
@@ -245,6 +313,8 @@ export async function importLedgerWorkbook(params: {
   const parsed: ArabicLedgerRow[] = [];
   const problems = new Map<string, number>();
   let skipped = 0;
+  let openingSkipped = 0;
+  let afterCutoff = 0;
 
   for (let i = header.row + 1; i < rows.length; i += 1) {
     const cells = rows[i];
@@ -252,7 +322,7 @@ export async function importLedgerWorkbook(params: {
     const hasAnything = cells.some((c) => c !== null && c !== undefined && c !== '');
     if (!hasAnything) continue;
 
-    const row = parseArabicLedgerRow(cells, header.columns, i + 1);
+    const row = parseRow(cells, i + 1);
     if ('reason' in row) {
       /**
        * **الصفّ الفارغ ليس خطأً.** أوراق المحاسب تحتها آلاف الصفوف المهيّأة
@@ -274,11 +344,44 @@ export async function importLedgerWorkbook(params: {
       continue;
     }
     if (row.date.getUTCFullYear() !== params.year) continue;
+
+    /**
+     * **الإسقاط بعد القراءة لا قبلها** — فيُعدّ ما أُسقط ويُقال في التقرير.
+     * صفٌّ يختفي بلا رقمٍ يشرحه يجعل فارق الميزان لغزًا بلا مفتاح.
+     */
+    if (params.skipOpeningBalances && 'isOpeningBalance' in row && row.isOpeningBalance) {
+      openingSkipped += 1;
+      continue;
+    }
+    if (params.until && row.date.getTime() > params.until.getTime()) {
+      afterCutoff += 1;
+      continue;
+    }
     parsed.push(row);
   }
 
   const accountCache = new Map<string, AccountRef>();
   const centerCache = new Map<string, { id: string; created: boolean }>();
+  const unknownBranches = new Set<string>();
+  const unknownAdmins = new Set<string>();
+  /**
+   * قائمة المستخدمين تُقرأ **مرة واحدة** — والمطابقة في الذاكرة. الدفتر
+   * خمسة آلاف سطر، وسؤالُ القاعدة عن كل سطرٍ رحلةٌ لا تُحتمل.
+   */
+  const staff =
+    dialect === 'en'
+      ? await db.user.findMany({ where: { active: true }, select: { id: true, name: true } })
+      : [];
+  const adminCache = new Map<string, string | null>();
+  const adminIdOf = (raw: string | null): string | null => {
+    if (!raw) return null;
+    if (adminCache.has(raw)) return adminCache.get(raw) ?? null;
+    const user = matchAdmin(raw, staff);
+    if (!user) unknownAdmins.add(raw);
+    adminCache.set(raw, user?.id ?? null);
+    return user?.id ?? null;
+  };
+
   const batches = groupBatches(parsed);
   const unbalanced: LedgerImportSummary['unbalanced'] = [];
   let entries = 0;
@@ -300,17 +403,50 @@ export async function importLedgerWorkbook(params: {
       creditBase: number;
       memo: string;
       costCenterId: string | null;
+      branch: string | null;
+      salesAdminId: string | null;
+      trafficSource: string | null;
+      translationType: string | null;
       sortOrder: number;
     }[] = [];
 
     for (const [index, row] of batch.rows.entries()) {
-      const type = accountTypeOf(row.path[0]) ?? row.accountType;
-      const account = await ensureAccount(row.path, type, row.expenseGroup, accountCache, tag);
+      /**
+       * **نوعُ الحساب من قارئه لا من جذره دائمًا.** جذر الدفتر العربي هو
+       * الحساب الرئيسي نفسه، وجذر الإنجليزي مستوًى فوقه (`Expenses`).
+       */
+      const type =
+        dialect === 'en' ? row.accountType : (accountTypeOf(row.path[0]) ?? row.accountType);
+      const account = await ensureAccount(
+        row.path,
+        type,
+        row.expenseGroup,
+        accountCache,
+        tag,
+        dialect === 'en'
+      );
       if (!account) continue;
 
-      const costCenterId = row.costCenter
-        ? await ensureCostCenter(row.costCenter, centerCache, tag)
+      const en = dialect === 'en' ? (row as EnglishLedgerRow) : null;
+
+      /**
+       * **ومركز ٢٠٢٦ هو مركز ٢٠٢٥ باسمه العربي.**
+       *
+       * كتب المحاسب `Salam Center | Haqibat Salam` وفي النظام «مركز سلام».
+       * وبلا هذه المطابقة يُنشأ للمركز الواحد سجلّان، فتُقسَّم ربحيةُ
+       * المشروع على اثنين ولا يُقرأ رقمٌ صحيح لواحدٍ منهما.
+       */
+      const centerName = en
+        ? (COST_CENTER_ALIASES[`${en.centerAccount ?? ''}|${en.centerProject ?? ''}`]?.name ??
+          en.centerProject ??
+          en.centerAccount)
+        : row.costCenter;
+
+      const costCenterId = centerName
+        ? await ensureCostCenter(centerName, centerCache, tag)
         : null;
+
+      if (en?.branchRaw) unknownBranches.add(en.branchRaw);
 
       lineData.push({
         accountId: account.id,
@@ -320,6 +456,15 @@ export async function importLedgerWorkbook(params: {
         creditBase: row.credit,
         memo: row.memo.slice(0, 500),
         costCenterId,
+        /**
+         * **ولا فرعَ لما قبل ٢٠٢٦.** الفروع بدأت حينها، ودفاتر ما قبلها
+         * بلا بُعد فرعٍ أصلًا — ووسمُها بفرعٍ يخلق بُعدًا لم يكن ويدعو
+         * إلى مقارنة فروعٍ لم توجد.
+         */
+        branch: en?.branch ?? null,
+        salesAdminId: adminIdOf(en?.salesAdmin ?? null),
+        trafficSource: en ? trafficKeyOf(en.trafficSource) : null,
+        translationType: en?.translationType ?? null,
         sortOrder: index,
       });
     }
@@ -342,11 +487,14 @@ export async function importLedgerWorkbook(params: {
     }
 
     const first = batch.rows[0];
+    const firstEn = dialect === 'en' ? (first as EnglishLedgerRow) : null;
     await db.journalEntry.create({
       data: {
         date: first.date,
         period: first.period,
-        docType: 'journal',
+        // نوع المستند ورقمه يذكرهما دفتر ٢٠٢٦ وحده — والفاتورة تُراجَع بهما
+        docType: firstEn?.docType ?? 'journal',
+        docNumber: batch.rows.map((r) => (r as EnglishLedgerRow).docNumber).find(Boolean) ?? null,
         description: first.memo.slice(0, 300),
         status: 'posted',
         postedAt: first.date,
@@ -379,5 +527,10 @@ export async function importLedgerWorkbook(params: {
     // المرجع لكل سطرٍ بعده، فعدُّه في كل مرة يُنتج رقمًا بعدد السطور
     accountsCreated: countCreated(accountCache),
     costCentersCreated: countCreated(centerCache),
+    dialect,
+    openingSkipped,
+    afterCutoff,
+    unknownBranches: [...unknownBranches],
+    unknownAdmins: [...unknownAdmins],
   };
 }

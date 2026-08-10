@@ -20,7 +20,7 @@
     "bootstrap": "node scripts/db-provider.mjs && prisma generate && tsx scripts/bootstrap.ts",
     "test:phone": "tsx tests/phone.mjs",
     "test:costing": "tsx tests/costing.mjs",
-    "test:unit": "npm run test:phone && npm run test:costing && npm run test:permissions && npm run test:commission && npm run test:freelancers && npm run test:accounting && npm run test:migration && npm run test:import-accounting && npm run test:notifications && npm run test:proposals && npm run test:email && npm run test:ai && npm run test:hr && npm run test:budget && npm run test:quote-design && npm run test:files && npm run test:branch-economics && npm run test:client-segments && npm run test:ops-metrics && npm run test:quality && npm run test:rate-limit && npm run test:error-log && npm run test:money && npm run test:jobs && npm run test:acquisition && npm run test:profit-centers && npm run test:receivables && npm run test:geo && npm run test:targets && npm run test:settlement && npm run test:import-ledger-ar && npm run test:client-merge && npm run test:xlsx && npm run test:ledger-batches && npm run test:import-sales && npm run check:additive && npm run check:migrations",
+    "test:unit": "npm run test:phone && npm run test:costing && npm run test:permissions && npm run test:commission && npm run test:freelancers && npm run test:accounting && npm run test:migration && npm run test:import-accounting && npm run test:notifications && npm run test:proposals && npm run test:email && npm run test:ai && npm run test:hr && npm run test:budget && npm run test:quote-design && npm run test:files && npm run test:branch-economics && npm run test:client-segments && npm run test:ops-metrics && npm run test:quality && npm run test:rate-limit && npm run test:error-log && npm run test:money && npm run test:jobs && npm run test:acquisition && npm run test:profit-centers && npm run test:receivables && npm run test:geo && npm run test:targets && npm run test:settlement && npm run test:import-ledger-ar && npm run test:client-merge && npm run test:xlsx && npm run test:ledger-batches && npm run test:import-sales && npm run test:import-ledger-en && npm run check:additive && npm run check:migrations",
     "test:client-segments": "tsx tests/client-segments.mjs",
     "test:ops-metrics": "tsx tests/ops-metrics.mjs",
     "test:quality": "tsx tests/quality.mjs",
@@ -58,7 +58,8 @@
     "test:branch-economics": "tsx tests/branch-economics.mjs",
     "test:permissions": "tsx tests/permissions.mjs",
     "test:import-accounting": "tsx tests/import-accounting.mjs",
-    "check:additive": "node scripts/check-additive.mjs"
+    "check:additive": "node scripts/check-additive.mjs",
+    "test:import-ledger-en": "tsx tests/import-ledger-en.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",

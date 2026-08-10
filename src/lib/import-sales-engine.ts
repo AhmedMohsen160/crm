@@ -113,6 +113,14 @@ export async function importSalesWorkbook(params: {
   sheetName?: string;
   /** سنواتٌ بعينها — وبلا تحديدٍ تدخل كل السنوات في الملف */
   onlyYears?: number[];
+  /**
+   * **تاريخ الوقف** — لا يدخل ما بعده.
+   *
+   * «نغلق الداتا ونظبطها على نهاية يوليو بحيث من أول أغسطس تكون مدخلات
+   * لاحقة». والسنة وحدها لا تكفي حدًّا: شيت ٢٠٢٦ يمتدّ إلى أغسطس، وسنةٌ
+   * نصفُها مغلقٌ ونصفُها مفتوح تحتاج يومًا لا سنة.
+   */
+  until?: Date;
 }): Promise<SalesImportSummary> {
   const workbook = readWorkbook(params.buffer);
   const sheetName =
@@ -182,6 +190,7 @@ export async function importSalesWorkbook(params: {
     }
     const year = parsed.date.getUTCFullYear();
     if (params.onlyYears && !params.onlyYears.includes(year)) continue;
+    if (params.until && parsed.date.getTime() > params.until.getTime()) continue;
 
     const name = cleanClientName(cell(row, col.name));
     const rawPhone = String(cell(row, col.phone) ?? '');

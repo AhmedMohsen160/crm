@@ -8,8 +8,25 @@ import { SaveButton } from '@/components/forms';
 import { EXECUTIVE_CLIENT_NAMES } from '@/lib/client-merge';
 import { centerClientsText } from '@/lib/settlement';
 
-/** السنوات التي تدخل الآن — و٢٠٢٦ مؤجَّلة باتفاق حتى تستقرّ هذه */
-const HISTORY_YEARS = '2022 2023 2024 2025';
+/** السنوات التي تدخل — ٢٠٢٦ معها بعد أن استقرّت التي قبلها */
+const HISTORY_YEARS = '2022 2023 2024 2025 2026';
+
+/**
+ * **والتسوية للسنوات المقفلة وحدها.**
+ *
+ * التسوية تُوسّع مبالغ المشاريع لتبلغ الدفتر — وهي صحيحة لسنةٍ انتهت
+ * وأُقفلت دفاترها. أما ٢٠٢٦ فسنةٌ جارية يُدخل فيها الموظفون كل يوم، وتوسيعُ
+ * مبالغها يمنح البائعين نسبًا على مالٍ **نسبه النظام إليهم ولم يبيعوه أحد**.
+ */
+const SETTLE_YEARS = '2022 2023 2024 2025';
+
+/**
+ * تاريخ وقف الترحيل.
+ *
+ * قالها أحمد: «نغلق الداتا ونظبطها على نهاية يوليو بحيث من أول أغسطس تكون
+ * مدخلات لاحقة أو مستقلة» — فمن أول أغسطس يُدخل الموظفون في النظام نفسه.
+ */
+const CUTOFF = '2026-07-31';
 import { formatMoney } from '@/lib/utils';
 import { previewReset, protectedCounts } from '@/lib/reset-engine';
 import { RESET_PHRASE } from '@/lib/mutations';
@@ -108,10 +125,11 @@ export default async function HistoryImportPage({
             </li>
             <li>
               <b>ارفع دفتر المحاسب — سنةً سنة.</b> اختر الملف واكتب سنته في الخانة، ثم
-              «رحّل الدفتر». أعِدها للسنة التالية. أربع رفعات: ٢٠٢٢ · ٢٠٢٣ · ٢٠٢٤ · ٢٠٢٥.
+              «رحّل الدفتر». أعِدها للسنة التالية. خمس رفعات: ٢٠٢٢ · ٢٠٢٣ · ٢٠٢٤ · ٢٠٢٥ ·
+              ٢٠٢٦.
             </li>
             <li>
-              <b>ارفع شيت المبيعات مرة واحدة</b> — الملف كلّه، واترك خانة السنوات فارغة.
+              <b>ارفع شيت المبيعات مرة واحدة</b> — الملف كلّه، وسنواتُه مكتوبةٌ لك في خانتها.
             </li>
             <li>
               <b>اضغط «سوِّ على الدفتر»</b> — لا ملفّ هنا، بل يبني النظام التسوية على ما
@@ -123,7 +141,24 @@ export default async function HistoryImportPage({
             <b>وكيف يفرّق النظام بين السنوات؟</b> في <b>الدفتر</b> أنت من يكتب السنة —
             وما خرج عنها في الملف يُتخطّى، فلو حمل ملفُّ ٢٠٢٣ قيدًا من ٢٠٢٢ لم يدخل معه.
             وفي <b>شيت المبيعات</b> لا تكتب شيئًا: فيه عمود تاريخٍ لكل صف، فيقرأ النظام
-            سنة كل صفٍّ بنفسه ويضعه في مكانه. ولهذا يُرفع الشيت مرة واحدة والدفتر أربعًا.
+            سنة كل صفٍّ بنفسه ويضعه في مكانه. ولهذا يُرفع الشيت مرة واحدة والدفتر خمسًا.
+          </p>
+          {/**
+            * **ودفتر ٢٠٢٦ إنجليزيّ الترويسة** — حوّله المحاسب كلَّه. والشاشة
+            * لا تسأل عن اللغة: القارئان يُعرضان على الورقة ويفوز من قرأ
+            * ترويستها. ويُقال في نتيجة الرفع أيّهما قرأ، ليُرى لا ليُختار.
+            */}
+          <p className="mt-2 text-xs leading-relaxed text-slate-700">
+            <b>وماذا عن ٢٠٢٦؟</b> دفترها كتبه المحاسب بالإنجليزية وفيها بدأت الفروع —
+            يقرأها النظام كما هي بلا أن تختار شيئًا. وشيءٌ واحد يُسقَط منها عمدًا:{' '}
+            <b>الأرصدة الافتتاحية</b> (٦٨ سطرًا تحمل أرصدة ٢٠٢٥). فهي موجودة أصلًا في
+            دفاتر ٢٠٢٢–٢٠٢٥ حركةً مفصّلة — والشركة واحدة مستمرّة لا دفتران، وإدخالها
+            ثانيةً يحسب المال مرتين.
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-700">
+            <b>و«حتى تاريخ» يقف بالبيانات عند نهاية يوليو ٢٠٢٦</b> كما اتفقنا — فمن أول
+            أغسطس يُدخل الموظفون في النظام نفسه، لا في الشيتات. وما بعد التاريخ يُعدّ
+            ويُقال في النتيجة ولا يدخل.
           </p>
           <p className="mt-2 text-xs leading-relaxed text-slate-700">
             <b>وكل رفعةٍ تُلغى بضغطة.</b> ما يدخل يُوسَم باسم مصدره وسنته
@@ -224,6 +259,36 @@ export default async function HistoryImportPage({
             دفعات لم تتوازن: <b className="nums">{n('unbalanced')}</b>
             {n('unbalanced') === 0 && ' — الدفتر متوازن بالقرش'}
           </li>
+          {/**
+            * **وما أُسقط يُقال برقمه.** صفٌّ يختفي بلا رقمٍ يشرحه يجعل فارق
+            * الميزان لغزًا بلا مفتاح — فيبحث المحاسب عن خطأٍ في الترحيل وهو
+            * قرارٌ اتُّخذ عمدًا.
+            */}
+          {n('opening') > 0 && (
+            <li className="sm:col-span-2">
+              أرصدة افتتاحية أُسقطت: <b className="nums">{n('opening')}</b> سطرًا — موجودة في
+              دفاتر ما قبلها حركةً، وإدخالها يحسب المال مرتين
+            </li>
+          )}
+          {n('after') > 0 && (
+            <li className="sm:col-span-2">
+              صفوف بعد تاريخ الوقف: <b className="nums">{n('after')}</b> — تُترك لدفعةٍ لاحقة
+            </li>
+          )}
+          <li className="text-slate-600 sm:col-span-2">
+            قُرئ بالترويسة {params.dialect === 'en' ? 'الإنجليزية' : 'العربية'}
+          </li>
+          {params.admins && (
+            <li className="text-amber-800 sm:col-span-2">
+              أدمنز لم يُطابَقوا بمستخدم: <b>{params.admins}</b> — قيودهم دخلت بلا أدمن، ولم
+              يُخمَّن أحد.
+            </li>
+          )}
+          {params.branches && (
+            <li className="text-amber-800 sm:col-span-2">
+              فروع لم تُطابَق: <b>{params.branches}</b> — قيودها دخلت بلا فرع.
+            </li>
+          )}
         </Result>
       )}
 
@@ -341,9 +406,37 @@ export default async function HistoryImportPage({
                   required
                   className="block w-full text-sm text-slate-600 file:ml-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700"
                 />
-                <p className="mt-1 text-xs text-slate-400">xlsx حتى ١٠ ميجابايت</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  xlsx حتى ١٠ ميجابايت — بالعربية أو بالإنجليزية
+                </p>
               </div>
+              <FormField
+                label="حتى تاريخ"
+                name="until"
+                type="date"
+                defaultValue={CUTOFF}
+                hint="ما بعده يُعدّ ويُقال في النتيجة ولا يدخل — وامسح الخانة ليدخل الملف كلّه"
+              />
             </div>
+            <details className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                إعدادات متقدّمة — مضبوطة سلفًا، لا تفتحها إلا لتغيّرها
+              </summary>
+              <label className="mt-3 flex items-start gap-2 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  name="keepOpening"
+                  value="yes"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                />
+                <span>
+                  <b>أدخِل الأرصدة الافتتاحية أيضًا.</b> اتركها فارغة. الأرصدة الافتتاحية
+                  في دفتر ٢٠٢٦ تحمل أرصدة ٢٠٢٥ مرحَّلة، وهي موجودة في دفاتر ٢٠٢٢–٢٠٢٥
+                  حركةً مفصّلة — فإدخالها معها يحسب المال مرتين. ولا تُعلَّم إلا لو رُحّل
+                  ٢٠٢٦ وحده بلا ما قبله.
+                </span>
+              </label>
+            </details>
             <div className="mt-4">
               <SaveButton>رحّل الدفتر</SaveButton>
             </div>
@@ -385,7 +478,14 @@ export default async function HistoryImportPage({
                 required
                 defaultValue={HISTORY_YEARS}
                 dir="ltr"
-                hint="٢٠٢٦ ليست هنا عمدًا — تُرفع وحدها حين يحين وقتها"
+                hint="امحُ سنةً منها لتبقى خارج هذه الرفعة — والفارغ مرفوض عمدًا"
+              />
+              <FormField
+                label="حتى تاريخ"
+                name="until"
+                type="date"
+                defaultValue={CUTOFF}
+                hint="الشيت يمتدّ إلى أغسطس، والاتفاق أن نقف عند نهاية يوليو"
               />
             </div>
             <AdvancedOwners
@@ -426,15 +526,24 @@ export default async function HistoryImportPage({
               <p className="text-amber-800">
                 وتُعاد التسوية كلّما أُعيد ترحيل الدفتر أو الشيت — فهي مبنيّة فوقهما.
               </p>
+              {/**
+                * **وشهرٌ صمت عنه الدفتر يبقى كما رصده الشيت.** كانت هذه
+                * الجملة في تلميح خانة السنوات، وانتقلت هنا حين صار التلميح
+                * يشرح لماذا ٢٠٢٦ خارج التسوية — والقاعدة أهمّ من موضعها.
+                */}
+              <p>
+                وشهرٌ رصده الشيت والدفترُ صامتٌ عنه يبقى كما رُصد ولا يُصفَّر —{' '}
+                <b>الصمت ليس رقمًا</b>.
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 label="السنوات"
                 name="years"
                 required
-                defaultValue={HISTORY_YEARS}
+                defaultValue={SETTLE_YEARS}
                 dir="ltr"
-                hint="سنةٌ بلا دفترٍ تبقى كما رصدها الشيت — الصمت ليس رقمًا"
+                hint="السنوات المقفلة وحدها — و٢٠٢٦ جاريةٌ فلا تُوسَّع مبالغها"
               />
             </div>
             <AdvancedOwners
