@@ -112,6 +112,25 @@ export default async function JobsPage() {
         </section>
       )}
 
+      {/**
+        * **الشاشة تقول قيدَ الخطة لا تسكت عنه.** الجدول اليوميّ ليس اختيارًا
+        * هندسيًّا بل حدُّ الخطة المجانية — ومن يفتح الشاشة فيجد «كل يوم» بلا
+        * تفسيرٍ يظنّه إهمالًا، ويطلب رفعه فلا يجد من يرفعه.
+        */}
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-700">
+        <p className="mb-1 font-semibold text-slate-800">لماذا مرة واحدة يوميًّا؟</p>
+        <p>
+          خطة الاستضافة المجانية تقبل مهمةً مجدولة <b>مرة واحدة في اليوم</b> ولا تقبل
+          أكثر. وقد طلبنا يومًا دورةً كل نصف ساعة، فرفضت المنصّة <b>النشر كلَّه</b> بلا
+          رسالةٍ ظاهرة، وبقي الموقع على نسخةٍ قديمة تسعة عشر كوميتًا حتى انكشف السبب.
+        </p>
+        <p className="mt-2">
+          <b>ولرفع التكرار طريقان:</b> ترقية الخطة إلى Pro، أو جدولةٌ خارجية مجانية تنادي
+          العنوان <code className="font-mono" dir="ltr">/api/cron?job=email&amp;key=…</code>{' '}
+          بأي تواتر تشاء — والمسار مبنيٌّ لها أصلًا، فهو يُحمى بالسرّ لا بمصدر النداء.
+        </p>
+      </div>
+
       <div className="card table-wrap">
         <table className="tbl">
           <thead>
@@ -131,7 +150,9 @@ export default async function JobsPage() {
                 <td className="whitespace-nowrap text-sm text-slate-600">
                   {job.everyMinutes < 60
                     ? `${job.everyMinutes} دقيقة`
-                    : `${job.everyMinutes / 60} ساعة`}
+                    : job.everyMinutes >= 24 * 60
+                      ? `${job.everyMinutes / (24 * 60)} يوم`
+                      : `${job.everyMinutes / 60} ساعة`}
                 </td>
                 <td className="whitespace-nowrap text-sm text-slate-600">
                   {at ? (
