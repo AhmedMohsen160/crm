@@ -124,18 +124,21 @@ export default async function SettingsPage() {
       permission: 'canManageSettings',
     },
     {
-      href: '/settings/import',
-      icon: Upload,
-      title: 'ترحيل الملفات القديمة',
-      description: 'سجل الليدز وملف المبيعات — لا يُحذف صف ولا يُخمَّن',
-      permission: 'canManageSettings',
-    },
-    {
       href: '/settings/import/history',
       icon: History,
-      title: 'ترحيل تاريخ المكتب',
-      description: 'دفاتر المحاسب وشيت المبيعات والتسوية بينهما — ليجد الموظفون تاريخهم كاملًا',
+      title: 'ترحيل تاريخ المكتب — ارفع ملفات إكسل',
+      description:
+        'دفاتر المحاسب السنوية وشيت المبيعات: تُرفع ملفًّا كما هي، ويسوّي النظام بينها',
       permission: 'canManageAccounting',
+    },
+    {
+      // **الاسمان كانا متشابهين فوقع الالتباس**: فُصلا بما يفعله كلٌّ منهما
+      // فعلًا — رفعُ ملفّ هناك، ولصقُ صفوفٍ هنا.
+      href: '/settings/import',
+      icon: Upload,
+      title: 'ترحيل باللصق — انسخ صفوفًا',
+      description: 'لدفعةٍ صغيرة تُلصق باليد في مربّع نصّ — لا لملفات المكتب الكاملة',
+      permission: 'canManageSettings',
     },
     {
       href: '/settings/system',

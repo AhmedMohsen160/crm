@@ -89,6 +89,49 @@ export default async function HistoryImportPage({
       </PageHeader>
       <ErrorAlert message={params.error} />
 
+      {/**
+        * **ورقةُ الطريق أولًا.** أحمد فتح الشاشة فسأل: «ماذا أكتب؟ وكيف
+        * أرفع؟ وكيف يفرّق النظام بين السنوات؟» — وهذه أسئلةٌ تُجاب في
+        * الشاشة نفسها، لا في مستندٍ بجانبها.
+        */}
+      {allowed && (
+        <section className="card border-brand-200 bg-brand-50/40">
+          <h2 className="mb-2 text-sm font-semibold text-brand-900">
+            ابدأ من هنا — أربع خطوات بترتيبها
+          </h2>
+          <ol className="mr-4 list-decimal space-y-1.5 text-xs leading-relaxed text-slate-700">
+            <li>
+              <b>امسح التجريبيّ</b> (القسم الرابع في آخر الصفحة) — مرة واحدة، بعد أن تنزّل
+              نسخةً احتياطية.
+            </li>
+            <li>
+              <b>ارفع دفتر المحاسب — سنةً سنة.</b> اختر الملف واكتب سنته في الخانة، ثم
+              «رحّل الدفتر». أعِدها للسنة التالية. أربع رفعات: ٢٠٢٢ · ٢٠٢٣ · ٢٠٢٤ · ٢٠٢٥.
+            </li>
+            <li>
+              <b>ارفع شيت المبيعات مرة واحدة</b> — الملف كلّه، واترك خانة السنوات فارغة.
+            </li>
+            <li>
+              <b>اضغط «سوِّ على الدفتر»</b> — لا ملفّ هنا، بل يبني النظام التسوية على ما
+              دخل في الخطوتين قبله.
+            </li>
+          </ol>
+
+          <p className="mt-3 border-t border-brand-200 pt-3 text-xs leading-relaxed text-slate-700">
+            <b>وكيف يفرّق النظام بين السنوات؟</b> في <b>الدفتر</b> أنت من يكتب السنة —
+            وما خرج عنها في الملف يُتخطّى، فلو حمل ملفُّ ٢٠٢٣ قيدًا من ٢٠٢٢ لم يدخل معه.
+            وفي <b>شيت المبيعات</b> لا تكتب شيئًا: فيه عمود تاريخٍ لكل صف، فيقرأ النظام
+            سنة كل صفٍّ بنفسه ويضعه في مكانه. ولهذا يُرفع الشيت مرة واحدة والدفتر أربعًا.
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-700">
+            <b>وكل رفعةٍ تُلغى بضغطة.</b> ما يدخل يُوسَم باسم مصدره وسنته
+            (<code className="font-mono">ledger-2023</code>)، ويظهر في الجدول أسفله ومعه
+            زرّ «اسحبه». فلا خطوة هنا بلا رجعة — عدا مسح التجريبيّ، وحارسُه النسخة
+            الاحتياطية.
+          </p>
+        </section>
+      )}
+
       {!allowed && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <p className="flex items-center gap-2 font-semibold">
