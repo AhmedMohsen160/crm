@@ -106,5 +106,5 @@ export function salesTag(year: number): string {
 
 /** هل الوسم من ترحيل تاريخيّ أصلًا؟ — يحرس زرّ السحب من وسمٍ مخترَع */
 export function isImportTag(tag: string): boolean {
-  return /^(ledger|sales|settle)-\d{4}$/.test(tag);
+  return /^(ledger|sales|settle|leads)-\d{4}$/.test(tag);
 }

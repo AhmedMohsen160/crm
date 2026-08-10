@@ -1,5 +1,5 @@
 import Link from '@/components/link';
-import { BookOpen, ShoppingBag, Scale, Undo2, CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
+import { BookOpen, ShoppingBag, Users, Scale, Undo2, CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requireAnyPermission, can } from '@/lib/auth';
 import { listOptions } from '@/lib/reference';
@@ -85,7 +85,13 @@ export default async function HistoryImportPage({
 
   const sorted = [...tags.entries()].sort(([a], [b]) => a.localeCompare(b));
   const kindOf = (tag: string) =>
-    tag.startsWith('ledger') ? 'دفتر المحاسب' : tag.startsWith('sales') ? 'شيت المبيعات' : 'تسوية';
+    tag.startsWith('ledger')
+      ? 'دفتر المحاسب'
+      : tag.startsWith('sales')
+        ? 'شيت المبيعات'
+        : tag.startsWith('leads')
+          ? 'شيت الليدز'
+          : 'تسوية';
 
   const magly = users.find((u) => u.name.includes('مجلي'));
   const userOptions = users.map((u) => ({
@@ -116,11 +122,11 @@ export default async function HistoryImportPage({
       {allowed && (
         <section className="card border-brand-200 bg-brand-50/40">
           <h2 className="mb-2 text-sm font-semibold text-brand-900">
-            ابدأ من هنا — أربع خطوات بترتيبها
+            ابدأ من هنا — خمس خطوات بترتيبها
           </h2>
           <ol className="mr-4 list-decimal space-y-1.5 text-xs leading-relaxed text-slate-700">
             <li>
-              <b>امسح التجريبيّ</b> (القسم الرابع في آخر الصفحة) — مرة واحدة، بعد أن تنزّل
+              <b>امسح التجريبيّ</b> (القسم الأخير في آخر الصفحة) — مرة واحدة، بعد أن تنزّل
               نسخةً احتياطية.
             </li>
             <li>
@@ -132,8 +138,11 @@ export default async function HistoryImportPage({
               <b>ارفع شيت المبيعات مرة واحدة</b> — الملف كلّه، وسنواتُه مكتوبةٌ لك في خانتها.
             </li>
             <li>
+              <b>ارفع شيت الليدز</b> — من سأل ولم يشترِ، والرصد بدأ ٢٠٢٦.
+            </li>
+            <li>
               <b>اضغط «سوِّ على الدفتر»</b> — لا ملفّ هنا، بل يبني النظام التسوية على ما
-              دخل في الخطوتين قبله.
+              دخل في الخطوات قبله.
             </li>
           </ol>
 
@@ -328,6 +337,49 @@ export default async function HistoryImportPage({
         </Result>
       )}
 
+      {params.done === 'leads' && (
+        <Result title="تم ترحيل شيت الليدز">
+          <li>
+            صفوف قُرئت: <b className="nums">{n('rows')}</b> · موقوفة:{' '}
+            <b className="nums">{n('skipped')}</b>
+          </li>
+          <li>
+            ليدز دخلت: <b className="nums">{n('leads')}</b>
+          </li>
+          <li>
+            تحوّلت: <b className="nums">{n('won')}</b>
+          </li>
+          <li>
+            لم تتحوّل: <b className="nums">{n('lost')}</b>
+          </li>
+          {/**
+            * **والالتصاق هو المقصود.** ليدٌ تحوّل له بطاقةُ عميلٍ جاءت من
+            * شيت المبيعات — فيُقرأ الاثنان في بطاقةٍ واحدة، ولا يظهر في
+            * السجل مرّتين فتنكسر قيمتُه العمرية.
+            */}
+          <li className="sm:col-span-2">
+            التصقت ببطاقة عميلٍ موجودة: <b className="nums">{n('linked')}</b> — فلا يظهر
+            أحدٌ مرّتين
+          </li>
+          {n('after') > 0 && (
+            <li className="sm:col-span-2">
+              صفوف بعد تاريخ الوقف: <b className="nums">{n('after')}</b> — تُترك لدفعةٍ لاحقة
+            </li>
+          )}
+          {params.years && <li className="sm:col-span-2">بالسنة: {params.years}</li>}
+          {params.admins && (
+            <li className="text-amber-800 sm:col-span-2">
+              أدمنز لم يُطابَقوا بمستخدم: <b>{params.admins}</b> — ليدزهم دخلت لمالك التجزئة.
+            </li>
+          )}
+          {params.branches && (
+            <li className="text-amber-800 sm:col-span-2">
+              فروع لم تُطابَق: <b>{params.branches}</b> — ليدزها دخلت بلا فرع.
+            </li>
+          )}
+        </Result>
+      )}
+
       {params.done === 'settle' && (
         <Result title={`تمت التسوية على الدفتر — ${params.years}`}>
           <li>
@@ -498,11 +550,74 @@ export default async function HistoryImportPage({
             </div>
           </form>
 
-          {/* ── ٣ · التسوية ────────────────────────────────── */}
+          {/* ── ٣ · شيت الليدز ─────────────────────────────── */}
+          <form method="post" action="/api/save" encType="multipart/form-data" className="card">
+            <input type="hidden" name="entity" value="history.leads" />
+            <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <Users className="h-4 w-4 text-brand-600" />٣ · شيت الليدز — ورقة «سجل العملاء»
+            </h2>
+            {/**
+              * **ولماذا شيتٌ ثالث:** الدفتر يقول ما دخل الخزينة، وشيت
+              * المبيعات يقول من اشترى — وكلاهما صامتٌ عن ثلثي من تواصل مع
+              * المكتب. وبلا هؤلاء لا تُقاس تكلفةُ اكتساب عميل ولا معدلُ
+              * تحويل ولا سببُ رفض.
+              */}
+            <p className="mb-4 text-xs text-slate-500">
+              هنا <b>من سأل ولم يشترِ</b> — وهم ثلثا من تواصل مع المكتب، وبلاهم لا تُقاس تكلفةُ
+              اكتساب العميل ولا معدلُ التحويل ولا أسبابُ الرفض. ومن تحوّل منهم{' '}
+              <b>يلتصق ببطاقة عميله</b> التي جاءت من شيت المبيعات ولا يُفتح له مشروعٌ ثانٍ —
+              وإلا تضاعف الإيراد. والليدز تدخل <b>محسومة</b> فوزًا أو خسارة، فلا تملأ طوابير
+              الفريق باستفساراتٍ انتهت.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="leadsFile">
+                  ملف الليدز <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="leadsFile"
+                  type="file"
+                  name="file"
+                  accept=".xlsx,.xls"
+                  required
+                  className="block w-full text-sm text-slate-600 file:ml-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  ورقة «الملخص الشهري» فيه لا تُقرأ — الإنفاق التسويقي مُدخَلٌ مرة واحدة في
+                  الدفتر
+                </p>
+              </div>
+              <FormField
+                label="السنوات التي تدخل"
+                name="years"
+                required
+                defaultValue="2026"
+                dir="ltr"
+                hint="الرصد بدأ ٢٠٢٦ — ولا شيء قبله في هذا الشيت"
+              />
+              <FormField
+                label="حتى تاريخ"
+                name="until"
+                type="date"
+                defaultValue={CUTOFF}
+                hint="والشيت يمتدّ إلى أغسطس، فيقف عند نهاية يوليو كغيره"
+              />
+            </div>
+            <AdvancedOwners
+              userOptions={userOptions}
+              defaultOwner={magly?.id}
+              executiveOwner={user.id}
+            />
+            <div className="mt-4">
+              <SaveButton>رحّل شيت الليدز</SaveButton>
+            </div>
+          </form>
+
+          {/* ── ٤ · التسوية ────────────────────────────────── */}
           <form method="post" action="/api/save" className="card">
             <input type="hidden" name="entity" value="history.settle" />
             <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Scale className="h-4 w-4 text-brand-600" />٣ · التسوية على الدفتر
+              <Scale className="h-4 w-4 text-brand-600" />٤ · التسوية على الدفتر
             </h2>
             <div className="mb-4 space-y-1 text-xs text-slate-500">
               <p>
@@ -586,7 +701,7 @@ export default async function HistoryImportPage({
           <form method="post" action="/api/save" className="card border-rose-200">
             <input type="hidden" name="entity" value="history.reset" />
             <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-rose-800">
-              <Trash2 className="h-4 w-4" />٤ · مسح البيانات التجريبية
+              <Trash2 className="h-4 w-4" />٥ · مسح البيانات التجريبية
             </h2>
             <p className="mb-3 text-xs text-slate-500">
               ما زُرع لتجريب النظام قبل أن يحمل بيانات المكتب. <b>والمُرحَّل لا يُمسّ</b> — ما

@@ -8,6 +8,8 @@ import { checkUpload } from '@/lib/files';
 import { importLedgerWorkbook, ledgerTag, rollbackTag } from '@/lib/import-history-engine';
 import { importSalesWorkbook, rollbackSalesTag } from '@/lib/import-sales-engine';
 import { settleYears, rollbackSettlement } from '@/lib/settle-engine';
+import { importLeadsWorkbook, rollbackLeadsTag } from '@/lib/import-leads-engine';
+import { leadsTag } from '@/lib/import-leads';
 import { salesTag, isImportTag } from '@/lib/import-sales';
 import { settleTag, parseCenterClients } from '@/lib/settlement';
 import { wipeDemoData } from '@/lib/reset-engine';
@@ -180,6 +182,56 @@ export async function importHistorySales(fd: FormData, user: SessionUser) {
   return `/settings/import/history?${params}`;
 }
 
+/**
+ * يرحّل شيت الليدز — من سأل ولم يشترِ.
+ *
+ * **وهو الشيت الوحيد الذي يقول ما خسره المكتب.** الدفتر يقول ما دخل
+ * الخزينة، وشيت المبيعات يقول من اشترى — وكلاهما صامتٌ عن ثلثي من تواصل.
+ * وبلا هؤلاء لا تُقاس تكلفةُ اكتساب عميل ولا معدلُ تحويل ولا سببُ رفض.
+ */
+export async function importHistoryLeads(fd: FormData, user: SessionUser) {
+  requireHistory(user);
+  const buffer = await readSheet(fd, 'file');
+  const rule = await readOwnerRule(fd, user);
+
+  const only = (str(fd, 'years') ?? '')
+    .split(/[,\s]+/)
+    .map((y) => Number(y))
+    .filter((y) => Number.isInteger(y) && y > 2000 && y < 2100);
+  if (!only.length) throw new MutationError('اكتب السنوات التي تدخل — مثال: 2026');
+
+  const summary = await importLeadsWorkbook({
+    buffer,
+    actorId: user.id,
+    defaultOwnerId: rule.defaultOwnerId,
+    onlyYears: only,
+    until: readCutoff(fd),
+  });
+
+  await auditEvent(
+    user.id,
+    'create',
+    'Lead',
+    'leads-import',
+    `شيت الليدز: ${summary.leads} ليدًا · ${summary.won} محوَّلًا · ${summary.lost} خاسرًا`
+  );
+
+  const params = new URLSearchParams({
+    done: 'leads',
+    rows: String(summary.rows),
+    leads: String(summary.leads),
+    won: String(summary.won),
+    lost: String(summary.lost),
+    linked: String(summary.linked),
+    skipped: String(summary.skipped),
+    after: String(summary.afterCutoff),
+    years: summary.years.map((y) => `${y.year}:${y.leads}`).join(','),
+    admins: summary.unmatchedAdmins.join('، '),
+    branches: summary.unmatchedBranches.join('، '),
+  });
+  return `/settings/import/history?${params}`;
+}
+
 /** يبني التسوية فوق الدفتر والشيت — ويُعاد بناؤها كلّما أُعيد أحدُهما */
 export async function runHistorySettlement(fd: FormData, user: SessionUser) {
   requireHistory(user);
@@ -243,6 +295,9 @@ export async function rollbackImportTag(fd: FormData, user: SessionUser) {
   } else if (tag === salesTag(year)) {
     const out = await rollbackSalesTag(tag);
     line = `${out.projects} مشروعًا · ${out.leads} ليدًا · ${out.clients} عميلًا`;
+  } else if (tag === leadsTag(year)) {
+    const out = await rollbackLeadsTag(tag);
+    line = `${out.leads} ليدًا`;
   } else if (tag === settleTag(year)) {
     const out = await rollbackSettlement(year);
     line = `رُدّ ${out.restored} مشروعًا إلى رقمه المرصود · وحُذف ${out.removed}`;

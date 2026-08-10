@@ -58,6 +58,7 @@ import {
   importAccountingLedger,
   importHistoryLedger,
   importHistorySales,
+  importHistoryLeads,
   runHistorySettlement,
   rollbackImportTag,
   wipeDemoRecords,
@@ -306,6 +307,9 @@ export async function POST(request: NextRequest) {
         break;
       case 'history.sales':
         destination = await importHistorySales(fd, user);
+        break;
+      case 'history.leads':
+        destination = await importHistoryLeads(fd, user);
         break;
       case 'history.settle':
         destination = await runHistorySettlement(fd, user);

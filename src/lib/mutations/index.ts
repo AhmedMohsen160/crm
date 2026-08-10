@@ -129,6 +129,7 @@ export { importLegacySheet, importAccountingLedger, resolveMigrationRow } from '
 export {
   importHistoryLedger,
   importHistorySales,
+  importHistoryLeads,
   runHistorySettlement,
   rollbackImportTag,
   wipeDemoRecords,
