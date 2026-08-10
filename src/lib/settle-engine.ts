@@ -214,14 +214,10 @@ export async function settleYears(params: {
   actorId: string;
   rule: OwnerRule;
   /**
-   * **فرعُ الإيراد الذي لا يذكر الدفتر فرعه.**
+   * **اسمُ الفرع في تسمية العميل الشهريّ المجمَّع** — لا أكثر.
    *
-   * دفتر المحاسب بلا بُعد فرعٍ أصلًا — فيه مراكز ربحية لا فروع. وما دخل منه
-   * بلا فرعٍ يخرج من تقرير الفروع كلَّه: كان **٥٧٪ من الإيراد** يقع في خانة
-   * «بلا فرع» فيصير التقرير أعرجَ لا يُقرأ.
-   *
-   * **فيُسأل عنه مرة واحدة في الشاشة** ولا يُخمَّن في الكود: المكتب بدأ في
-   * المقطم وحده، ومن يعرف أين كان يُنفَّذ عملُ عميلٍ بعينه هو أحمد لا النظام.
+   * «عملاء المقطم — مارس ٢٠٢٢» اسمٌ طلبه أحمد بنصّه. وهو **اسمٌ يُقرأ لا
+   * بُعدٌ يُحلَّل**: حقلُ الفرع نفسه يبقى فارغًا في كل ما جاء من الدفتر.
    */
   fallbackBranch?: string;
   /** خريطة «مركز الربحية ← عميله» — تُكتب في الشاشة سطرًا سطرًا */
@@ -283,7 +279,15 @@ export async function settleYears(params: {
          */
         const clientName = clientOfCenter(center, centerClients);
         const owner = ownerFor(clientName, params.rule);
-        const client = await clientByName(clientName, owner, params.actorId, tag, fallbackBranch, 'company');
+        /**
+         * **ولا فرعَ لما جاء من الدفتر.**
+         *
+         * قالها أحمد: «ما كانش في السابق فيه فروع أصلًا — الفروع بدأت من
+         * ٢٠٢٦». والدفتر بلا بُعد فرعٍ أصلًا: فيه مراكز ربحية لا فروع.
+         * فوسمُ تاريخٍ كلِّه بفرعٍ يخلق بُعدًا لم يكن، ويدعو إلى مقارنة
+         * فروعٍ لم توجد بعدُ فتُقرأ أرقامٌ لا معنى لها.
+         */
+        const client = await clientByName(clientName, owner, params.actorId, tag, null, 'company');
         if (client.created) report.namedClients += 1;
 
         // مركز الربحية يشير إلى عميله — وهو ما أُنشئ الحقل من أجله
@@ -304,7 +308,6 @@ export async function settleYears(params: {
             collectedAmount: round2(cell.amount),
             clientId: client.id,
             ownerId: owner,
-            branch: fallbackBranch,
             createdAt: date,
             convertedAt: date,
             deliveredAt: date,
@@ -351,7 +354,7 @@ export async function settleYears(params: {
           owner,
           params.actorId,
           tag,
-          dominant ?? fallbackBranch,
+          null,
           'individual'
         );
         if (client.created) report.bucketClients += 1;
@@ -365,7 +368,6 @@ export async function settleYears(params: {
             collectedAmount: round2(month.bucket.amount),
             clientId: client.id,
             ownerId: owner,
-            branch: dominant ?? fallbackBranch,
             createdAt: date,
             convertedAt: date,
             deliveredAt: date,

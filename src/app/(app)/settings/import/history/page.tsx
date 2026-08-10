@@ -434,11 +434,11 @@ export default async function HistoryImportPage({
                 hint="سنةٌ بلا دفترٍ تبقى كما رصدها الشيت — الصمت ليس رقمًا"
               />
               <SelectField
-                label="فرع الإيراد الذي لا يذكر الدفتر فرعه"
+                label="اسم الفرع في تسمية العميل الشهريّ المجمَّع"
                 name="fallbackBranch"
                 options={branches}
                 defaultValue="mokattam"
-                hint="الدفتر بلا بُعد فرع — وبلا هذا الاختيار يخرج أكثرُ الإيراد من تقرير الفروع"
+                hint="اسمٌ يُقرأ فقط («عملاء المقطم — مارس ٢٠٢٢») — وما جاء من الدفتر يبقى بلا فرع، فالفروع بدأت ٢٠٢٦"
               />
               <div className="sm:col-span-2">
                 <label className="label" htmlFor="centerClients">
