@@ -155,19 +155,46 @@ export async function acquisitionReport(params: {
     leadsByMonth.set(key, cell);
   }
 
-  // ── ٣ · الإيراد المعترَف به لكل قناة ─────────────────────────
+  /**
+   * ── ٣ · الإيراد المعترَف به لكل قناة ─────────────────────────
+   *
+   * **وقناةُ المشروع من ليده، فإن لم يكن فمن ليدِ عميله.**
+   *
+   * الشيتان مصدران منفصلان: شيت المبيعات يفتح المشاريع، وشيت الليدز
+   * يفتح الاستفسارات — ولا يربط أحدُهما مشروعًا بليدٍ بعينه. فألفٌ ومئةٌ
+   * وسبعةٌ وأربعون مشروعًا في ٢٠٢٦ **بلا ليد**، ولو وقفنا عندها لكان
+   * الإيراد صفرًا في كل قناة ولا عائدَ إنفاقٍ يُقرأ.
+   *
+   * **والرابط الصحيح بطاقةُ العميل**: الليد التصق بها بالهاتف، والمشروع
+   * يقع عليها — فقناةُ العميل هي قناةُ من جاء به.
+   */
   const revenueRows = await db.project.findMany({
     where: {
       status: { in: ['delivered', 'collected'] },
       deliveredAt: { gte: from, lte: to },
       ...(branch ? { branch } : {}),
     },
-    select: { netTotal: true, deliveredAt: true, lead: { select: { channel: true } } },
+    select: {
+      netTotal: true,
+      deliveredAt: true,
+      lead: { select: { channel: true } },
+      client: {
+        select: {
+          leads: {
+            where: { channel: { not: null } },
+            select: { channel: true },
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+          },
+        },
+      },
+    },
   });
   const revenueByChannel = new Map<string, number>();
   const revenueByMonth = new Map<string, number>();
   for (const project of revenueRows) {
-    const channel = project.lead?.channel ?? UNATTRIBUTED;
+    const channel =
+      project.lead?.channel ?? project.client?.leads[0]?.channel ?? UNATTRIBUTED;
     revenueByChannel.set(channel, (revenueByChannel.get(channel) ?? 0) + (project.netTotal ?? 0));
     if (project.deliveredAt) {
       const key = `${periodOf(project.deliveredAt)}|${channel}`;

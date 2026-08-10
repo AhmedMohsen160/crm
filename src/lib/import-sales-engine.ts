@@ -56,6 +56,8 @@ export type SalesImportSummary = {
   review: number;
   /** صفوف رُحِّلت من قبل بمفتاحها فلم تُكرَّر */
   skipped: number;
+  /** بطاقاتٌ أُضيف لها مالكٌ فرعيّ — أدمنٌ ثانٍ باع لعميل ليست بطاقتُه */
+  coOwners: number;
   years: SalesYearSummary[];
   problems: { reason: string; count: number }[];
   /** أسماء وردت في الشيت ولم تُطابَق — تُقال ولا تُخمَّن */
@@ -63,7 +65,7 @@ export type SalesImportSummary = {
   unmatchedBranches: string[];
 };
 
-type ClientRef = { id: string; created: boolean };
+type ClientRef = { id: string; created: boolean; ownerId: string | null; coOwnerId: string | null };
 
 /**
  * يسحب كل ما رُحِّل من شيت المبيعات بوسمٍ بعينه.
@@ -262,6 +264,8 @@ export async function importSalesWorkbook(params: {
   let projects = 0;
   let leads = 0;
   let skipped = 0;
+  /** بطاقاتٌ أُضيف لها مالكٌ فرعيّ — أدمنٌ ثانٍ باع لعميلٍ ليس بطاقتُه */
+  let coOwners = 0;
 
   // بالتاريخ صعودًا: فأولُ صفٍّ للعميل هو من يفتح بطاقته ويكتب فرعه الأول
   ready.sort((a, b) => a.date.getTime() - b.date.getTime() || a.rowNo - b.rowNo);
@@ -280,9 +284,15 @@ export async function importSalesWorkbook(params: {
     if (!client) {
       const existing = await db.client.findUnique({
         where: { phoneNormalized: r.key },
-        select: { id: true },
+        select: { id: true, ownerId: true, coOwnerId: true },
       });
-      if (existing) client = { id: existing.id, created: false };
+      if (existing)
+        client = {
+          id: existing.id,
+          created: false,
+          ownerId: existing.ownerId,
+          coOwnerId: existing.coOwnerId,
+        };
       else {
         const made = await db.client.create({
           data: {
@@ -297,9 +307,33 @@ export async function importSalesWorkbook(params: {
           },
           select: { id: true },
         });
-        client = { id: made.id, created: true };
+        client = { id: made.id, created: true, ownerId, coOwnerId: null };
       }
       clients.set(r.key, client);
+    }
+
+    /**
+     * **والأدمن الثاني يصير مالكًا فرعيًّا — لا يزيح الأول.**
+     *
+     * قالها أحمد: «عميل قديم كان داخل لأحمد مجلي ولكن اشترى بعد ذلك مرة
+     * أخرى من أدمن غير أحمد مجلي، ساعتها يُنسب لأحمد مجلي كمالك رئيسي
+     * والأدمن الآخر مالك فرعي، بحيث يظهر عند الحسابين».
+     *
+     * **والصفوف مرتَّبة بالتاريخ صعودًا**، فأولُ من باع هو الرئيسي دائمًا
+     * ومن جاء بعده هو الفرعي — لا العكس.
+     *
+     * **ولا تمسّ النسبة**: هي على مالك **المشروع** لا مالك البطاقة، فمن
+     * نفّذ الصفقة له ٣٪ ومديره ٢٪ مهما كان مالك البطاقة.
+     */
+    if (
+      ownerId &&
+      client.ownerId &&
+      ownerId !== client.ownerId &&
+      !client.coOwnerId
+    ) {
+      await db.client.update({ where: { id: client.id }, data: { coOwnerId: ownerId } });
+      client.coOwnerId = ownerId;
+      coOwners += 1;
     }
 
     const day = r.date.toISOString().slice(0, 10);
@@ -382,6 +416,7 @@ export async function importSalesWorkbook(params: {
     leads,
     review,
     skipped,
+    coOwners,
     years: [...summaries.values()].sort((a, b) => a.year - b.year),
     problems: [...problems.entries()]
       .map(([reason, count]) => ({ reason, count }))

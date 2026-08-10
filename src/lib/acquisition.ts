@@ -60,7 +60,19 @@ export const SPEND_CHANNELS: { value: string; label: string }[] = [
   { value: 'walk_in', label: 'زيارة فرع' },
 ];
 
-const SPEND_LABELS = new Map(SPEND_CHANNELS.map((c) => [c.value, c.label]));
+/**
+ * قنواتٌ يأتي منها ليدٌ ولا يُنفَق عليها.
+ *
+ * **تُعرض ولا تُضبط**: «عميل قديم» ليس بابًا يُشترى، لكنه يُعدّ في القمع —
+ * وبلا اسمِه في الشاشة يظهر مفتاحُه البرمجيّ خامًا (`returning`) في شاشةٍ
+ * عربيّة يقرؤها المالك.
+ */
+const SPEND_LABELS = new Map<string, string>([
+  ...SPEND_CHANNELS.map((c) => [c.value, c.label] as [string, string]),
+  ['returning', 'عميل قديم'],
+  ['other', 'أخرى'],
+  ['unknown', 'بلا قناة مسجَّلة'],
+]);
 
 export function channelLabel(channel: string): string {
   return SPEND_LABELS.get(channel) ?? (channel === UNATTRIBUTED ? UNATTRIBUTED_LABEL : channel);
