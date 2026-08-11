@@ -1,0 +1,747 @@
+<title>مراجعة المدخلات ولوحات التحكم — فاست ترانس</title>
+<style>
+  /* ــــ الهوية من ملفات الشعار الرسمية ــــ */
+  :root {
+    color-scheme: light dark;
+
+    --navy:      #242E5B;
+    --blue:      #2B57A6;
+    --marine:    #5BB5E8;
+    --lime:      #C4D82E;
+
+    /* رماديّات مائلة إلى الكحليّ — مختارة لا موروثة */
+    --ground:    #FBFAF8;
+    --surface:   #FFFFFF;
+    --sunken:    #F3F4F8;
+    --line:      #DFE1EC;
+    --line-soft: #ECEDF4;
+    --ink:       #1B2036;
+    --ink-2:     #4A5169;
+    --ink-3:     #767D96;
+
+    --ok:        #167A5B;
+    --ok-bg:     #E8F5F0;
+    --wait:      #9A6410;
+    --wait-bg:   #FBF1DF;
+    --next:      #2B57A6;
+    --next-bg:   #E9EFF9;
+
+    --measure: 68ch;
+    --r: 10px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:    #12141F;
+      --surface:   #1A1D2B;
+      --sunken:    #222639;
+      --line:      #333853;
+      --line-soft: #282C40;
+      --ink:       #EDEFF6;
+      --ink-2:     #B3B9CE;
+      --ink-3:     #848BA6;
+
+      --navy:      #8E9AD4;
+      --blue:      #7EA3E0;
+      --marine:    #5BB5E8;
+      --lime:      #C4D82E;
+
+      --ok:        #5FCFA8;
+      --ok-bg:     #122E27;
+      --wait:      #E5B463;
+      --wait-bg:   #33270F;
+      --next:      #8FB4EC;
+      --next-bg:   #17223A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:    #12141F;
+    --surface:   #1A1D2B;
+    --sunken:    #222639;
+    --line:      #333853;
+    --line-soft: #282C40;
+    --ink:       #EDEFF6;
+    --ink-2:     #B3B9CE;
+    --ink-3:     #848BA6;
+
+    --navy:      #8E9AD4;
+    --blue:      #7EA3E0;
+    --marine:    #5BB5E8;
+    --lime:      #C4D82E;
+
+    --ok:        #5FCFA8;
+    --ok-bg:     #122E27;
+    --wait:      #E5B463;
+    --wait-bg:   #33270F;
+    --next:      #8FB4EC;
+    --next-bg:   #17223A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+    direction: rtl;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: system-ui, "Segoe UI", Tahoma, "Noto Sans Arabic", "Dubai", sans-serif;
+    font-size: 16px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 60rem; margin: 0 auto; }
+
+  /* ــــ الترويسة ــــ */
+  header.top {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 3.5rem 0 2rem;
+    border-bottom: 3px solid var(--navy);
+    margin-bottom: 2.5rem;
+  }
+  .eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.75rem, 4.5vw, 2.6rem);
+    line-height: 1.25;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    color: var(--navy);
+  }
+  .lede {
+    margin: 0;
+    max-width: var(--measure);
+    font-size: 1.05rem;
+    color: var(--ink-2);
+  }
+
+  /* ــــ الأقسام ــــ */
+  section { margin-bottom: 3.5rem; }
+
+  h2 {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    margin: 0 0 0.4rem;
+    font-size: clamp(1.3rem, 3vw, 1.7rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  h2 .num {
+    flex: none;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--surface);
+    background: var(--navy);
+    border-radius: 50%;
+    width: 1.9rem;
+    height: 1.9rem;
+    display: grid;
+    place-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+  h3 {
+    margin: 2.25rem 0 0.5rem;
+    font-size: 1.06rem;
+    font-weight: 700;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .sub {
+    margin: 0 0 1.5rem;
+    max-width: var(--measure);
+    color: var(--ink-2);
+  }
+  p { max-width: var(--measure); }
+
+  /* ــــ الجداول ــــ */
+  .scroll {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--surface);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    min-width: 42rem;
+  }
+  thead th {
+    background: var(--sunken);
+    text-align: right;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 0.8rem 0.9rem;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  .num-cell {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: left;
+    direction: ltr;
+  }
+
+  /* ــــ الشارات ــــ */
+  .tag {
+    display: inline-block;
+    white-space: nowrap;
+    font-size: 0.73rem;
+    font-weight: 700;
+    padding: 0.18rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+  }
+  .t-ok   { color: var(--ok);   background: var(--ok-bg);   border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+  .t-wait { color: var(--wait); background: var(--wait-bg); border-color: color-mix(in srgb, var(--wait) 30%, transparent); }
+  .t-next { color: var(--next); background: var(--next-bg); border-color: color-mix(in srgb, var(--next) 30%, transparent); }
+
+  /* ــــ بطاقة سؤال يحتاج قرارًا ــــ */
+  .decide {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-right: 4px solid var(--lime);
+    border-radius: var(--r);
+    padding: 1.15rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .decide h4 {
+    margin: 0 0 0.4rem;
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .decide p { margin: 0.4rem 0 0; font-size: 0.93rem; color: var(--ink-2); }
+  .decide ul { margin: 0.5rem 0 0; padding-inline-start: 1.1rem; font-size: 0.93rem; color: var(--ink-2); }
+  .decide li { margin-bottom: 0.3rem; }
+
+  /* ــــ بطاقات الأرقام ــــ */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.9rem;
+    margin: 1.5rem 0;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 0.95rem 1rem;
+  }
+  .stat .k {
+    font-size: 0.75rem;
+    color: var(--ink-3);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.3rem;
+  }
+  .stat .v {
+    font-size: 1.5rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--navy);
+    line-height: 1.15;
+  }
+  .stat .n { font-size: 0.78rem; color: var(--ink-3); display: block; margin-top: 0.2rem; }
+
+  /* ــــ شريط القناة ــــ */
+  .chan { display: flex; flex-direction: column; gap: 0.85rem; margin: 1.4rem 0; }
+  .chan-row { display: grid; grid-template-columns: 8.5rem 1fr auto; gap: 0.75rem; align-items: center; }
+  .chan-name { font-weight: 700; font-size: 0.9rem; }
+  .bar {
+    height: 0.62rem;
+    border-radius: 999px;
+    background: var(--sunken);
+    overflow: hidden;
+  }
+  .bar > span { display: block; height: 100%; border-radius: 999px; }
+  .chan-val {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--ink-2);
+  }
+  @media (max-width: 34rem) {
+    .chan-row { grid-template-columns: 1fr auto; }
+    .bar { grid-column: 1 / -1; }
+  }
+
+  /* ــــ لوحة الأدوار ــــ */
+  .roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin-top: 1.4rem; }
+  .role {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 1.1rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .role .who { font-weight: 800; font-size: 1rem; color: var(--navy); }
+  .role .q { font-size: 0.85rem; color: var(--ink-3); font-style: italic; }
+  .role ul { margin: 0; padding-inline-start: 1.05rem; font-size: 0.88rem; color: var(--ink-2); }
+  .role li { margin-bottom: 0.22rem; }
+  .role .state { margin-top: auto; padding-top: 0.5rem; }
+
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--sunken);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    direction: ltr;
+    display: inline-block;
+  }
+  strong { font-weight: 700; color: var(--ink); }
+  a { color: var(--blue); }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--marine); outline-offset: 2px; }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <span class="eyebrow">فاست ترانس · مراجعة تشغيلية</span>
+  <h1>مراجعة المدخلات، ولوحات التحكم، وأين يذهب كل رقم</h1>
+  <p class="lede">
+    كل رقم في هذه الصفحة مستخرَجٌ من بيانات المكتب الفعلية بعد رفعها — دفاتر ٢٠٢٢–٢٠٢٦
+    وشيت المبيعات وشيت الليدز، موقوفةً عند ٣١ يوليو ٢٠٢٦. لا تقديرات ولا أمثلة.
+  </p>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2><span class="num">١</span> ما وجدتُه — وما فعلتُه به</h2>
+  <p class="sub">
+    أحد عشر أمرًا. سبعةٌ منها أُصلحت ودُفعت اليوم، وثلاثةٌ تحتاج قرارك أنت لأن الجواب
+    ليس في الأرقام، وواحدٌ في الطريق.
+  </p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>ما وجدتُه</th>
+          <th>الدليل من بياناتك</th>
+          <th>ماذا كان يعني</th>
+          <th>الحال</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>تكلفة اكتساب العميل لم تظهر</strong> رغم أن المال مقيَّد في الدفتر منذ ٢٠٢٢</td>
+          <td>النظام كان يربط القناة <em>برمز الحساب</em>، وحسابات محاسبك المرحَّلة بلا رموز</td>
+          <td>٩٠٩ آلاف جنيه إنفاق تسويقي في ٢٠٢٦ وحدها تقع في «غير منسوب»، وكل قناة تظهر بتكلفة «صفر»</td>
+          <td><span class="tag t-ok">أُصلح</span></td>
+        </tr>
+        <tr>
+          <td><strong>حسابٌ واحد يجمع جوجل وفيسبوك</strong> في دفتر ٢٠٢٦</td>
+          <td>محاسبك كتب اسم المنصّة في <em>بيان القيد</em>: <code>- Google Ads</code> و«سوشيال ميديا (فيسبوك)»</td>
+          <td>٢١٣ ألفًا كتلة واحدة لا تُقسَم على قناة</td>
+          <td><span class="tag t-ok">أُصلح</span></td>
+        </tr>
+        <tr>
+          <td><strong>ملكية بطاقة العميل لا تُعدَّل</strong> من أي مكان في النظام</td>
+          <td>المالك يُكتب عند إنشاء البطاقة وحده، ولا خانةَ مالكٍ في النموذج أصلًا</td>
+          <td>بطاقةٌ وقعت على الحساب الخطأ تبقى عليه للأبد — وبياناتك دخلت كلها بحسابٍ واحد</td>
+          <td><span class="tag t-ok">أُصلح</span></td>
+        </tr>
+        <tr>
+          <td><strong>المالك الفرعي غير موجود</strong> — وقاعدتك تطلبه</td>
+          <td>استُخرج من الشيت: <strong>٥٥ بطاقة</strong>، منها <strong>٤٦</strong> «مجلي رئيسيّ ويحيى فرعيّ»</td>
+          <td>العميل القديم الذي اشترى من أدمن آخر لا يظهر عند الاثنين</td>
+          <td><span class="tag t-ok">أُصلح</span></td>
+        </tr>
+        <tr>
+          <td><strong>عائد الإنفاق صفرٌ في كل قناة</strong></td>
+          <td>١٬١٤٧ مشروعًا في ٢٠٢٦ <em>بلا ليد</em> — الشيتان مصدران منفصلان لا يربطهما شيء</td>
+          <td>لا يُعرف أي قناة تعيد مالها وأيها تخسره</td>
+          <td><span class="tag t-ok">أُصلح</span></td>
+        </tr>
+        <tr>
+          <td><strong>«تكلفة الليد صفر»</strong> لقناة بلا إنفاق منسوب</td>
+          <td>كان اختبارٌ في النظام <em>يؤكّد</em> الصفر بحجّة أنه «قياس صحيح»</td>
+          <td>الصفر يقول «جاءنا هذا الليد مجانًا» — فيُزاد الإنفاق على رقم كاذب</td>
+          <td><span class="tag t-ok">أُصلح</span></td>
+        </tr>
+        <tr>
+          <td><strong>اسم القناة يظهر بمفتاحه البرمجي</strong></td>
+          <td><code>returning</code> بدل «عميل قديم» في شاشة عربية</td>
+          <td>تشويش في شاشة تُفتح كل يوم</td>
+          <td><span class="tag t-ok">أُصلح</span></td>
+        </tr>
+        <tr>
+          <td><strong>٦٣٢ ألفًا من الإنفاق التسويقي بلا قناة</strong></td>
+          <td>جُلُّها رواتب قسم البيع (٦١٠ آلاف) — والدفتر يجمعها في سطر واحد</td>
+          <td>راتب أحمد جمال (السيو) داخلها ولا يُفصَل منها — فتكلفة الأورجانيك ناقصة</td>
+          <td><span class="tag t-wait">قرارك</span></td>
+        </tr>
+        <tr>
+          <td><strong>سبب الرفض غير مسجَّل في ٩٩٪ من الاستفسارات الخاسرة</strong></td>
+          <td>١٬٢٢٩ ليدًا من ١٬٢٤٣ بلا سبب في شيتك — والمكتوب منها ١٣ سببًا بنصّ حرّ</td>
+          <td>أهمّ ما في الشيت — لماذا نخسر — غير موجود</td>
+          <td><span class="tag t-wait">قرارك</span></td>
+        </tr>
+        <tr>
+          <td><strong>لا أحد في النظام له خطة نسب</strong> — ولا سارة ولا غيرها</td>
+          <td>صفر إسناد خطة نسب. و«سارة» الوحيدة في النظام حسابٌ من البيانات التجريبية</td>
+          <td>لا نسبة تُحسب لأحد، ولا لوحة ترتيب لها معنى</td>
+          <td><span class="tag t-wait">قرارك</span></td>
+        </tr>
+        <tr>
+          <td><strong>الدولة والمدينة نصٌّ حرّ في بطاقة العميل</strong></td>
+          <td>٢٬٥٠٦ بطاقة بلا دولة. والقاعدة المتفق عليها أنهما يُختاران ولا يُكتبان</td>
+          <td>«مصر» و«Egypt» صفّان لشيء واحد، فلا يُجمَّع تقرير جغرافيّ</td>
+          <td><span class="tag t-next">التالي</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>ثلاثة أسئلة لا يجيب عنها إلا أنت</h3>
+
+  <div class="decide">
+    <h4>١ · راتب أحمد جمال — كيف يدخل تكلفة الأورجانيك؟</h4>
+    <p>
+      قلتَ: «تكلفة السيو كاملة = راتب أحمد جمال + كتابة المحتوى + الباك لينكس». والاثنان
+      الأخيران موجودان في الدفتر ودخلا الحساب فعلًا (٦٣٬٨٢٠ ج). أما الراتب فمحاسبك يقيّد
+      رواتب قسم البيع <strong>في سطر واحد مجمَّع</strong> شهريًّا — فلا يُفصَل منه راتبُ شخصٍ بعينه.
+    </p>
+    <ul>
+      <li><strong>الأنظف:</strong> نطلب من المحاسب فصل «رواتب التسويق والسيو» في حساب فرعيّ مستقل من أغسطس. عندها يدخل الرقم وحده تلقائيًّا وإلى الأبد.</li>
+      <li><strong>الأسرع:</strong> نضيف حقل «قناة» على ملف الموظف في الموارد البشرية، فيُقرأ راتب من وُسم بـ«سيو» من مصدره الوحيد — ولا يُكتب رقم ثانٍ في مكان ثانٍ.</li>
+    </ul>
+    <p>أرشّح <strong>الثاني الآن والأول من أغسطس</strong>: الثاني يعمل على تاريخك المرحَّل، والأول يجعلها صحيحة بلا صيانة.</p>
+  </div>
+
+  <div class="decide">
+    <h4>٢ · سبب الرفض — قائمة أم نصّ حرّ؟</h4>
+    <p>
+      شيتك فيه ١٣ سببًا مكتوبة بخطّ الأدمن، وكلٌّ منها مفيد: «السعر كان عالي» تسعير،
+      و«كان يعتقد أن المكتب مكتب توثيقات» إعلانٌ يجلب من لا يريد الخدمة أصلًا. ولا يصحّ
+      طيُّهما في تصنيف واحد. لكن ١٬٢٢٩ استفسارًا بلا سبب <em>أصلًا</em>.
+    </p>
+    <p>
+      أرشّح: <strong>قائمة قصيرة إلزامية عند إغلاق الليد + خانة نصّ اختيارية بجانبها</strong>.
+      القائمة تُنتج تقريرًا يُجمَّع، والنصّ يحفظ التفصيلة. والقائمة موجودة في النظام بالفعل
+      (٨ أسباب) وتحتاج إلزامًا فقط. <em>وما مضى يبقى بلا سبب — لا يُخترَع له واحد.</em>
+    </p>
+  </div>
+
+  <div class="decide">
+    <h4>٣ · سارة وخطط النسب — من يستحقّ ماذا اعتبارًا من متى؟</h4>
+    <p>
+      قلتَ: سارة فرع الرياض، لا تتبع أحدًا، ٥٪ كاملة بعد تارجت ٢٥ ألف ريال. القاعدة واضحة
+      والنظام يحسبها — لكن <strong>لا حساب لها ولا لغيرها</strong>، ولا خطة نسب مُسندة لأحد.
+    </p>
+    <ul>
+      <li>هل أفتح حسابات الفريق كلّهم (يحيى · نورا · الصاوي · بكري · سارة · طارق يوسف)؟</li>
+      <li>ومن أي شهر تبدأ النسب: أغسطس ٢٠٢٦، أم بأثر رجعي على ٢٠٢٦ كلها؟</li>
+    </ul>
+    <p><em>وطارق يوسف ظهر في دفتر ٢٠٢٦ ولا حساب له — قيوده دخلت بلا أدمن ولم يُخمَّن أحد.</em></p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2><span class="num">٢</span> ما صارت تقوله الأرقام</h2>
+  <p class="sub">
+    بعد إصلاح اليوم، هذه أول قراءة حقيقية لعائد إنفاقك الإعلاني — من دفترك أنت،
+    لا من تقدير.
+  </p>
+
+  <div class="stats">
+    <div class="stat"><span class="k">الإنفاق التسويقي ٢٠٢٦</span><span class="v">٩٠٩٬٢٥٠</span><span class="n">جنيه · حتى ٣١ يوليو</span></div>
+    <div class="stat"><span class="k">استفسارات وصلت</span><span class="v">١٬٨٤١</span><span class="n">منها ٥٩٨ اشترى</span></div>
+    <div class="stat"><span class="k">معدل التحويل</span><span class="v">٣٢٪</span><span class="n">ثلثاهم لم يشترِ</span></div>
+    <div class="stat"><span class="k">منسوب لقناة</span><span class="v">٢٧٧٬٢٥٢</span><span class="n">والباقي رواتب مجمَّعة</span></div>
+  </div>
+
+  <h3>عائد كل قناة على ما أُنفق عليها</h3>
+  <div class="chan">
+    <div class="chan-row">
+      <span class="chan-name">Organic — السيو</span>
+      <span class="bar"><span style="width:100%;background:var(--ok)"></span></span>
+      <span class="chan-val">٤٫٦×</span>
+    </div>
+    <div class="chan-row">
+      <span class="chan-name">Google Ads</span>
+      <span class="bar"><span style="width:48%;background:var(--blue)"></span></span>
+      <span class="chan-val">٢٫٢×</span>
+    </div>
+    <div class="chan-row">
+      <span class="chan-name">Meta Ads</span>
+      <span class="bar"><span style="width:9%;background:var(--wait)"></span></span>
+      <span class="chan-val">٠٫٤×</span>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>القناة</th>
+          <th class="num-cell">الإنفاق</th>
+          <th class="num-cell">استفسارات</th>
+          <th class="num-cell">تحويل</th>
+          <th class="num-cell">تكلفة الاستفسار</th>
+          <th class="num-cell">الإيراد</th>
+          <th class="num-cell">العائد</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Organic</strong> — سيو ومحتوى وباك لينك</td>
+          <td class="num-cell">63,820</td>
+          <td class="num-cell">533</td>
+          <td class="num-cell">33.6%</td>
+          <td class="num-cell">120</td>
+          <td class="num-cell">296,330</td>
+          <td class="num-cell"><strong>4.6×</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Google Ads</strong></td>
+          <td class="num-cell">158,150</td>
+          <td class="num-cell">1,211</td>
+          <td class="num-cell">31.6%</td>
+          <td class="num-cell">131</td>
+          <td class="num-cell">352,415</td>
+          <td class="num-cell"><strong>2.2×</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Meta Ads</strong></td>
+          <td class="num-cell">55,282</td>
+          <td class="num-cell">92</td>
+          <td class="num-cell">25.0%</td>
+          <td class="num-cell">601</td>
+          <td class="num-cell">24,505</td>
+          <td class="num-cell"><strong>0.4×</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:1.25rem">
+    <strong>ثلاث قراءات تستحقّ وقفة.</strong> الأورجانيك أرخص قناة وأعلاها عائدًا — والإنفاق
+    عليها أقلّ من ربع ما يذهب لجوجل. وميتا تكلّف الاستفسار الواحد <strong>أربع مرات ونصف</strong>
+    ما يكلّفه جوجل وتعيد أقلّ من نصف ما أُنفق عليها. وتكلفة استفسار جوجل تتحسّن شهرًا بشهر:
+    ٣٢٢ ج في مارس ثم ١١٨ ثم ١٨٦ ثم ١٧٧ ثم <strong>٨١ ج في يوليو</strong>.
+  </p>
+  <p>
+    <em>ولا تُقرأ هذه كتوصية بعد.</em> ٦٣٢ ألفًا من رواتب البيع خارج القسمة، وإدخالها يرفع
+    تكلفة كل قناة. القرار يُتّخذ بعد أن تُجاب مسألةُ الرواتب أعلاه.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2><span class="num">٣</span> لوحة لكل نمط عمل</h2>
+  <p class="sub">
+    في النظام اليوم <strong>ثلاث</strong> لوحات: بائع · مشغّل · محاسب. والقاعدة التي بُنيت عليها
+    أن اللوحة تتبع <em>عمل صاحبها</em> لا مرتبته. وبعد أن دخلت بيانات خمس سنوات صار
+    نمطان آخران بلا لوحة تخصّهما.
+  </p>
+
+  <div class="roles">
+    <div class="role">
+      <span class="who">أدمن المبيعات</span>
+      <span class="q">«ما الذي يجب أن أفعله اليوم؟»</span>
+      <ul>
+        <li>استفساراتي التي لم تُردَّ</li>
+        <li>مشاريعي الجارية وما اقترب تسليمه</li>
+        <li>تحصيلي هذا الشهر مقابل تارجتي</li>
+        <li>نسبتي المستحقّة حتى الآن</li>
+      </ul>
+      <span class="state"><span class="tag t-ok">موجودة</span></span>
+    </div>
+
+    <div class="role">
+      <span class="who">مدير المشاريع</span>
+      <span class="q">«أين يقف الإنتاج؟»</span>
+      <ul>
+        <li>ما ينتظر إسنادًا</li>
+        <li>حِمل كل منفِّذ هذا الأسبوع</li>
+        <li>ما تأخّر عن موعده</li>
+        <li>كثافة الملاحظات ونسبة الإعادة</li>
+      </ul>
+      <span class="state"><span class="tag t-ok">موجودة</span></span>
+    </div>
+
+    <div class="role">
+      <span class="who">المحاسب</span>
+      <span class="q">«ما حال النقد والذمم؟»</span>
+      <ul>
+        <li>النقد وأرصدة الخزائن</li>
+        <li>الذمم وأعمارها</li>
+        <li>طابور القيود المنتظرة ترحيله</li>
+        <li>ربح الشهر ومقارنته بالموازنة</li>
+      </ul>
+      <span class="state"><span class="tag t-ok">موجودة</span></span>
+    </div>
+
+    <div class="role">
+      <span class="who">مدير المبيعات</span>
+      <span class="q">«فريقي — من يقود ومن يتعثّر؟»</span>
+      <ul>
+        <li>أرقام كل أدمن في فريقه جنبًا إلى جنب</li>
+        <li>الاستفسارات التي بردت بلا ردّ لأكثر من يومين</li>
+        <li>معدل تحويل كل أدمن — لا عدد صفقاته فقط</li>
+        <li>عملاء الفريق الذين لم يشتروا منذ ٩٠ يومًا</li>
+      </ul>
+      <span class="state"><span class="tag t-next">مقترحة</span></span>
+    </div>
+
+    <div class="role">
+      <span class="who">المالك والمدير التنفيذي</span>
+      <span class="q">«أين المال، وأين يتسرّب؟»</span>
+      <ul>
+        <li>إيراد وهامش الشهر مقابل نفس الشهر من العام الماضي</li>
+        <li>عائد كل قناة إعلانية — وتكلفة الاستفسار</li>
+        <li>هامش مساهمة كل فرع</li>
+        <li>أكبر عشرة عملاء وحصّتهم من الإيراد</li>
+        <li>ما يحتاج قرارًا: فرعٌ مساهمته سالبة، قناةٌ عائدها أقلّ من واحد</li>
+      </ul>
+      <span class="state"><span class="tag t-next">مقترحة</span></span>
+    </div>
+  </div>
+
+  <p style="margin-top:1.6rem">
+    <strong>ولماذا لوحةٌ للمالك وأنت ترى كل شيء؟</strong> لأن «ترى كل شيء» ليست لوحة — هي جردٌ
+    تبحث فيه. اللوحة تعرض <em>ما تغيّر وما يحتاج قرارًا</em>، وتصمت عمّا يسير كما ينبغي.
+    وهذا الفرق بين شاشةٍ تُفتح كل صباح وشاشةٍ تُفتح حين يُسأل عنها.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2><span class="num">٤</span> كل مدخل وأين ينعكس</h2>
+  <p class="sub">
+    فحصتُ المسار كاملًا: من الخانة التي يُكتب فيها الرقم إلى كل شاشة تقرؤه. هذه نتيجة
+    الفحص — وما فيه ثغرة مكتوبٌ بصراحة.
+  </p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>المدخل</th>
+          <th>مصدره الوحيد</th>
+          <th>أين ينعكس</th>
+          <th>الحال</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>الإنفاق التسويقي</td>
+          <td>دفتر الأستاذ — «مصاريف بيعية وتسويقية»</td>
+          <td>قائمة الدخل · تكلفة الاكتساب · ربحية الفرع · الموازنة</td>
+          <td><span class="tag t-ok">سليم</span></td>
+        </tr>
+        <tr>
+          <td>قناة الاستفسار</td>
+          <td>شاشة الليد وشيت الليدز</td>
+          <td>تكلفة الاكتساب · القمع · أداء الأدمن</td>
+          <td><span class="tag t-ok">سليم</span></td>
+        </tr>
+        <tr>
+          <td>الراتب</td>
+          <td>الموارد البشرية — بنود الأجر بتاريخ سريان</td>
+          <td>كشف الرواتب · تكلفة المنتِج · هامش المشروع · التعادل</td>
+          <td><span class="tag t-ok">سليم</span></td>
+        </tr>
+        <tr>
+          <td>مالك بطاقة العميل</td>
+          <td>شاشة العميل — رئيسيّ وفرعيّ</td>
+          <td>سجل العملاء · نطاق رؤية الفريق · لوحة الأدمن</td>
+          <td><span class="tag t-ok">أُصلح اليوم</span></td>
+        </tr>
+        <tr>
+          <td>قناة الإنفاق على الحساب</td>
+          <td>شاشة تكلفة الاكتساب — تُضبط مرة واحدة</td>
+          <td>تكلفة الاستفسار · عائد الإنفاق · التحليلات</td>
+          <td><span class="tag t-ok">أُصلح اليوم</span></td>
+        </tr>
+        <tr>
+          <td>مركز الربحية</td>
+          <td>سطر القيد — والعميل فوقه بخريطة تُكتب في الشاشة</td>
+          <td>ربحية المشاريع · القيمة العمرية للعميل · التسوية</td>
+          <td><span class="tag t-ok">سليم</span></td>
+        </tr>
+        <tr>
+          <td>فرع الليد والمشروع</td>
+          <td>الشيت، أو فرع من أدخله</td>
+          <td>ربحية الفرع · القمع بالفرع · تكلفة الاكتساب بالفرع</td>
+          <td><span class="tag t-wait">٥٠٢ ليدًا بلا فرع (٢٧٪)</span></td>
+        </tr>
+        <tr>
+          <td>سبب خسارة الليد</td>
+          <td>شاشة الليد عند الإغلاق</td>
+          <td>تحليل أسباب الخسارة — لا شيء آخر يقرؤه</td>
+          <td><span class="tag t-wait">غير إلزاميّ</span></td>
+        </tr>
+        <tr>
+          <td>الدولة والمدينة</td>
+          <td>بطاقة العميل — نصّ حرّ اليوم</td>
+          <td>التوزيع الجغرافي · ترشيح السجل</td>
+          <td><span class="tag t-next">تصير قائمة</span></td>
+        </tr>
+        <tr>
+          <td>قناة الوصول على سطر القيد</td>
+          <td>محاسبك يملؤها في الدفتر</td>
+          <td>إيراد القناة من جانب الدفتر</td>
+          <td><span class="tag t-wait">مملوءة في ١٠٪ فقط</span></td>
+        </tr>
+        <tr>
+          <td>خطة النسب والتارجت</td>
+          <td>إسناد خطة لكل موظف</td>
+          <td>النسب المستحقة · لوحة الترتيب · قيد النسبة في الدفتر</td>
+          <td><span class="tag t-wait">لا إسناد لأحد</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:1.25rem">
+    <strong>القاعدة التي حكمت الفحص كلَّه:</strong> لكل رقم <em>مصدرٌ واحد</em>. الراتب من
+    الموارد البشرية ولا يُكتب ثانيةً في شاشة التكاليف. والمصروف التسويقي من الدفتر ولا
+    يُكتب ثانيةً في شيت حملات. ورقمان لشيء واحد يختلفان يومًا — ولا يُعرف حينها أيّهما الصحيح.
+  </p>
+</section>
+
+<footer>
+  مبنيّ على بيانات فاست ترانس الفعلية بعد ترحيلها: ٨٬٨٤٨ قيدًا · ٢٬٥٠٦ عميلًا ·
+  ٢٬٧٩٢ مشروعًا · ٢٬٣١٣ ليدًا · ٢١٬٠٩٥٬٦٤٠ ج — من يناير ٢٠٢٢ إلى ٣١ يوليو ٢٠٢٦.
+</footer>
+
+</div>
