@@ -12,6 +12,7 @@ import {
   yearlyTrend,
 } from '@/lib/analytics';
 import { yearRange, monthRange, fiscalMonth } from '@/lib/accounting';
+import { MONTH_NAMES } from '@/lib/settlement';
 import { formatMoney } from '@/lib/utils';
 import { PageHeader, StatCard, Badge, EmptyState } from '@/components/ui';
 import { BarList, ColumnChart, Funnel, HeroNumber, NumbersDetails } from '@/components/chart';
@@ -20,6 +21,18 @@ export const metadata = { title: 'التحليلات' };
 export const dynamic = 'force-dynamic';
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}٪`;
+
+/**
+ * سنوات الاتجاه — من أول سنةٍ في دفاتر المكتب إلى السنة المعروضة.
+ *
+ * كانت أربعًا ثابتة، فسقطت ٢٠٢٢ من الشاشة بعد أن دخل دفترها: سنةُ التأسيس
+ * لا تُقارَن بها سنةٌ، وهي أول ما يُسأل عنه حين يُقرأ نموّ المكتب.
+ */
+const FIRST_LEDGER_YEAR = 2022;
+const TREND_YEARS = (year: number) => {
+  const from = Math.max(FIRST_LEDGER_YEAR, year - 5);
+  return Array.from({ length: year - from + 1 }, (_, i) => from + i);
+};
 
 /**
  * التحليلات (§١٣).
@@ -61,7 +74,7 @@ export default async function AnalyticsPage({
       funnel({ from: range.start, to: range.end }),
       clientValue({ from: range.start, to: range.end }),
       seesProduction ? producerPerformance({ from: range.start, to: range.end }) : Promise.resolve([]),
-      seesCompany ? yearlyTrend([year - 3, year - 2, year - 1, year]) : Promise.resolve([]),
+      seesCompany ? yearlyTrend(TREND_YEARS(year)) : Promise.resolve([]),
       listOptions('service_line'),
     ]);
 
@@ -272,7 +285,7 @@ export default async function AnalyticsPage({
           قمع المبيعات
         </h2>
         <p className="mb-4 text-xs text-slate-500">
-          العمود الأخير هو <b>الفاقد</b> عند كل مرحلة — وهو ما يُعالَج، لا العدد.
+          العمود الأخير هو <b>الفاقد</b> عند كل مرحلة.
         </p>
         <Funnel steps={steps.map((s) => ({ stage: s.stage, count: s.count }))} />
       </section>
@@ -370,10 +383,7 @@ export default async function AnalyticsPage({
           </table>
         </div>
         </NumbersDetails>
-        <p className="mt-2 text-xs text-slate-400">
-          فارق معدل التحويل داخل الفريق الواحد هو سبب وجود هذا الجدول — وهو ما
-          يُدرَّب عليه، لا ما يُعاقَب به.
-        </p>
+
       </section>
       )}
 
@@ -387,9 +397,7 @@ export default async function AnalyticsPage({
             </Link>
           </h2>
           <p className="mb-3 text-xs text-slate-500">
-            الإنفاق مقروء من <b>دفتر الأستاذ</b> — مجموعة «مصاريف بيعية وتسويقية»
-            كاملةً لا من إدخال يدوي، فالرقم يطابق ما صُرف فعلًا ويُدخَل مرة واحدة.
-            وما لم يُنسب لقناة يظهر صفًّا مستقلًّا ولا يُخفى.
+            الإنفاق من <b>دفتر الأستاذ</b> — مجموعة «مصاريف بيعية وتسويقية».
           </p>
           <div className="card card-pad mb-3">
             <p className="mb-3 text-xs font-medium text-slate-500">
@@ -561,20 +569,20 @@ export default async function AnalyticsPage({
       {/* ══ الاتجاه السنوي ═════════════════════════════════════ */}
       {seesCompany && trend.length > 0 && (
         <section>
-          <h2 className="mb-3 section-title">الاتجاه على أربع سنوات</h2>
+          <h2 className="mb-3 section-title">الاتجاه السنوي</h2>
           <div className="card card-pad mb-3">
             <ColumnChart
               columns={trend.map((t) => ({
                 key: String(t.year),
-                label: String(t.year),
+                label:
+                  t.throughMonth > 0 && t.throughMonth < 12
+                    ? `${t.year} · حتى ${MONTH_NAMES[t.throughMonth - 1]}`
+                    : String(t.year),
                 value: t.revenue,
                 display: formatMoney(t.revenue).replace(/\s?ج\.م/, ''),
-                muted: t.incomplete,
+                muted: t.throughMonth > 0 && t.throughMonth < 12,
               }))}
             />
-            <p className="mt-3 text-xs text-slate-400">
-              العمود <b>المخطَّط</b> سنةٌ ناقصة البيانات — يُعرض ولا يُحذف، ولا يُقارَن به نمو.
-            </p>
           </div>
           <NumbersDetails>
           <div className="card table-wrap">
@@ -592,30 +600,31 @@ export default async function AnalyticsPage({
               </thead>
               <tbody>
                 {trend.map((t) => (
-                  <tr key={t.year} className={t.incomplete ? 'bg-amber-50/50' : undefined}>
+                  <tr key={t.year}>
                     <td className="font-medium text-slate-800">
                       {t.year}
-                      {t.incomplete && (
-                        <Badge className="mr-2 border-amber-200 bg-amber-50 text-amber-700">
-                          ناقصة
+                      {t.throughMonth > 0 && t.throughMonth < 12 && (
+                        <Badge className="mr-2 border-slate-200 bg-slate-50 text-slate-600">
+                          حتى {MONTH_NAMES[t.throughMonth - 1]}
                         </Badge>
                       )}
                     </td>
                     <td className="nums">{t.leads}</td>
                     <td className="nums">{t.projects}</td>
                     <td className="nums">{formatMoney(t.revenue)}</td>
-                    <td className="nums">{t.revenue > 0 ? pct(t.marginPct) : '—'}</td>
+                    <td className="nums">{t.marginPct === null ? '—' : pct(t.marginPct)}</td>
                     <td className="nums text-slate-600">{formatMoney(t.avgOrder)}</td>
                     <td className="nums">
                       {t.growth === null ? (
                         '—'
-                      ) : t.growthReliable ? (
+                      ) : (
                         <span className={t.growth >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
                           {pct(t.growth)}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-400" title="مقارنة بسنة ناقصة">
-                          غير موثوق
+                          {t.comparedMonths !== null && (
+                            <span className="mr-1 text-xs text-slate-400">
+                              ({t.comparedMonths} شهرًا مقابل مثلها)
+                            </span>
+                          )}
                         </span>
                       )}
                     </td>
@@ -625,11 +634,6 @@ export default async function AnalyticsPage({
             </table>
           </div>
           </NumbersDetails>
-          <p className="mt-2 text-xs text-slate-500">
-            السنة المعلَّمة <b>«ناقصة»</b> لا تصلح خط أساس (§١٤): بياناتها لم
-            تُسجَّل كاملة، والنمو المقارَن بها يضلّل. نقولها هنا بدل أن نعرض
-            رقمًا يبدو صحيحًا.
-          </p>
         </section>
       )}
     </div>

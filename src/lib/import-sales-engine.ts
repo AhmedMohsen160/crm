@@ -370,7 +370,7 @@ export async function importSalesWorkbook(params: {
           closedAt: r.date,
           legacyKey,
           importTag: tag,
-          notes: mergeNotes(r.notes, 'صفٌّ بلا سعر — استفسار لم يُبَع'),
+          notes: mergeNotes(r.notes, 'بلا سعر في المصدر'),
         },
       });
       leads += 1;

@@ -8,6 +8,7 @@ import {
   round2,
   settleTag,
   isGenericCenter,
+  isFxAccount,
   clientNameOfCenter,
   clientOfCenter,
   type MonthSettlement,
@@ -111,7 +112,7 @@ async function ledgerRevenue(year: number) {
     select: { id: true, name: true },
   });
   // فروق العملة ربحُ صرفٍ لا بيعًا — ونسبتُها إلى عميل تكذب على سجلّه
-  const ids = accounts.filter((a) => !/فروق العملة/.test(a.name)).map((a) => a.id);
+  const ids = accounts.filter((a) => !isFxAccount(a.name)).map((a) => a.id);
 
   const lines = await db.journalLine.findMany({
     where: {
@@ -196,7 +197,7 @@ async function clientByName(
       createdById: actorId,
       ownerId,
       importTag: tag,
-      notes: 'أُنشئ من دفتر المحاسب — لا رقم له في الدفتر',
+      notes: 'من دفتر المحاسب',
     },
     select: { id: true },
   });
@@ -222,8 +223,13 @@ export async function settleYears(params: {
   fallbackBranch?: string;
   /** خريطة «مركز الربحية ← عميله» — تُكتب في الشاشة سطرًا سطرًا */
   centerClients?: Map<string, string>;
+  /** تاريخ الوقف — لا يُسوَّى شهرٌ بعده، وهو نفس وقف الترحيل */
+  until?: Date;
 }): Promise<SettlementReport> {
   const centerClients = params.centerClients ?? new Map<string, string>();
+  const lastPeriod = params.until
+    ? `${params.until.getUTCFullYear()}-${String(params.until.getUTCMonth() + 1).padStart(2, '0')}`
+    : null;
   const branchOptions = await listOptions('branch');
   const branchLabel = (value: string | null) =>
     branchOptions.find((b) => b.value === value)?.label ?? 'فاست ترانس';
@@ -264,7 +270,17 @@ export async function settleYears(params: {
       byMonth.set(p.revenueMonth!, list);
     }
 
-    const periods = [...new Set([...ledger.keys(), ...byMonth.keys()])].sort();
+    /**
+     * **ولا يُسوَّى شهرٌ ما زال يُكتب فيه.**
+     *
+     * قالها أحمد: «نغلق الداتا ونظبطها على نهاية يوليو بحيث من أول أغسطس
+     * تكون مدخلات لاحقة». والتسوية توسّع مبالغ الشيت لتبلغ الدفتر — وهي
+     * صحيحةٌ لشهرٍ انتهى ورُحِّل دفترُه، خاطئةٌ لشهرٍ يدخل فيه الفريق كل يوم:
+     * يُوسَّع نصفُ الشهر ليبلغ نصفَ دفترٍ ثم يدخل نصفُه الآخر فوق التوسيع.
+     */
+    const periods = [...new Set([...ledger.keys(), ...byMonth.keys()])]
+      .filter((p) => !lastPeriod || p <= lastPeriod)
+      .sort();
 
     for (const period of periods) {
       const book = ledger.get(period);
@@ -315,10 +331,12 @@ export async function settleYears(params: {
             closedAt: date,
             revenueMonth: period,
             importTag: tag,
+            // **بيانٌ لا شرح**: مصدرُ الرقم ومركزُه، وما زاد تعليقٌ يقرؤه
+            // الموظف كل يوم في صفٍّ لا يحتاجه
             description:
               center === clientName
-                ? 'إيراد الشهر كما رصده دفتر المحاسب على مركز ربحية هذا العميل — لا تقديرَ فيه'
-                : `إيراد الشهر على مركز ربحية «${center}» — وهو مشروعٌ للعميل «${clientName}»`,
+                ? `دفتر المحاسب · ${periodLabel(period)}`
+                : `دفتر المحاسب · ${periodLabel(period)} · مركز «${center}»`,
           },
         });
         report.namedProjects += 1;
@@ -375,8 +393,7 @@ export async function settleYears(params: {
             closedAt: date,
             revenueMonth: period,
             importTag: tag,
-            description:
-              'تجميعُ إيراد الشهر من دفتر المحاسب — شهرٌ لم يرصد شيت المبيعات فيه عميلًا بعينه',
+            description: `دفتر المحاسب · ${periodLabel(period)}`,
           },
         });
         report.bucketAmount = round2(report.bucketAmount + month.bucket.amount);

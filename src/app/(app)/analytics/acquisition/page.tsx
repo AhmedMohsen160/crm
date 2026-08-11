@@ -120,9 +120,9 @@ export default async function AcquisitionPage({
             إنفاقٌ تسويقيّ بلا قناة: {formatMoney(report.unattributedSpend)}
           </p>
           <p className="mt-1 text-xs leading-relaxed">
-            هذا المبلغ <b>خارج القسمة</b>، فتكلفةُ الليد أعلاه أقلّ من حقيقتها. وحساباتُه:{' '}
+            خارج القسمة. حساباتُه:{' '}
             {report.unmapped.map((a) => `${a.name} (${formatMoney(a.amount)})`).join(' · ')}.
-            {can(user, 'canManageAccounting') && ' اضبط قناة كلٍّ منها في جدول آخر الصفحة.'}
+            {can(user, 'canManageAccounting') && ' تُضبط قناتها في جدول آخر الصفحة.'}
           </p>
         </div>
       )}
@@ -134,9 +134,8 @@ export default async function AcquisitionPage({
           كل قناة بتكلفتها
         </h2>
         <p className="mb-4 text-xs leading-relaxed text-slate-500">
-          <b>تكلفة الليد</b> تُقسم على كل من تواصل — لا على من اشترى وحده، وإلا بدا الإعلان
-          أرخص ممّا هو. و<b>تكلفة العميل المكتسب</b> تقسم نفس الإنفاق على من دفع فعلًا.
-          و<b>العائد</b> إيرادُ ما سُلّم من القناة ÷ إنفاقها.
+          <b>تكلفة الاستفسار</b> = الإنفاق ÷ كل من تواصل. و<b>تكلفة العميل</b> = الإنفاق ÷
+          من اشترى. و<b>العائد</b> = إيراد ما سُلّم ÷ الإنفاق.
         </p>
 
         {summary.rows.length === 0 ? (
@@ -207,10 +206,7 @@ export default async function AcquisitionPage({
       {report.monthly.length > 0 && (
         <section className="card card-pad">
           <h2 className="mb-1 font-semibold text-slate-800">شهرًا بشهر</h2>
-          <p className="mb-4 text-xs leading-relaxed text-slate-500">
-            <b>الاتجاه أهمّ من اللحظة.</b> شهرٌ ارتفعت فيه تكلفة الليد وحده قد يكون موسمًا؛
-            وثلاثةٌ متتالية قرارٌ يُتّخذ.
-          </p>
+
           <div className="overflow-x-auto">
             <table className="tbl tbl-wide">
               <thead>
@@ -258,9 +254,8 @@ export default async function AcquisitionPage({
             * آلاف المرات يُنتج آلاف الفرص للخطأ.
             */}
           <p className="mb-4 text-xs leading-relaxed text-slate-500">
-            حسابات <b>المصروفات البيعية والتسويقية</b> وحدها تظهر هنا — ووضعُ قناةٍ على
-            حساب الإيجار يقسم إيجارَ المكتب على ليدز جوجل. والمبلغ بجانب كلٍّ هو ما وقع
-            عليه في {year}، فتعرف أيَّها يستحقّ الضبط.
+            حسابات <b>المصروفات البيعية والتسويقية</b> وحدها. والمبلغ بجانب كلٍّ هو ما وقع
+            عليه في {year}.
           </p>
           <div className="overflow-x-auto">
             <table className="tbl">

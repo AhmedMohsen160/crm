@@ -226,11 +226,15 @@ export function groupNames(occurrences: NameOccurrence[]): MergeGroup[] {
  */
 export const EXECUTIVE_CLIENT_NAMES = [
   'علي الشبيلي',
+  'أكاديمية الأسرة',
   'قرآن هاوس',
   'بصيرة',
   'سلام',
   'ترانزليشن هوم',
   'دار يتخيلون',
+  'أبو الهيثم',
+  'حصين',
+  'مسار الذهبية',
 ];
 
 const EXECUTIVE_KEYS = new Set(EXECUTIVE_CLIENT_NAMES.map(mergeKey));

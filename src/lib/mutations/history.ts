@@ -248,6 +248,8 @@ export async function runHistorySettlement(fd: FormData, user: SessionUser) {
     actorId: user.id,
     rule,
     fallbackBranch: str(fd, 'fallbackBranch') ?? 'mokattam',
+    // نفس وقف الترحيل — فما بعده مدخلاتُ الفريق لا تُوسَّع
+    until: readCutoff(fd),
     // خريطة «مركز الربحية ← عميله»: المركز مشروعٌ، والعميل فوقه
     centerClients: parseCenterClients(str(fd, 'centerClients') ?? ''),
   });
