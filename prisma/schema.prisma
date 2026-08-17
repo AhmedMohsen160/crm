@@ -160,6 +160,9 @@ model Role {
   canUseEmail             Boolean @default(false)
   canUseAi                Boolean @default(false)
   canManageHr             Boolean @default(false)
+  /// حذفٌ نهائيّ لسجل عميل — للمالك ومدير النظام وحدهما، ولتنقية ما أُدخل
+  /// تجربةً. والعمود يُولد `false` فلا يُمنح لأحدٍ بترقية القاعدة وحدها.
+  canPurgeRecords         Boolean @default(false)
 
   /// أقصى نسبة خصم يمنحها صاحب هذا الدور بلا اعتماد (٠٫١ تعني ١٠٪).
   /// عمود في الدور لا مفتاح إعدادات باسم دور، لأن الأدوار تُنشأ من الشاشة.

@@ -62,6 +62,7 @@ import {
   runHistorySettlement,
   rollbackImportTag,
   wipeDemoRecords,
+  purgeClientRecord,
   resolveMigrationRow,
   saveAccount,
   saveCostCenter,
@@ -320,6 +321,9 @@ export async function POST(request: NextRequest) {
         break;
       case 'history.reset':
         destination = await wipeDemoRecords(fd, user);
+        break;
+      case 'client.purge':
+        destination = await purgeClientRecord(fd, user);
         break;
       case 'migrationReview':
         destination = await resolveMigrationRow(fd, user, id);

@@ -2056,6 +2056,28 @@ const ACCESS = [
   ],
 ];
 
+/**
+ * ★ **وقسمُ الحذف النهائيّ محجوبٌ عن كل من لا يملك صلاحيته.**
+ *
+ * وهو حجبٌ في الصفحة لا في القائمة: القسم في بطاقة العميل نفسها، ومن يفتحها
+ * بحسابٍ بلا `canPurgeRecords` لا يرى الجملة ولا الخانة.
+ */
+await loginAs('magly@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/clients', '25b-purge-denied');
+const anyClient = page.locator('a[href^="/clients/c"]').first();
+if (await anyClient.count()) {
+  await go(await anyClient.getAttribute('href'), '25b-purge-hidden');
+  const body = await page.locator('body').innerText();
+  check(
+    !body.includes('احذف هذا العميل نهائيًا'),
+    '★ **ومدير المبيعات لا يرى الحذف النهائيّ** — للمالك ومدير النظام وحدهما'
+  );
+  check(
+    (await page.locator('input[name="confirm"]').count()) === 0,
+    'ولا تُرسل خانتُه في حمولة الصفحة أصلًا'
+  );
+}
+
 for (const [email, password, role, allowed, denied] of ACCESS) {
   await loginAs(email, password);
   const reachedAll = [];
@@ -2560,6 +2582,32 @@ if (clientHref && /^\/clients\/[^/]+$/.test(clientHref)) {
   check(
     form.includes('ولا تمسّ النسبة'),
     '★ **والشاشة تقول إن الفرعيّ بابُ رؤيةٍ لا حصّةُ مال** — النسبة على مالك المشروع'
+  );
+}
+
+/**
+ * ★ **والحذف النهائيّ لسجل عميل — لمدير النظام وحده.**
+ *
+ * قالها أحمد: «البيانات التي أقوم بإدخالها كتجربة للسيستم أستطيع حذفها…
+ * ويكأنه لم يدخل السيستم أصلًا». وهو استثناءٌ من «لا شيء يُمحى» محدودٌ
+ * بصلاحيةٍ خاصة وجملةٍ تُكتب وجردٍ يُعرض وسجلِّ تدقيقٍ يبقى.
+ */
+if (clientHref && /^\/clients\/[^/]+$/.test(clientHref)) {
+  await go(clientHref, '35c-client-purge');
+  const card = await page.locator('body').innerText();
+  check(card.includes('حذفٌ نهائيّ'), '★ **قسمُ الحذف النهائيّ في بطاقة العميل** لمن يملكه');
+  check(card.includes('سيُحذف'), 'ويعرض جردَ ما سيُحذف قبل الضغط — لا يُحذف على العماية');
+  check(
+    card.includes('احذف هذا العميل نهائيًا'),
+    '★ **وجملةٌ تُكتب بالحرف** — لا زرَّ تأكيدٍ يُنقر مرورًا'
+  );
+  check(
+    card.includes('سجل التدقيق'),
+    'ويقول إنّ الأثر يبقى في سجل التدقيق — فهو حذفٌ لا محوٌ للأثر'
+  );
+  check(
+    (await page.locator('input[name="confirm"]').count()) === 1,
+    'وخانةُ التأكيد موجودة'
   );
 }
 

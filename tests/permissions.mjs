@@ -80,6 +80,24 @@ check(
   !has('executive_director', 'canManageRoles') && !has('executive_director', 'canManageSettings'),
   'المدير التنفيذي: تعريف الأدوار وإعدادات النظام تبقى للمالك'
 );
+/**
+ * **والحذف النهائيّ ثالثُها.** قالها أحمد: «تكون لمدير النظام فقط» — فهي
+ * للمالك ومدير النظام وحدهما، وتُمنح لغيرهما من شاشة الأدوار متى قرّر.
+ */
+check(
+  !has('executive_director', 'canPurgeRecords'),
+  '★ **والحذف النهائيّ للمالك ومدير النظام وحدهما** — «تكون لمدير النظام فقط»'
+);
+check(
+  has('owner', 'canPurgeRecords') && has('system_admin', 'canPurgeRecords'),
+  'وهما يملكانه'
+);
+check(
+  !has('sales_manager', 'canPurgeRecords') &&
+    !has('finance', 'canPurgeRecords') &&
+    !has('project_manager', 'canPurgeRecords'),
+  'ولا يملكه مدير المبيعات ولا المحاسب ولا مدير المشاريع'
+);
 check(
   has('executive_director', 'canManageUsers') &&
     has('executive_director', 'canManageHr') &&
@@ -88,8 +106,8 @@ check(
   'وما عداهما يديره كاملًا — الأقسام كلها تحته'
 );
 check(
-  roleOf('executive_director').permissions.length === PERMISSION_KEYS.length - 2,
-  'وحُجبت عنه صلاحيتان بالضبط لا أكثر'
+  roleOf('executive_director').permissions.length === PERMISSION_KEYS.length - 3,
+  'وحُجبت عنه ثلاثُ صلاحيات بالضبط لا أكثر — الأدوار والإعدادات والحذف النهائيّ'
 );
 
 // ── مدير المبيعات وأدمن المبيعات ─────────────────────────────

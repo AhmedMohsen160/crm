@@ -13,6 +13,8 @@ import { leadsTag } from '@/lib/import-leads';
 import { salesTag, isImportTag } from '@/lib/import-sales';
 import { settleTag, parseCenterClients } from '@/lib/settlement';
 import { wipeDemoData } from '@/lib/reset-engine';
+import { clientPurgeInventory, purgeClient } from '@/lib/client-purge-engine';
+import { PURGE_PHRASE, purgeVerdict } from '@/lib/client-purge';
 
 /**
  * ترحيل تاريخ المكتب — دفاتر المحاسب وشيت المبيعات.
@@ -335,4 +337,58 @@ export async function wipeDemoRecords(fd: FormData, user: SessionUser) {
 
   await auditEvent(user.id, 'delete', 'Client', 'demo-reset', `مسحُ البيانات التجريبية — ${line}`);
   return `/settings/import/history?${new URLSearchParams({ done: 'reset', line })}`;
+}
+
+/**
+ * الحذف النهائيّ لسجل عميل.
+ *
+ * قالها أحمد: «البيانات التي أقوم بإدخالها كتجربة للسيستم أستطيع حذفها…
+ * ويكأنه لم يدخل السيستم أصلًا». وهو استثناءٌ من §٣ بند ٣ محدودٌ بأربعة
+ * حدود — صلاحيةٌ خاصة، وجملةٌ تُكتب، وجردٌ يُعرض، **وسجلُّ تدقيقٍ يبقى**.
+ *
+ * **والفحص يُعاد لحظةَ الضغط** لا يُقرأ من الشاشة: قد يمرّ وقتٌ بين العرض
+ * والتأكيد يدخل فيه مشروعٌ جديد أو تُقفل فترة.
+ */
+export async function purgeClientRecord(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canPurgeRecords')) {
+    throw new MutationError('الحذف النهائيّ للمالك ومدير النظام وحدهما');
+  }
+  const clientId = str(fd, 'clientId');
+  if (!clientId) throw new MutationError('معرّف العميل مفقود');
+  if (str(fd, 'confirm') !== PURGE_PHRASE) {
+    throw new MutationError(`اكتب «${PURGE_PHRASE}» بالحرف لتأكيد الحذف`);
+  }
+
+  const inventory = await clientPurgeInventory(clientId);
+  if (!inventory) throw new MutationError('العميل غير موجود — لعلّه حُذف بالفعل');
+
+  const verdict = purgeVerdict(inventory);
+  if (!verdict.ok) throw new MutationError(verdict.reason);
+
+  /**
+   * **الجرد يُكتب في سجل التدقيق قبل الحذف لا بعده.**
+   *
+   * بعد الحذف لا يبقى ما يُقرأ منه الجرد — وسطرُ التدقيق هو الأثر الوحيد
+   * الباقي على أن هذا العميل كان ومُحي. فهو ما يجعل هذا حذفًا لا محوًا
+   * للأثر.
+   */
+  const line = Object.entries(inventory.counts)
+    .map(([label, n]) => `${label}: ${n}`)
+    .join(' · ');
+  await auditEvent(
+    user.id,
+    'delete',
+    'Client',
+    clientId,
+    `حذفٌ نهائيّ للعميل «${inventory.clientName}» — ${line || 'بلا سجلات تابعة'}` +
+      (inventory.revenue > 0 ? ` · إيراد معترَف به: ${inventory.revenue}` : '') +
+      (inventory.importTag ? ` · وسم ترحيل: ${inventory.importTag}` : '')
+  );
+
+  const removed = await purgeClient(clientId);
+  const done = Object.entries(removed)
+    .map(([label, n]) => `${label}: ${n}`)
+    .join(' · ');
+
+  return `/clients?${new URLSearchParams({ purged: inventory.clientName, line: done })}`;
 }

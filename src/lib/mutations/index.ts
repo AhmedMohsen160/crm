@@ -134,6 +134,7 @@ export {
   runHistorySettlement,
   rollbackImportTag,
   wipeDemoRecords,
+  purgeClientRecord,
   RESET_PHRASE,
 } from './history';
 export { markNotificationsRead, runNotifications } from './alerts';
