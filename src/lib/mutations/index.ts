@@ -48,6 +48,8 @@ export {
   saveSettings,
   markErrorsSeen,
   saveTargets,
+  saveYearTargets,
+  spreadYearTargets,
   saveStaffCost,
   changeOwnPassword,
 } from './admin';
@@ -74,10 +76,12 @@ export {
   closeFiscalPeriod,
   saveBudget,
   saveBudgetLines,
+  saveBudgetGrid,
   saveFixedAsset,
   generateDraftEntries,
   fillBudgetFromHistory,
   saveAccountBehaviour,
+  saveAdChannels,
   saveBudgetPlanSettings,
 } from './accounting';
 
@@ -102,7 +106,8 @@ export { readClientSite, designQuoteDocument, clearQuoteDesign } from './quotes'
 export {
   saveBranch,
   seedBranches,
-  saveCostCenterKinds,
+  saveSpendKinds,
+  suggestSpendKinds,
   saveAccountCashFlags,
   saveAllocationRate,
   deriveAllocationRate,
@@ -120,4 +125,16 @@ export {
 } from './hr';
 
 export { importLegacySheet, importAccountingLedger, resolveMigrationRow } from './migration';
+
+// ترحيل تاريخ المكتب: دفاتر المحاسب · شيت المبيعات · التسوية بينهما
+export {
+  importHistoryLedger,
+  importHistorySales,
+  importHistoryLeads,
+  runHistorySettlement,
+  rollbackImportTag,
+  wipeDemoRecords,
+  purgeClientRecord,
+  RESET_PHRASE,
+} from './history';
 export { markNotificationsRead, runNotifications } from './alerts';

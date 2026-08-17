@@ -15,10 +15,11 @@
  * التشغيل:  npm run test:branch-economics
  */
 import {
-  COST_CENTER_KIND_KEYS,
+  SPEND_KIND_KEYS,
   SHARED_KINDS,
   isShared,
   checkClassification,
+  effectiveSpendKind,
   deriveStandardRate,
   appliedRate,
   branchPL,
@@ -67,7 +68,7 @@ function near(actual, expected, label, tol = 0.02) {
 
 console.log('\n── ١ · التصنيف ───────────────────────────────────────');
 
-eq(COST_CENTER_KIND_KEYS.length, 4, 'أربع فئات لمراكز التكلفة');
+eq(SPEND_KIND_KEYS.length, 4, 'أربعة تصنيفات للإنفاق');
 eq(SHARED_KINDS.length, 3, 'ثلاث منها هي الكتلة المشتركة');
 check(isShared('production'), 'الإنتاج مشترك');
 check(isShared('central_marketing'), 'والتسويق المؤسسي');
@@ -79,8 +80,30 @@ const cls = (kind, branch, isExpense = true) => checkClassification({ kind, bran
 
 check(cls('branch_direct', 'mokattam').ok, 'بند ذاتيّ بفرعه يمرّ');
 check(cls('production', null).ok, 'وبند مشترك بلا فرع يمرّ');
-check(!cls(null, 'mokattam').ok, '**وبند مصروف بلا مركز تكلفة يُرفض** (القاعدة ١)');
+check(!cls(null, 'mokattam').ok, '**وبند مصروف بحساب بلا تصنيف يُرفض** (القاعدة ١)');
 check(!cls('نوع مخترَع', null).ok, 'وفئة غير معروفة تُرفض');
+check(
+  cls(null, 'mokattam').error.includes('إعدادات المصاريف'),
+  'والرسالة تدلّه على الشاشة التي يُصنَّف فيها الحساب مرة واحدة'
+);
+
+// ── تصنيف الإنفاق: من الحساب، والسطر يتجاوزه ──────────────────
+eq(
+  effectiveSpendKind(null, 'general_admin'),
+  'general_admin',
+  '★ **التصنيف من الحساب** — يُصنَّف «الإيجار» مرة ولا يُسأل عنه في كل قيد'
+);
+eq(
+  effectiveSpendKind('branch_direct', 'central_marketing'),
+  'branch_direct',
+  '★ **والسطر يتجاوزه للحالة الشاذّة** — إعلانٌ من حساب التسويق وُجّه لمنطقة فرع'
+);
+eq(effectiveSpendKind(null, null), null, 'وبلا هذا ولا ذاك: بلا تصنيف — لا افتراضٌ يُخترع');
+eq(
+  effectiveSpendKind('', 'production'),
+  'production',
+  'والفراغ ليس تجاوزًا — خانةٌ لم تُملأ تعني «خذه من الحساب»'
+);
 
 const sharedWithBranch = cls('production', 'mokattam');
 check(

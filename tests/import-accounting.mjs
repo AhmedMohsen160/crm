@@ -154,13 +154,10 @@ check(
   'حساب رئيسي غير معروف يُرفض ولا يُخمَّن'
 );
 check(
-  parseRow(row({ branch: 'Saudi Arabia' }), 8).branchRaw === 'Saudi Arabia',
+  parseRow(row({ branch: 'Tanta' }), 8).branchRaw === 'Tanta',
   'الفرع غير المطابق يُذكر اسمه ولا يُخمَّن له مفتاح'
 );
-check(
-  parseRow(row({ branch: 'Saudi Arabia' }), 8).branch === null,
-  'وسطره يدخل بلا فرع'
-);
+check(parseRow(row({ branch: 'Tanta' }), 8).branch === null, 'وسطره يدخل بلا فرع');
 
 // ── الترويسة والحشو ──────────────────────────────────────────
 
@@ -274,7 +271,16 @@ check(
 );
 check(Object.keys(EXPENSE_GROUPS).length === 3, 'مجموعات المصروف ثلاث — كتقسيم المحاسب حرفًا بحرف');
 check(BRANCH_KEYS['Nasr City'] === 'nasr_city', 'مدينة نصر تُطابَق بمفتاحها');
-check(BRANCH_KEYS['Saudi Arabia'] === undefined, 'و«السعودية» ليست فرعًا في القائمة — لا تُخمَّن');
+/**
+ * ★ **و«Saudi Arabia» هي الرياض.**
+ *
+ * كان هذا الاختبار يقول عكسه — كُتب قبل أن يصل دفتر ٢٠٢٦ فلم يكن في
+ * الأوراق فرعٌ سعوديّ أصلًا. ثم كتبه المحاسب في ٢٠٢٦ ثلاثة عشر مرة ولم
+ * يكتب `Riyadh` مرة واحدة، وأكّد أحمد أن الرياض فرعٌ بدأ العمل فعلًا.
+ * وتركُه بلا مطابقة يُسقط فرعًا كاملًا في «غير محدَّد».
+ */
+check(BRANCH_KEYS['Saudi Arabia'] === 'riyadh', '★ و«Saudi Arabia» هي الرياض — هكذا كتبها المحاسب');
+check(BRANCH_KEYS['Tanta'] === undefined, 'وما ليس في قائمة الفروع لا يُخمَّن');
 check(
   COST_CENTER_ALIASES['Tibyan Association|The Masjid al-Haram Project'].name === 'جمعية التبيان',
   'مركز التكلفة نفسه بالعربية والإنجليزية — فلا يُنشأ مرتين'

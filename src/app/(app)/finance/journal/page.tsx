@@ -170,7 +170,7 @@ export default async function JournalPage({
                 <th>التاريخ</th>
                 <th>البيان والحسابان</th>
                 <th>العميل والمشروع</th>
-                <th>أدمن المبيعات</th>
+                <th>الموظف المسؤول</th>
                 <th>الفرع</th>
                 <th>المبلغ</th>
                 <th>الحال</th>

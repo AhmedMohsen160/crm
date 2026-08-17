@@ -80,6 +80,7 @@ model User {
   quotes           Quote[]
   auditEntries     AuditLog[]
   ownedClients     Client[]      @relation("ClientOwner")
+  coOwnedClients   Client[]      @relation("ClientCoOwner")
   createdClients   Client[]      @relation("ClientCreator")
 
   commissionEntries CommissionEntry[]      @relation("CommissionBeneficiary")
@@ -159,6 +160,9 @@ model Role {
   canUseEmail             Boolean @default(false)
   canUseAi                Boolean @default(false)
   canManageHr             Boolean @default(false)
+  /// حذفٌ نهائيّ لسجل عميل — للمالك ومدير النظام وحدهما، ولتنقية ما أُدخل
+  /// تجربةً. والعمود يُولد `false` فلا يُمنح لأحدٍ بترقية القاعدة وحدها.
+  canPurgeRecords         Boolean @default(false)
 
   /// أقصى نسبة خصم يمنحها صاحب هذا الدور بلا اعتماد (٠٫١ تعني ١٠٪).
   /// عمود في الدور لا مفتاح إعدادات باسم دور، لأن الأدوار تُنشأ من الشاشة.
@@ -217,7 +221,7 @@ model AuditLog {
 // ───────────────────────────────────────────────
 
 model Company {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   name         String
   nameAr       String?
   industry     String? // القطاع: محاماة، طبي، حكومي...
@@ -227,11 +231,27 @@ model Company {
   country      String?
   city         String?
   address      String?
-  taxNumber    String? // الرقم الضريبي / السجل التجاري
+  taxNumber    String? // الرقم الضريبي
   paymentTerms String? // شروط الدفع: فوري، 30 يوم...
   notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+
+  /// رقم السجل التجاري — كان يُحشر مع الرقم الضريبي في خانة واحدة، وهما
+  /// رقمان مختلفان تطلبهما الفاتورة كلاهما
+  commercialRegNo String?
+
+  /// **ممثّل الشركة** — الشخص الذي يُوقّع ويُتابع. غير جهة الاتصال: تلك قد
+  /// تكون موظف تنسيق، وهذا من يُخاطَب في الالتزامات
+  repName  String?
+  repPhone String?
+
+  /// صورة السجل التجاري والبطاقة الضريبية — **اختياريتان**، ترفعهما المبيعات
+  /// مرة فيجدهما المحاسب عند إصدار الفاتورة بلا أن يطلبهما من العميل ثانيةً
+  commercialRegFileId String?     @unique
+  commercialRegFile   StoredFile? @relation("CompanyCommercialReg", fields: [commercialRegFileId], references: [id], onDelete: SetNull)
+  taxCardFileId       String?     @unique
+  taxCardFile         StoredFile? @relation("CompanyTaxCard", fields: [taxCardFileId], references: [id], onDelete: SetNull)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   ownerId String?
   owner   User?   @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -331,6 +351,19 @@ model Client {
   ownerId String?
   owner   User?   @relation("ClientOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
+  /// **المالك الفرعي — للرؤية وحدها لا للنسبة.**
+  ///
+  /// قالها أحمد: «عميل قديم كان داخل لأحمد مجلي ولكن اشترى بعد ذلك مرة أخرى
+  /// من أدمن غير أحمد مجلي، ساعتها يُنسب لأحمد مجلي كمالك رئيسي والأدمن
+  /// الآخر مالك فرعي، بحيث يظهر عند الحسابين ويستطيع كليهما قراءته».
+  ///
+  /// **ولا تمسّ النسبة**: «العبرة بالشراء وليس المالك الرئيسي» — فمن نفّذ
+  /// الصفقة له ٣٪ ومديره ٢٪، وهي تُحسب على مالك **المشروع** لا على مالك
+  /// البطاقة. فالملكية المزدوجة الملغاة في المرحلة ١٦ كانت على الصفقة،
+  /// وهذه على بطاقة العميل: بابُ رؤيةٍ لا حصّةُ مال.
+  coOwnerId String?
+  coOwner   User?   @relation("ClientCoOwner", fields: [coOwnerId], references: [id], onDelete: SetNull)
+
   /// ربط اختياري بسجل الشركة (الرقم الضريبي وشروط الدفع)
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
@@ -341,11 +374,16 @@ model Client {
   accounts  Account[]
   proposals Proposal[]
   emails    EmailMessage[]
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag String?
 
   @@index([phoneNormalized])
   @@index([phoneAltNormalized])
   @@index([name])
   @@index([ownerId])
+  @@index([coOwnerId])
   @@index([firstBranch])
 }
 
@@ -745,6 +783,9 @@ model Lead {
 
   /// مفتاح الصف في الملف القديم — يمنع تكرار الترحيل (§١٤)
   legacyKey String? @unique
+  /// **وسمُ الترحيل** — «sales-2022». كل ما يدخل من ملفات المكتب القديمة
+  /// يحمله، فتُسحب سنةٌ كاملة بضغطة بلا أن تمسّ ما أُدخل من الشاشات.
+  importTag String?
 
   clientId String?
   client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
@@ -892,6 +933,14 @@ model Project {
   /// مفتاح الصف في الملف القديم — يمنع تكرار الترحيل (§١٤)
   legacyKey String? @unique
 
+  /// **المبلغ قبل التسوية على دفتر المحاسب.**
+  ///
+  /// شيت المبيعات ناقصٌ لا خاطئ: مشترياتٌ متكرّرة لم تُسجَّل، وعملاءُ لم
+  /// يُرصدوا. فتُوسَّع مبالغُه بالتناسب حتى تطابق الدفتر. ويُحفظ الأصل هنا
+  /// لأن **ما يُسوَّى يجب أن يُرَدّ**: تسويةٌ لا تُعكَس تصير طبقةً فوق طبقة
+  /// كلما رُفع الشيت مرة أخرى.
+  preSettleTotal Float?
+
   leadId String?
   lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
@@ -921,6 +970,10 @@ model Project {
   freelancerPayments FreelancerPayment[]
   journalEntries     JournalEntry[]
   emails             EmailMessage[]
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag          String?
 
   @@index([status])
   @@index([ownerId])
@@ -1162,6 +1215,17 @@ model Account {
   isPostable Boolean @default(false)
   active     Boolean @default(true)
 
+  /// **قناة الإنفاق التسويقي** — google_ads | meta_ads | organic | …
+  ///
+  /// تُضبط **مرة واحدة على الحساب** لا في كل قيد: «إعلانات جوجل» جوجلُ في
+  /// كل قيد يقع عليه، وسؤالُ المحاسب عنه مئات المرات يُنتج مئات الفرص
+  /// للخطأ. وعليها تُقسَم تكلفةُ اكتساب العميل.
+  ///
+  /// **وتبقى فارغة في الغالب الأعمّ**: حسابُ الإيجار ليس قناةً تسويقية،
+  /// وما لا قناة له يُعرض في «غير منسوب» ولا يُخمَّن — النسبة الخاطئة أسوأ
+  /// من عدمها لأن عليها يُبنى قرار إنفاق.
+  adChannel String?
+
   /// حساب نظامي يربطه النظام بحدث تشغيلي (مثل: إيراد الترجمة التحريرية)
   systemKey String? @unique
 
@@ -1185,12 +1249,29 @@ model Account {
   /// حقلٌ يُملأ يدويًا آلاف المرات يُملأ خطأً مرة على الأقل.
   isCash Boolean @default(true)
 
+  /// **تصنيف الإنفاق** — أين يقع جنيه هذا الحساب في اقتصاديات الفروع:
+  ///   central_marketing التسويق المؤسسي — كتلة مشتركة
+  ///   production        الإنتاج والتشغيل المركزي — كتلة مشتركة
+  ///   general_admin     الإدارة العامة — كتلة مشتركة
+  ///   branch_direct     مصروف فرع بعينه — لا يدخل الكتلة أبدًا
+  ///
+  /// كان يُقرأ من **فئة مركز التكلفة**، وهو خلطٌ لبُعدين: مركز التكلفة عند
+  /// المحاسب مشروعٌ تُقاس ربحيته (جمعية التبيان)، لا وعاءٌ لتصنيف الإنفاق.
+  /// وصار على الحساب: يُصنَّف «الإيجار» مرة واحدة فلا يُسأل عنه في كل قيد.
+  spendKind String?
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag String?
+
   @@index([type])
   @@index([parentId])
   @@index([isPostable, active])
 }
 
-/// مركز التكلفة = حساب + مشروع، كما في دفاتر فاست ترانس
+/// **مركز ربحية** — مشروع أو عميل مستمرّ يُرصد إيرادُه ومصروفُه ليُقاس هامشه
+/// وحده (Job Costing). أنشأه المحاسب لمشاريع كبيرة مستمرّة، وهذا استعمالٌ
+/// معياريّ. والاسم `CostCenter` بقي كما هو فلا يُكسر ما بُني عليه.
 model CostCenter {
   id      String  @id @default(cuid())
   name    String
@@ -1204,14 +1285,25 @@ model CostCenter {
 
   departments Department[]
 
-  /// **الفئة المحاسبية** — هي ما يحدّد أين يقع الجنيه (§٣ من مواصفة الفروع):
-  ///   production        الإنتاج والتشغيل — كتلة مشتركة ثابتة
-  ///   central_marketing التسويق المؤسسي — كتلة مشتركة
-  ///   general_admin     الإدارة العامة — كتلة مشتركة
-  ///   branch_direct     مصاريف فرع بعينه — لا تدخل الكتلة أبدًا
+  /// **متقاعد** — كان يحمل تصنيف الإنفاق، وانتقل إلى `Account.spendKind`.
+  /// يبقى العمود ولا يُقرأ: النشر يدفع القاعدة قبل أن يبني الكود، فحذفُ عمود
+  /// يُسقط النسخة العاملة قبل وصول بديلها.
   kind String @default("branch_direct")
 
+  /// الفرع الذي يتبعه المشروع — لنسبة إيراده ومصروفه إليه في تقارير الفروع
+  branch String?
+
+  /// العميل صاحب المشروع، إن كان مركز الربحية عميلًا بعينه
+  clientId String?
+
+  notes     String?
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag String?
+
   @@unique([name, project])
+  @@index([active])
 }
 
 /// رأس قيد اليومية — لا يُرحَّل إلا متوازنًا
@@ -1248,7 +1340,11 @@ model JournalEntry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lines JournalLine[]
+  lines     JournalLine[]
+  /// **وسمُ الترحيل** — «ledger-2022» أو «sales-2023». كل ما يدخل من ملفات
+  /// المكتب القديمة يحمله، فتُسحب سنةٌ كاملة بضغطة إن خرجت خطأً بلا أن تمسّ
+  /// ما أُدخل من الشاشات. وما يُدخله الموظف يبقى فارغًا.
+  importTag String?
 
   @@index([period, status])
   @@index([date])
@@ -1284,6 +1380,11 @@ model JournalLine {
   salesAdmin      User?       @relation("LineSalesAdmin", fields: [salesAdminId], references: [id], onDelete: SetNull)
   trafficSource   String?
   translationType String?
+
+  /// **تجاوزٌ على تصنيف الحساب** — يبقى فارغًا في الغالب الأعمّ فيُقرأ
+  /// التصنيف من الحساب. ويُملأ للحالة الشاذّة وحدها: إعلانٌ من حساب التسويق
+  /// المؤسسي وُجّه لمنطقة فرع بعينه.
+  spendKind String?
 
   memo      String?
   sortOrder Int     @default(0)
@@ -1709,6 +1810,9 @@ model StoredFile {
   uploadedBy   User?   @relation("FileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
 
   freelancerCv Freelancer? @relation("FreelancerCv")
+
+  companyCommercialReg Company? @relation("CompanyCommercialReg")
+  companyTaxCard       Company? @relation("CompanyTaxCard")
 
   createdAt DateTime @default(now())
 

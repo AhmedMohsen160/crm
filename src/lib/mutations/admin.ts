@@ -46,12 +46,14 @@ import { periodOf } from '@/lib/commission';
 import { allSettings } from '@/lib/reference';
 import {
   PROJECT_STATUSES,
+  REVENUE_FILTER,
   performerRole,
   allowedTransitions,
   revenueMonthKey,
   endOfToday,
   type ProjectStatus,
 } from '@/lib/projects';
+import { spreadYear, seasonalWeights, periodOfMonth } from '@/lib/targets';
 import { LEAD_STATUSES, LEAD_CLOSED_STATUSES, type LeadStatus } from '@/lib/constants';
 
 /**
@@ -438,6 +440,116 @@ export async function saveTargets(fd: FormData, admin: SessionUser) {
   }
 
   return `/settings/targets?period=${period}&saved=1`;
+}
+
+/** يكتب هدف (فرع، شهر) ولا يكتب ما لم يتغيّر — والتدقيق يسجّل الفرق وحده */
+async function writeTarget(adminId: string, branch: string, period: string, amount: number) {
+  const existing = await db.branchTarget.findUnique({
+    where: { branch_period: { branch, period } },
+  });
+  if (existing?.amount === amount) return;
+  await db.branchTarget.upsert({
+    where: { branch_period: { branch, period } },
+    update: { amount },
+    create: { branch, period, amount },
+  });
+  await auditDiff(
+    adminId,
+    'BranchTarget',
+    `${branch}:${period}`,
+    { amount: existing?.amount },
+    { amount }
+  );
+}
+
+/**
+ * حفظ السنة كاملة من الشاشة الواحدة.
+ *
+ * **ولا يُكتب إلا ما أُرسل**: الخانة الغائبة عن النموذج تُترك كما هي في
+ * القاعدة، فلا يمسح حفظُ صفحةٍ أهدافًا لا تعرضها.
+ */
+export async function saveYearTargets(fd: FormData, admin: SessionUser) {
+  if (!can(admin, 'canManageSettings')) {
+    throw new MutationError('ليس لديك صلاحية تعديل الأهداف');
+  }
+
+  const year = Number(str(fd, 'year'));
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    throw new MutationError('السنة غير صالحة');
+  }
+
+  let changed = 0;
+  for (const [key, raw] of fd.entries()) {
+    const match = key.match(/^t_(.+)_(\d{4}-\d{2})$/);
+    if (!match) continue;
+    const [, branch, period] = match;
+    if (!period.startsWith(String(year))) continue;
+
+    const amount = Number(String(raw).trim() || 0);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new MutationError(`هدف ${period} يجب أن يكون رقمًا موجبًا`);
+    }
+    await writeTarget(admin.id, branch, period, amount);
+    changed += 1;
+  }
+
+  return `/settings/targets/year?year=${year}&saved=${changed}`;
+}
+
+/**
+ * توزيع رقمٍ سنويّ على شهور السنة.
+ *
+ * **بالتساوي أو بموسمية السنة الماضية.** والموسمية تُقرأ من إيرادٍ فعليّ لا
+ * تُقدَّر: سنةٌ نصفها أصفار ليست نمطًا، فيُرَدّ إلى التساوي بدل أن يُثبَّت
+ * تشوّهٌ في تارجت السنة كلها.
+ *
+ * والقرش الأخير يُسوَّى على ديسمبر فيطابق المجموع الرقم المكتوب بالضبط.
+ */
+export async function spreadYearTargets(fd: FormData, admin: SessionUser) {
+  if (!can(admin, 'canManageSettings')) {
+    throw new MutationError('ليس لديك صلاحية تعديل الأهداف');
+  }
+
+  const year = Number(str(fd, 'year'));
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    throw new MutationError('السنة غير صالحة');
+  }
+  const annual = num(fd, 'annual');
+  if (annual === null || annual <= 0) throw new MutationError('اكتب رقمًا سنويًّا موجبًا');
+
+  const requested = str(fd, 'branch') ?? '__all__';
+  const seasonal = str(fd, 'mode') === 'seasonal';
+
+  const branches = await db.listItem.findMany({
+    where: { listName: 'branch' },
+    select: { value: true },
+  });
+  const targets =
+    requested === '__all__' ? branches.map((b) => b.value) : [requested];
+
+  const periods = Array.from({ length: 12 }, (_, m) => periodOfMonth(year, m));
+
+  for (const branch of targets) {
+    let weights: number[] | null = null;
+
+    if (seasonal) {
+      const lastYear = Array.from({ length: 12 }, (_, m) => periodOfMonth(year - 1, m));
+      const actual = await db.project.groupBy({
+        by: ['revenueMonth'],
+        where: { ...REVENUE_FILTER, branch, revenueMonth: { in: lastYear } },
+        _sum: { netTotal: true },
+      });
+      const byMonth = new Map(actual.map((a) => [a.revenueMonth ?? '', a._sum.netTotal ?? 0]));
+      weights = seasonalWeights(lastYear.map((p) => byMonth.get(p) ?? 0));
+    }
+
+    const months = spreadYear(annual, weights ?? undefined);
+    for (let m = 0; m < 12; m += 1) {
+      await writeTarget(admin.id, branch, periods[m], months[m]);
+    }
+  }
+
+  return `/settings/targets/year?year=${year}&spread=${targets.length}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
