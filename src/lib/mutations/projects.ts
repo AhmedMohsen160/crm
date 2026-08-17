@@ -111,6 +111,9 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
     delete (data as Partial<typeof data>).netTotal;
     delete (data as Partial<typeof data>).unitPrice;
     delete (data as Partial<typeof data>).deposit;
+    // والعملة معها: النموذج لا يعرضها لمن لا يرى السعر، فقيمتُها الافتراضية
+    // كانت تُعيد كل مشروعٍ بالريال إلى الجنيه
+    if (id) delete (data as Partial<typeof data>).currency;
   }
 
   // الخصم: يُقبل ممّن يملك صلاحيته، ويُوقف المشروع إن تجاوز حدّ دوره.
