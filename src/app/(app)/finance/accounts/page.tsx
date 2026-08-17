@@ -215,12 +215,14 @@ export default async function AccountsPage({
         </form>
       </section>
 
-      {/* ── مراكز التكلفة ────────────────────────────────────── */}
+      {/* ── مراكز الربحية ────────────────────────────────────── */}
       <section className="card card-pad">
-        <h2 className="mb-1 font-semibold text-slate-800">مراكز التكلفة</h2>
-        <p className="mb-4 text-xs text-slate-500">
-          مركز التكلفة = حساب + مشروع. عليه يقوم توزيع الإيراد والمصروف على
-          المشاريع الكبيرة في تقرير الشهر.
+        <h2 className="mb-1 font-semibold text-slate-800">مراكز الربحية</h2>
+        <p className="mb-4 text-xs leading-relaxed text-slate-500">
+          مشروعٌ أو عميلٌ مستمرّ يُرصد إيرادُه ومصروفُه ليُقاس <b>هامشه وحده</b> —
+          يُختار في سطر القيد، وتُقرأ نتيجته في «ربحية المشاريع». وهو{' '}
+          <b>غير تصنيف الإنفاق</b> (مركزي أم فرعي): ذاك على الحساب في «إعداد محاسبة
+          الفروع».
         </p>
 
         <div className="mb-4 flex flex-wrap gap-2">
@@ -243,8 +245,8 @@ export default async function AccountsPage({
           <input type="hidden" name="entity" value="costCenter" />
           <input type="hidden" name="id" value="" />
           <input type="hidden" name="back" value="/finance/accounts" />
-          <FormField label="الحساب" name="name" required />
-          <FormField label="المشروع" name="project" />
+          <FormField label="اسم المركز" name="name" required hint="اسم المشروع أو الجهة" />
+          <FormField label="وصف إضافي" name="project" />
           <div className="flex items-end gap-3 pb-1">
             <label className="flex items-center gap-2 text-sm">
               <input

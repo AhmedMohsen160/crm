@@ -3,7 +3,6 @@ import { db } from './db';
 import { allSettings } from './reference';
 import { absorptionRate, roiDirect, onTimeRate } from './costing';
 import { cac, roas, yoyGrowth, round2, monthRange, yearRange } from './accounting';
-import { isIncompleteYear } from './migration';
 import { REVENUE_FILTER } from './projects';
 
 /**
@@ -270,14 +269,22 @@ export async function channelPerformance(range: Range): Promise<ChannelRow[]> {
         entry: { status: 'posted', date: { gte: range.from, lt: range.to } },
         account: { expenseGroup: 'selling_marketing' },
       },
-      include: { account: { select: { systemKey: true } } },
+      include: { account: { select: { systemKey: true, adChannel: true } } },
     }),
   ]);
   void projects;
 
   const spendByChannel: Record<string, number> = {};
   for (const line of adSpend) {
-    const key = channelOfAccount(line.account.systemKey);
+    /**
+     * **والقناة المضبوطة من الشاشة تعلو على المفتاح النظاميّ.**
+     *
+     * كان الربط بالمفتاح وحده، وهو لحسابات الشجرة المزروعة. وحسابات
+     * المحاسب المرحَّلة من دفاتره بلا مفاتيح — «م. إشتركات في مجلات
+     * وإعلانات» و`Paid Advertising via Platforms Expenses` — فوقع إنفاق
+     * المكتب كلُّه في «غير منسوب» ولم تظهر تكلفةُ عميلٍ واحد.
+     */
+    const key = channelOfAccount(line.account.systemKey, line.account.adChannel);
     spendByChannel[key] = round2(
       (spendByChannel[key] ?? 0) + line.debitBase - line.creditBase
     );
@@ -462,42 +469,86 @@ export async function producerPerformance(range: Range) {
 
 // ── الاتجاه السنوي ─────────────────────────────────────────────
 
+/**
+ * إيراد سنةٍ حتى شهرٍ بعينه — أساس المقارنة بالمثل.
+ *
+ * السنة الجارية تُقاس حتى آخر شهرٍ فيه تسليم، فتُقارَن بالمدى نفسه من السنة
+ * قبلها. وسبعةُ أشهر أمام اثني عشر مقارنةٌ تُنقص الأداء بالثلث بلا سبب.
+ */
+async function revenueThrough(year: number, throughMonth: number): Promise<number> {
+  const start = new Date(Date.UTC(year, 0, 1));
+  const end = new Date(Date.UTC(year, throughMonth, 1));
+  const row = await db.project.aggregate({
+    where: { ...REVENUE_FILTER, deliveredAt: { gte: start, lt: end } },
+    _sum: { netTotal: true },
+  });
+  return round2(row._sum.netTotal ?? 0);
+}
+
 export async function yearlyTrend(years: number[]) {
-  return Promise.all(
+  const rows = await Promise.all(
     years.map(async (year) => {
       const { start, end } = yearRange(year);
-      const [projects, leads] = await Promise.all([
+      const [projects, leads, last] = await Promise.all([
         db.project.aggregate({
           where: { ...REVENUE_FILTER, deliveredAt: { gte: start, lt: end } },
           _sum: { netTotal: true, costTotal: true },
           _count: true,
         }),
         db.lead.count({ where: { createdAt: { gte: start, lt: end } } }),
+        // آخر شهرٍ فيه تسليم — منه تُقرأ تغطية السنة بلا تقويمٍ مفترَض
+        db.project.findFirst({
+          where: { ...REVENUE_FILTER, deliveredAt: { gte: start, lt: end } },
+          orderBy: { deliveredAt: 'desc' },
+          select: { deliveredAt: true },
+        }),
       ]);
 
       const revenue = round2(projects._sum.netTotal ?? 0);
       const cost = round2(projects._sum.costTotal ?? 0);
+      const throughMonth = last?.deliveredAt ? last.deliveredAt.getUTCMonth() + 1 : 0;
 
       return {
         year,
         revenue,
         cost,
         margin: round2(revenue - cost),
-        marginPct: revenue > 0 ? (revenue - cost) / revenue : 0,
+        /**
+         * **والهامش `null` حين لا تكلفة مسجَّلة** — لا مئةً بالمئة.
+         *
+         * تكلفةُ المشاريع المرحَّلة من ملفات المكتب غير مرصودة، وصفرُ تكلفةٍ
+         * يُنتج هامشًا كاملًا يبدو صحيحًا وهو أثرُ غياب لا أثرُ ربح.
+         */
+        marginPct: revenue > 0 && cost > 0 ? (revenue - cost) / revenue : null,
         projects: projects._count,
         leads,
         avgOrder: projects._count > 0 ? round2(revenue / projects._count) : 0,
-        // §١٤: ٢٠٢٤ ناقصة — لا تصلح خط أساس، ونقولها في التقرير نفسه
-        incomplete: isIncompleteYear(year),
+        /** عدد الشهور المغطّاة — تُعرض حين تنقص عن اثني عشر */
+        throughMonth,
       };
     })
-  ).then((rows) =>
-    rows.map((row, i) => ({
-      ...row,
-      growth: i > 0 ? yoyGrowth(row.revenue, rows[i - 1].revenue) : null,
-      // النمو المقارَن بسنة ناقصة لا معنى له
-      growthReliable: i > 0 ? !rows[i - 1].incomplete && !row.incomplete : false,
-    }))
+  );
+
+  return Promise.all(
+    rows.map(async (row, i) => {
+      const previous = i > 0 ? rows[i - 1] : null;
+      if (!previous) return { ...row, growth: null, comparedMonths: null };
+
+      /**
+       * **والمقارنة بالمثل**: سنةٌ مغطّاة سبعة أشهر تُقاس على سبعة أشهر من
+       * السنة قبلها لا على اثني عشر.
+       */
+      const span = Math.min(row.throughMonth || 12, previous.throughMonth || 12);
+      const base =
+        span >= 12 ? previous.revenue : await revenueThrough(previous.year, span);
+      const current = span >= 12 ? row.revenue : await revenueThrough(row.year, span);
+
+      return {
+        ...row,
+        growth: yoyGrowth(current, base),
+        comparedMonths: span >= 12 ? null : span,
+      };
+    })
   );
 }
 
