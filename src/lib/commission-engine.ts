@@ -3,6 +3,7 @@ import { db } from './db';
 import {
   computeCommission,
   attributeShares,
+  commissionableAmount,
   periodRange,
   type CommissionTier,
   type TierMode,
@@ -125,6 +126,9 @@ export async function computePeriod(period: string): Promise<PeriodSummary> {
       deposit: true,
       collectedAmount: true,
       ownerId: true,
+      // ما مسّته التسوية لا يُحسب عليه نسبةً — ولا كاملًا ولا موسَّعًا
+      importTag: true,
+      preSettleTotal: true,
       owner: { select: { id: true, name: true, reportsToId: true } },
     },
   });
@@ -170,8 +174,14 @@ export async function computePeriod(period: string): Promise<PeriodSummary> {
       id: p.id,
       code: p.code,
       title: p.title,
-      collected:
-        scheme?.basis === 'net' ? p.netTotal : Math.min(p.netTotal, p.deposit + p.collectedAmount),
+      collected: commissionableAmount({
+        amount:
+          scheme?.basis === 'net'
+            ? p.netTotal
+            : Math.min(p.netTotal, p.deposit + p.collectedAmount),
+        importTag: p.importTag,
+        preSettleTotal: p.preSettleTotal,
+      }),
       managerId,
       managerName: managerId ? (managerName.get(managerId) ?? null) : null,
     }));

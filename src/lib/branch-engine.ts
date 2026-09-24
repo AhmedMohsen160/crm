@@ -14,6 +14,7 @@ import {
   companyRollup,
   deriveStandardRate,
   deriveTargets,
+  effectiveSpendKind,
   isShared,
   safetyMargin,
   achievement,
@@ -97,8 +98,10 @@ async function readLedger(from: Date, to: Date): Promise<LedgerSlice> {
   const lines = await db.journalLine.findMany({
     where: { entry: { status: 'posted', date: { gte: from, lte: to } } },
     include: {
-      account: { select: { type: true, name: true, systemKey: true, isCash: true } },
-      costCenter: { select: { kind: true, name: true } },
+      account: {
+        select: { type: true, name: true, systemKey: true, isCash: true, spendKind: true },
+      },
+      costCenter: { select: { name: true } },
       entry: { select: { code: true } },
     },
   });
@@ -129,13 +132,14 @@ async function readLedger(from: Date, to: Date): Promise<LedgerSlice> {
     const value = line.debitBase - line.creditBase;
     if (value === 0) continue;
 
-    const kind = line.costCenter?.kind ?? null;
+    // التصنيف من الحساب، والسطر يتجاوزه في الحالة الشاذّة وحدها
+    const kind = effectiveSpendKind(line.spendKind, line.account.spendKind);
 
     if (!kind) {
       slice.misclassified.push({
         entry: line.entry.code ?? '—',
         account: line.account.name,
-        reason: 'بلا مركز تكلفة — لا يُعرف أذاتيّ هو أم مشترك',
+        reason: 'حساب بلا تصنيف إنفاق — لا يُعرف أذاتيّ هو أم مشترك',
         amount: value,
       });
       continue;

@@ -193,6 +193,51 @@ export function projectAlert(project: AlertInput): string {
 // ── مشتقات تُحسب عند القراءة لا تُخزَّن ────────────────────────
 
 /** الرصيد = الإجمالي − المقدم − المحصَّل. مشتق بسيط، فلا يُخزَّن */
+/**
+ * هل يفتح هذا المستخدم صفحةَ هذا المشروع؟
+ *
+ * **قاعدةٌ واحدة تحكم القائمة والصفحة معًا.** كانت الصفحة تفحص
+ * `canViewAllLeads` والقائمة تفحص `canAssignProduction` — فيرى مدير المشاريع
+ * المشروع في القائمة ويُسنده، ثم يضغط ليبدأ التنفيذ فتقول له الصفحة
+ * «الصفحة غير موجودة». وهو مأذونٌ يبحث عمّا لا يجده.
+ *
+ * وثلاثة أبواب:
+ *   · **من يرى الكلّ** — بصلاحية الليدز الواسعة أو بصلاحية الإسناد.
+ *   · **ومالكُ المشروع** أو أحدُ فريقه، بنطاق الرؤية.
+ *   · **ومن أُسند إليه المشروع نفسه** — منفِّذًا أو مراجعًا أو مديرَ مشروعٍ
+ *     له. **والإسنادُ بلا وصولٍ طريقٌ مسدود**: من كُلِّف بالعمل يفتح ما كُلِّف
+ *     به ولو لم يملك صلاحيةً واسعة.
+ *
+ * والحقولُ المالية تبقى محجوبةً بصلاحياتها هي (`canViewSellPrice`
+ * و`canViewCostIndicator`) — هذا بابُ الصفحة لا بابُ أرقامها.
+ */
+export function canOpenProject(
+  actor: {
+    id: string;
+    /** true إن كان يرى كل المشاريع — بالإسناد أو بالرؤية الواسعة */
+    seesAll: boolean;
+    /** معرّفات من تدخل سجلاتهم في نطاق رؤيته — هو وفريقه */
+    scopeIds?: string[] | null;
+  },
+  project: {
+    ownerId?: string | null;
+    projectManagerId?: string | null;
+    primaryProducerId?: string | null;
+    reviewerId?: string | null;
+  }
+): boolean {
+  if (actor.seesAll) return true;
+
+  const scope = actor.scopeIds ?? [actor.id];
+  if (project.ownerId && scope.includes(project.ownerId)) return true;
+
+  return (
+    project.projectManagerId === actor.id ||
+    project.primaryProducerId === actor.id ||
+    project.reviewerId === actor.id
+  );
+}
+
 export function projectBalance(project: {
   netTotal: number;
   deposit: number;

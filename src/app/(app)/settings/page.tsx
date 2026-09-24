@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   DatabaseBackup,
   Clock,
+  History,
 } from 'lucide-react';
 import { requireUser, can } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -123,10 +124,22 @@ export default async function SettingsPage() {
       permission: 'canManageSettings',
     },
     {
+      href: '/settings/import/history',
+      icon: History,
+      title: 'ترحيل تاريخ المكتب — ارفع ملفات إكسل',
+      description:
+        'دفاتر المحاسب السنوية وشيت المبيعات: تُرفع ملفًّا كما هي، ويسوّي النظام بينها',
+      // **وشرطُ البطاقة شرطُ الصفحة نفسها** — بطاقةٌ أضيقُ من صفحتها تُخفي
+      // عمّن يملك فتحها، فيبحث عن رابطٍ لا يجده وهو مأذون
+      permission: 'canManageSettings',
+    },
+    {
+      // **الاسمان كانا متشابهين فوقع الالتباس**: فُصلا بما يفعله كلٌّ منهما
+      // فعلًا — رفعُ ملفّ هناك، ولصقُ صفوفٍ هنا.
       href: '/settings/import',
       icon: Upload,
-      title: 'ترحيل الملفات القديمة',
-      description: 'سجل الليدز وملف المبيعات — لا يُحذف صف ولا يُخمَّن',
+      title: 'ترحيل باللصق — انسخ صفوفًا',
+      description: 'لدفعةٍ صغيرة تُلصق باليد في مربّع نصّ — لا لملفات المكتب الكاملة',
       permission: 'canManageSettings',
     },
     {

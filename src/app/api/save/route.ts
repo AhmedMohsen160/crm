@@ -33,7 +33,8 @@ import {
   deleteThread,
   saveBranch,
   seedBranches,
-  saveCostCenterKinds,
+  saveSpendKinds,
+  suggestSpendKinds,
   saveAccountCashFlags,
   saveAllocationRate,
   deriveAllocationRate,
@@ -55,6 +56,13 @@ import {
   runNotifications,
   importLegacySheet,
   importAccountingLedger,
+  importHistoryLedger,
+  importHistorySales,
+  importHistoryLeads,
+  runHistorySettlement,
+  rollbackImportTag,
+  wipeDemoRecords,
+  purgeClientRecord,
   resolveMigrationRow,
   saveAccount,
   saveCostCenter,
@@ -63,10 +71,12 @@ import {
   closeFiscalPeriod,
   saveBudget,
   saveBudgetLines,
+  saveBudgetGrid,
   saveFixedAsset,
   generateDraftEntries,
   fillBudgetFromHistory,
   saveAccountBehaviour,
+  saveAdChannels,
   saveBudgetPlanSettings,
   saveCommissionScheme,
   saveCommissionTier,
@@ -80,6 +90,8 @@ import {
   saveSettings,
   markErrorsSeen,
   saveTargets,
+  saveYearTargets,
+  spreadYearTargets,
   changeOwnPassword,
 } from '@/lib/mutations';
 
@@ -216,8 +228,11 @@ export async function POST(request: NextRequest) {
       case 'branch.seed':
         destination = await seedBranches(fd, user);
         break;
-      case 'costCenter.kinds':
-        destination = await saveCostCenterKinds(fd, user);
+      case 'account.spendKinds':
+        destination = await saveSpendKinds(fd, user);
+        break;
+      case 'account.suggestSpendKinds':
+        destination = await suggestSpendKinds(fd, user);
         break;
       case 'account.cash':
         destination = await saveAccountCashFlags(fd, user);
@@ -287,6 +302,29 @@ export async function POST(request: NextRequest) {
       case 'legacy.import':
         destination = await importLegacySheet(fd, user);
         break;
+
+      // ترحيل تاريخ المكتب — الدفتر ثم الشيت ثم التسوية فوقهما
+      case 'history.ledger':
+        destination = await importHistoryLedger(fd, user);
+        break;
+      case 'history.sales':
+        destination = await importHistorySales(fd, user);
+        break;
+      case 'history.leads':
+        destination = await importHistoryLeads(fd, user);
+        break;
+      case 'history.settle':
+        destination = await runHistorySettlement(fd, user);
+        break;
+      case 'history.rollback':
+        destination = await rollbackImportTag(fd, user);
+        break;
+      case 'history.reset':
+        destination = await wipeDemoRecords(fd, user);
+        break;
+      case 'client.purge':
+        destination = await purgeClientRecord(fd, user);
+        break;
       case 'migrationReview':
         destination = await resolveMigrationRow(fd, user, id);
         break;
@@ -308,6 +346,9 @@ export async function POST(request: NextRequest) {
       case 'budget':
         destination = await saveBudget(fd, user, id);
         break;
+      case 'budget.grid':
+        destination = await saveBudgetGrid(fd, user);
+        break;
       case 'budgetLines':
         destination = await saveBudgetLines(fd, user);
         break;
@@ -319,6 +360,10 @@ export async function POST(request: NextRequest) {
         break;
       case 'budget.behaviour':
         destination = await saveAccountBehaviour(fd, user);
+        break;
+      // قنوات الإنفاق التسويقي — تُضبط مرة واحدة على الحساب
+      case 'account.adChannel':
+        destination = await saveAdChannels(fd, user);
         break;
       case 'budget.plan':
         destination = await saveBudgetPlanSettings(fd, user);
@@ -358,6 +403,12 @@ export async function POST(request: NextRequest) {
         break;
       case 'errors.seen':
         destination = await markErrorsSeen(fd, user);
+        break;
+      case 'targets.year':
+        destination = await saveYearTargets(fd, user);
+        break;
+      case 'targets.spread':
+        destination = await spreadYearTargets(fd, user);
         break;
       case 'targets':
         destination = await saveTargets(fd, user);

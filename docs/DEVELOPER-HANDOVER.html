@@ -1,0 +1,709 @@
+<title>دليل المبرمج ومستند التسليم — فاست ترانس CRM</title>
+<style>
+  /* ــــ الهوية من ملفات الشعار الرسمية ــــ */
+  :root {
+    color-scheme: light dark;
+
+    --navy:      #242E5B;
+    --blue:      #2B57A6;
+    --marine:    #5BB5E8;
+    --lime:      #C4D82E;
+
+    /* رماديّات مائلة إلى الكحليّ — مختارة لا موروثة */
+    --ground:    #FBFAF8;
+    --surface:   #FFFFFF;
+    --sunken:    #F3F4F8;
+    --line:      #DFE1EC;
+    --line-soft: #ECEDF4;
+    --ink:       #1B2036;
+    --ink-2:     #4A5169;
+    --ink-3:     #767D96;
+
+    --ok:        #167A5B;
+    --ok-bg:     #E8F5F0;
+    --wait:      #9A6410;
+    --wait-bg:   #FBF1DF;
+    --next:      #2B57A6;
+    --next-bg:   #E9EFF9;
+
+    --measure: 68ch;
+    --r: 10px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:    #12141F;
+      --surface:   #1A1D2B;
+      --sunken:    #222639;
+      --line:      #333853;
+      --line-soft: #282C40;
+      --ink:       #EDEFF6;
+      --ink-2:     #B3B9CE;
+      --ink-3:     #848BA6;
+
+      --navy:      #8E9AD4;
+      --blue:      #7EA3E0;
+      --marine:    #5BB5E8;
+      --lime:      #C4D82E;
+
+      --ok:        #5FCFA8;
+      --ok-bg:     #122E27;
+      --wait:      #E5B463;
+      --wait-bg:   #33270F;
+      --next:      #8FB4EC;
+      --next-bg:   #17223A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:    #12141F;
+    --surface:   #1A1D2B;
+    --sunken:    #222639;
+    --line:      #333853;
+    --line-soft: #282C40;
+    --ink:       #EDEFF6;
+    --ink-2:     #B3B9CE;
+    --ink-3:     #848BA6;
+
+    --navy:      #8E9AD4;
+    --blue:      #7EA3E0;
+    --marine:    #5BB5E8;
+    --lime:      #C4D82E;
+
+    --ok:        #5FCFA8;
+    --ok-bg:     #122E27;
+    --wait:      #E5B463;
+    --wait-bg:   #33270F;
+    --next:      #8FB4EC;
+    --next-bg:   #17223A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+    direction: rtl;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: system-ui, "Segoe UI", Tahoma, "Noto Sans Arabic", "Dubai", sans-serif;
+    font-size: 16px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 60rem; margin: 0 auto; }
+
+  /* ــــ الترويسة ــــ */
+  header.top {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 3.5rem 0 2rem;
+    border-bottom: 3px solid var(--navy);
+    margin-bottom: 2.5rem;
+  }
+  .eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 600;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.75rem, 4.5vw, 2.6rem);
+    line-height: 1.25;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    color: var(--navy);
+  }
+  .lede {
+    margin: 0;
+    max-width: var(--measure);
+    font-size: 1.05rem;
+    color: var(--ink-2);
+  }
+
+  /* ــــ الأقسام ــــ */
+  section { margin-bottom: 3.5rem; }
+
+  h2 {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    margin: 0 0 0.4rem;
+    font-size: clamp(1.3rem, 3vw, 1.7rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  h2 .num {
+    flex: none;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--surface);
+    background: var(--navy);
+    border-radius: 50%;
+    width: 1.9rem;
+    height: 1.9rem;
+    display: grid;
+    place-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+  h3 {
+    margin: 2.25rem 0 0.5rem;
+    font-size: 1.06rem;
+    font-weight: 700;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .sub {
+    margin: 0 0 1.5rem;
+    max-width: var(--measure);
+    color: var(--ink-2);
+  }
+  p { max-width: var(--measure); }
+
+  /* ــــ الجداول ــــ */
+  .scroll {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--surface);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    min-width: 42rem;
+  }
+  thead th {
+    background: var(--sunken);
+    text-align: right;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 0.8rem 0.9rem;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  .num-cell {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: left;
+    direction: ltr;
+  }
+
+  /* ــــ الشارات ــــ */
+  .tag {
+    display: inline-block;
+    white-space: nowrap;
+    font-size: 0.73rem;
+    font-weight: 700;
+    padding: 0.18rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+  }
+  .t-ok   { color: var(--ok);   background: var(--ok-bg);   border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+  .t-wait { color: var(--wait); background: var(--wait-bg); border-color: color-mix(in srgb, var(--wait) 30%, transparent); }
+  .t-next { color: var(--next); background: var(--next-bg); border-color: color-mix(in srgb, var(--next) 30%, transparent); }
+
+  /* ــــ بطاقة سؤال يحتاج قرارًا ــــ */
+  .decide {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-right: 4px solid var(--lime);
+    border-radius: var(--r);
+    padding: 1.15rem 1.25rem;
+    margin: 1.25rem 0;
+  }
+  .decide h4 {
+    margin: 0 0 0.4rem;
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .decide p { margin: 0.4rem 0 0; font-size: 0.93rem; color: var(--ink-2); }
+  .decide ul { margin: 0.5rem 0 0; padding-inline-start: 1.1rem; font-size: 0.93rem; color: var(--ink-2); }
+  .decide li { margin-bottom: 0.3rem; }
+
+  /* ــــ بطاقات الأرقام ــــ */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.9rem;
+    margin: 1.5rem 0;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 0.95rem 1rem;
+  }
+  .stat .k {
+    font-size: 0.75rem;
+    color: var(--ink-3);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.3rem;
+  }
+  .stat .v {
+    font-size: 1.5rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--navy);
+    line-height: 1.15;
+  }
+  .stat .n { font-size: 0.78rem; color: var(--ink-3); display: block; margin-top: 0.2rem; }
+
+  /* ــــ شريط القناة ــــ */
+  .chan { display: flex; flex-direction: column; gap: 0.85rem; margin: 1.4rem 0; }
+  .chan-row { display: grid; grid-template-columns: 8.5rem 1fr auto; gap: 0.75rem; align-items: center; }
+  .chan-name { font-weight: 700; font-size: 0.9rem; }
+  .bar {
+    height: 0.62rem;
+    border-radius: 999px;
+    background: var(--sunken);
+    overflow: hidden;
+  }
+  .bar > span { display: block; height: 100%; border-radius: 999px; }
+  .chan-val {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--ink-2);
+  }
+  @media (max-width: 34rem) {
+    .chan-row { grid-template-columns: 1fr auto; }
+    .bar { grid-column: 1 / -1; }
+  }
+
+  /* ــــ لوحة الأدوار ــــ */
+  .roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin-top: 1.4rem; }
+  .role {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 1.1rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .role .who { font-weight: 800; font-size: 1rem; color: var(--navy); }
+  .role .q { font-size: 0.85rem; color: var(--ink-3); font-style: italic; }
+  .role ul { margin: 0; padding-inline-start: 1.05rem; font-size: 0.88rem; color: var(--ink-2); }
+  .role li { margin-bottom: 0.22rem; }
+  .role .state { margin-top: auto; padding-top: 0.5rem; }
+
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--sunken);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    direction: ltr;
+    display: inline-block;
+  }
+  strong { font-weight: 700; color: var(--ink); }
+  a { color: var(--blue); }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--marine); outline-offset: 2px; }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    max-width: var(--measure);
+  }
+</style>
+<style>
+  pre { background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r);
+        padding: 1rem 1.15rem; overflow-x: auto; direction: ltr; text-align: left;
+        font-size: 0.82rem; line-height: 1.6; }
+  pre code { background: none; padding: 0; display: block; }
+  h1 { margin: 3rem 0 0.5rem; font-size: clamp(1.7rem, 4.5vw, 2.5rem); color: var(--navy);
+       font-weight: 800; line-height: 1.25; }
+  h2 { margin: 3rem 0 0.75rem; padding-top: 1.5rem; border-top: 2px solid var(--line); }
+  h3 { margin: 2rem 0 0.5rem; }
+  hr { border: 0; height: 0; margin: 2.5rem 0 0; }
+  ul, ol { max-width: var(--measure); padding-inline-start: 1.3rem; }
+  li { margin-bottom: 0.4rem; }
+  blockquote { margin: 1.25rem 0; padding: 0.9rem 1.15rem; background: var(--surface);
+               border: 1px solid var(--line); border-right: 4px solid var(--lime);
+               border-radius: var(--r); max-width: var(--measure); color: var(--ink-2);
+               font-size: 0.95rem; }
+  .scroll { margin: 1.25rem 0; }
+  table { min-width: 0; }
+  td, th { font-size: 0.86rem; }
+</style>
+<div class="wrap">
+<h1>فاست ترانس CRM — دليل المبرمج ومستند التسليم</h1>
+<blockquote><strong>لمن هذا المستند:</strong> للمبرمج الذي سيتولّى المنصة. يشرح ما بُني ولماذا بُني هكذا، وما يجب ألّا يُكسر. وفي آخره <strong>قائمة استلام</strong> يمشي عليها بندًا بندًا قبل أن يعتمد المنصة.  آخر تحديث: ٢٤ سبتمبر ٢٠٢٦ · المستودع: <code>AhmedMohsen160/crm</code> · الموقع الحيّ: <code>www.fastrans-crm.com</code></blockquote>
+<hr>
+<h2>١ · ما هذه المنصة ولمن</h2>
+<p><strong>نظام تشغيل متكامل لمكتب فاست ترانس للترجمة المعتمدة — وليس CRM عامًّا.</strong></p>
+<p>كل شاشة وكل معادلة فيه مشتقّة من تدقيق بيانات المكتب الفعلية لا من قالب جاهز. فمن يدخل الكود باحثًا عن <code>Deals</code> و<code>Pipelines</code> سيجد بدلها «مشاريع ترجمة» و«خطوات تنفيذ» و«صفحات موزونة».</p>
+<h3>المكتب</h3>
+<div class="scroll"><table><thead><tr><th>الفروع</th><th>ستة — المقطم · المهندسين · الإسكندرية · مدينة نصر · الرياض · بريدة</th></tr></thead><tbody><tr><td>الموظفون الداخليون</td><td>خمسة عشر تقريبًا</td></tr><tr><td>المترجمون الخارجيون</td><td>١٬٠٦٧ فريلانسر في القاعدة</td></tr><tr><td>العملة</td><td>الجنيه المصري أساسًا — وفرع الرياض يبيع بالريال</td></tr><tr><td>المالك</td><td>أحمد محسن — <strong>غير مبرمج</strong></td></tr></tbody></table></div>
+<h3>خطّا عمل في نظام واحد</h3>
+<p><strong>(أ) ترجمة معتمدة لمستندات شخصية</strong> — أغلب الحجم. طلبات صغيرة متكرّرة، وسيط الطلب خمسمئة جنيه تقريبًا. عملُ كاونتر لا مشروع: العميل يدخل الفرع بشهادة ميلاد ويخرج بعد ساعتين.</p>
+<p><strong>(ب) ترجمة متخصّصة وتوطين للشركات</strong> — قانوني وطبي ومالي وتقني. مشاريع بعشرات الآلاف، خطوات تنفيذ متعدّدة، مراجعة وتدقيق ونشر مكتبي.</p>
+<blockquote><strong>القاعدة التي حكمت التصميم كلّه:</strong> نفس الشاشات تخدم الخطّين، بلا أن تُبطئ متطلباتُ (ب) تشغيلَ (أ). فشاشة «ليد جديد» تُنجَز في خمس عشرة ثانية للكاونتر، وتحتمل في الوقت نفسه مشروعًا بخمس خطوات ومراجعَين.</blockquote>
+<h3>خمسة تعرفها قبل أن تلمس سطرًا</h3>
+<ol><li><strong>المالك غير مبرمج.</strong> كل رسالة خطأ وكل تلميح في الشاشة مكتوب بلغة العمل لا بلغة الكود.</li><li><strong>الواجهة عربية RTL وحدها</strong> — بلا لغة ثانية ولا مبدّل لغة. المفاتيح البرمجية إنجليزية، والتعليقات عربية تشرح <strong>لماذا</strong> لا ماذا.</li><li><strong>النظام يعمل كاملًا ولو تعطّلت الجافاسكربت</strong> — نتيجة مقصودة لا صدفة.</li><li><strong>مستندات المستودع مُلزِمة</strong> وتعلو على أي اجتهاد: <code>docs/SPEC.md</code> و <code>docs/FINANCE-SPEC.md</code> و<code>docs/BRANCH-SPEC.md</code> و<code>COMMISSION-SPEC.md</code>. وإن سكتت المواصفة أو تعارضت — <strong>توقّف واسأل أحمد، ولا تجتهد</strong>.</li><li><strong><code>CLAUDE.md</code> في جذر المستودع هو ذاكرة المشروع</strong> — كل قرار محسوم بسببه، وكل خطأ وقع مرة بحارسه. <strong>اقرأه كاملًا قبل أول تعديل.</strong></li></ol>
+<hr>
+<h2>٢ · الحالة اليوم — بالأرقام</h2>
+<p>المنصة <strong>مكتملة وتعمل على الهواء</strong>، ومرّت بتسع عشرة مرحلة تطوير. وليست مشروعًا تجريبيًّا: داخلها خمس سنوات من بيانات المكتب الحقيقية مُطابَقة بالقرش على دفاتر المحاسب.</p>
+<h3>الكود</h3>
+<div class="scroll"><table><thead><tr><th>جداول قاعدة البيانات</th><th>٥٦ جدولًا · ٩٧ فهرسًا</th></tr></thead><tbody><tr><td>الشاشات</td><td>١٠٨ شاشة</td></tr><tr><td>مسارات API</td><td>١٢ مسارًا</td></tr><tr><td>وحدات القواعد الخالصة</td><td>٦١ ملفًا في <code>src/lib/</code></td></tr><tr><td>المحرّكات (server-only)</td><td>١٨ ملفًا <code>*-engine.ts</code></td></tr><tr><td>وحدات الحفظ</td><td>١٩ ملفًا في <code>src/lib/mutations/</code></td></tr><tr><td>الصلاحيات · الأدوار</td><td>٢٧ صلاحية · ١٠ أدوار افتراضية</td></tr><tr><td>الاختبارات</td><td><strong>١٬٧٤٣ وحدة</strong> (٣٩ ملفًا) + <strong>٣٤٠ e2e</strong></td></tr></tbody></table></div>
+<h3>البيانات المُرحَّلة (يناير ٢٠٢٢ – ٣١ يوليو ٢٠٢٦)</h3>
+<div class="scroll"><table><thead><tr><th>عملاء</th><th>٢٬٤٨٠</th></tr></thead><tbody><tr><td>ليدز (استفسارات)</td><td>٢٬٣٠٩</td></tr><tr><td>مشاريع</td><td>٢٬٧٩٤</td></tr><tr><td>قيود يومية</td><td>٨٬٨٤٨ قيدًا · ٢٠٬٩١٢ سطرًا</td></tr><tr><td>إجمالي الإيراد المرحَّل</td><td>١٧٬٠٨٤٬٧٤٧ جنيه</td></tr></tbody></table></div>
+<h3>مطابقة السنوات الخمس على دفتر المحاسب</h3>
+<p>هذا الجدول <strong>أهمّ رقم في المنصة كلّها</strong>: إيراد النظام مقابل ما كتبه المحاسب بخطّه في ورقة ميزان المراجعة.</p>
+<div class="scroll"><table><thead><tr><th>السنة</th><th>إيراد المحاسب</th><th>إيراد النظام</th><th>صافي المحاسب</th><th>صافي النظام</th></tr></thead><tbody><tr><td>٢٠٢٢</td><td>٣٩٩٬٦٢١٫٣٧</td><td>٣٩٩٬٦٢١٫٣٧</td><td>−٤٠٥٬٦٧٩٫٢٦</td><td>−٤٠٥٬٦٧٩٫٢٦</td></tr><tr><td>٢٠٢٣</td><td>٣٬٢٣٤٬٣٧٣٫٣٥</td><td>٣٬٢٣٤٬٣٧٣٫٣٥</td><td>٩٨٣٬٢٤٠٫٦٨</td><td>٩٨٣٬٢٤٠٫٧٠</td></tr><tr><td>٢٠٢٤</td><td>٥٬٤٤٩٬١٦٠٫٤٥</td><td>٥٬٤٤٩٬١٦٠٫٥٠</td><td>١٬٣٥٨٬٨٩٣٫٤٧</td><td>١٬٣٥٨٬٨٩٣٫٥١</td></tr><tr><td>٢٠٢٥</td><td>٤٬٧١٩٬٦٤٥٫٧٠</td><td>٤٬٧١٩٬٦٤٥٫٦٩</td><td>٣١٧٬٧٢٧٫٠٥</td><td>٣١٧٬٧٢٧٫٠١</td></tr><tr><td>٢٠٢٦ (حتى ٣١/٧)</td><td>٣٬٢٨١٬٩٤٦٫٦٧</td><td>٣٬٢٨١٬٩٤٦٫٦٧</td><td>—</td><td>٦٦٨٬٥٠٢٫٧٧</td></tr></tbody></table></div>
+<p><strong>أقصى فرق أربعة قروش</strong> — تراكمُ تقريب عبر ثمانية آلاف قيد. والموازين الخمسة متوازنة، والميزانيات الخمس متوازنة.</p>
+<blockquote><strong>ما يعنيه هذا لك:</strong> أي تغيير يمسّ الدفتر أو التسوية أو الاعتراف بالإيراد <strong>يجب أن يُعاد بعده هذا الجدول</strong>. وإن اختلف رقم بأكثر من قروش قليلة، فقد كُسر شيء — ولو نجحت الاختبارات.</blockquote>
+<hr>
+<h2>٣ · البنية التقنية — وقرارات ستبدو غريبة</h2>
+<h3>المكدّس</h3>
+<div class="scroll"><table><thead><tr><th>الطبقة</th><th>الأداة</th><th>النسخة</th></tr></thead><tbody><tr><td>الإطار</td><td>Next.js App Router</td><td>^15.5</td></tr><tr><td>الواجهة</td><td>React</td><td>^19.2</td></tr><tr><td>القاعدة</td><td>Prisma ORM</td><td>^6.3</td></tr><tr><td>القاعدة محليًا</td><td>SQLite (<code>prisma/dev.db</code>)</td><td>—</td></tr><tr><td>القاعدة إنتاجًا</td><td>PostgreSQL</td><td>—</td></tr><tr><td>الأنماط</td><td>Tailwind CSS</td><td>^3.4</td></tr><tr><td>الجلسات</td><td><code>jose</code> (JWT) + <code>bcryptjs</code></td><td>—</td></tr><tr><td>اللغة</td><td>TypeScript صارم</td><td>^5.7</td></tr><tr><td>النشر</td><td>Vercel من فرع <code>main</code></td><td>—</td></tr></tbody></table></div>
+<h3>ثلاثة قرارات ستريد عكسها — ولا تفعل</h3>
+<p><strong>١) لا Server Actions.</strong> كل نموذج هنا <code>&lt;form method=&quot;post&quot; action=&quot;/api/save&quot;&gt;</code> ثم تحويل 303. وليس هذا جهلًا بالأداة: جُرّبت فكانت <strong>تتعطّل نحو نصف المرات</strong> على هذا النشر — يُحفظ السجل ولا تنتقل الواجهة، فيظنّ الموظف أن الحفظ فشل فيعيده مرتين.</p>
+<p><strong>٢) لا <code>next/link</code>.</strong> التنقّل بـ<code>&lt;a&gt;</code> عادي ملفوف في <code>src/components/link.tsx</code>. والسبب نفسه: التنقل كان يفشل <strong>مرة من كل ثلاث</strong>.</p>
+<p><strong>٣) الفصل الصارم بين القواعد الخالصة والمحرّكات.</strong> <code>src/lib/*.ts</code> بلا قاعدة بيانات ولا شبكة، و<code>*-engine.ts</code> وحدها تلمسهما. وبهذا تعمل <strong>١٬٧٤٣ اختبارًا في ثوانٍ</strong> بلا قاعدة بيانات.</p>
+<blockquote><strong>النتيجة الجانبية المقصودة:</strong> النظام يعمل كاملًا ولو تعطّلت الجافاسكربت. وهذا يهمّ فعلًا: أجهزة الفروع قديمة والشبكة متقطّعة.</blockquote>
+<h3>البوابة التي يمرّ منها كل شيء</h3>
+<pre><code>
+نموذج HTML (method=post)
+        ↓
+   /api/save  — ٩٠ كيانًا في موجّه واحد
+        ↓
+ mutations/*.ts — الصلاحية + التحقّق + سجل التدقيق
+        ↓
+   lib/*.ts (القاعدة الخالصة)  +  *-engine.ts (الكتابة)
+        ↓
+      Prisma  →  تحويل ٣٠٣
+</code></pre>
+<p>والزرّ الذي يُبدّل صفًّا واحدًا (ترحيل قيد، تعليم مهمة) يطلب <code>json=1</code> من <strong>نفس البوابة</strong> لا من مسار آخر — فتبقى القاعدة والصلاحية والتدقيق في مكان واحد، وتبقى الشاشة عاملة بلا جافاسكربت.</p>
+<h3>مصائد تسمية ستقع فيها</h3>
+<p>لا تُسمِّ حقل نموذج <code>entity</code> ولا <code>id</code> ولا <code>back</code> — كلها تصطدم بموجّه <code>/api/save</code> فيُكتب السجل في المكان الخطأ. وقعت هذه فعلًا مع <code>entity</code> في العرض الاحترافي، وصار <code>contractingEntity</code>.</p>
+<hr>
+<h2>٤ · خريطة الكود</h2>
+<pre><code>
+src/lib/*.ts            قواعد خالصة — بلا قاعدة ولا شبكة  ★ كل منطق العمل هنا
+src/lib/*-engine.ts     محرّكات server-only — تلمس القاعدة
+src/lib/ledger.ts       دفتر الأستاذ
+src/lib/analytics.ts    التحليلات
+src/lib/mutations/      ١٩ وحدة بالمجال + base.ts + index.ts
+src/app/api/save        بوابة الحفظ الموحّدة
+src/app/api/mutate      تعديلات سريعة
+src/app/(app)/**        ١٠٨ شاشة — عرض فقط، لا حساب
+tests/*.mjs             ٣٩ ملف اختبار وحدة + e2e.mjs
+prisma/schema.prisma    ٥٦ جدولًا
+prisma/migrations/      ملفات الترحيل بلهجة PostgreSQL وحدها
+scripts/bootstrap.ts    يزرع الأدوار والفريق وشجرة الحسابات
+docs/                   المواصفات المُلزِمة
+CLAUDE.md               ذاكرة المشروع — اقرأه أولًا
+</code></pre>
+<h3>المعيار الحاكم</h3>
+<blockquote><strong>إن لم تستطع اختبار الكود بلا قاعدة بيانات، فهو في الطبقة الخطأ.</strong></blockquote>
+<p>المعادلة تسكن <code>src/lib/</code>، ومن يقرأ القاعدة ويكتب فيها يسكن <code>*-engine.ts</code>. والشاشات <strong>تعرض ولا تحسب</strong> — فإن وجدت معادلة في <code>page.tsx</code> فهي دينٌ يجب نقله.</p>
+<h3>أين تضيف ميزة جديدة</h3>
+<ol><li>القاعدة الخالصة في ملف جديد في <code>src/lib/</code>، ومعها <strong>اختبارها في نفس الكوميت</strong>.</li><li>المحرّك في <code>*-engine.ts</code> إن احتاج القاعدة.</li><li><strong>ملف جديد في <code>mutations/</code></strong> — لا إضافة إلى ملف مجال آخر.</li><li>تصديره من <code>mutations/index.ts</code>، والاستيراد دائمًا من <code>@/lib/mutations</code>.</li><li>حالة في موجّه <code>/api/save</code>.</li><li>الشاشة.</li></ol>
+<h3>الهوية البصرية</h3>
+<p>أربعة ألوان <strong>مقروءة من ملفات الشعار الرسمية لا مقدَّرة بالعين</strong>: الكحلي <code>#242E5B</code> (<code>brand-600</code>) · الأزرق <code>#2B57A6</code> · السماوي <code>#5BB5E8</code> · الليموني <code>#C4D82E</code>.</p>
+<p>والعلامة <strong>رأسية بنسبة ١٢٠:٢٠٦</strong> — لا تُرسم في مربّع، وعرضها يُشتقّ من ارتفاعها في كل موضع.</p>
+<hr>
+<h2>٥ · الأدوار العشرة</h2>
+<p><strong>القاعدة قبل الجدول:</strong> الأدوار <strong>بيانات في القاعدة تُنشَأ من الشاشة بلا نشر</strong>، والعشرة أدناه قيمة ابتدائية يزرعها <code>bootstrap</code>. فلا تكتب أبدًا <code>user.roleName === &#x27;sales_admin&#x27;</code> — افحص الصلاحية: <code>can(user, &#x27;canViewSellPrice&#x27;)</code>.</p>
+<div class="scroll"><table><thead><tr><th>الدور</th><th>المفتاح</th><th>صلاحيات</th><th>حد الخصم</th><th>من يشغله اليوم</th></tr></thead><tbody><tr><td>المالك الرئيسي</td><td><code>owner</code></td><td>٢٧/٢٧</td><td>١٠٠٪</td><td>أحمد محسن</td></tr><tr><td>مدير النظام</td><td><code>system_admin</code></td><td>٢٧/٢٧</td><td>١٠٠٪</td><td>حساب التجهيز</td></tr><tr><td>المدير التنفيذي</td><td><code>executive_director</code></td><td>٢٤/٢٧</td><td>١٠٠٪</td><td>—</td></tr><tr><td>الإدارة</td><td><code>executive</code></td><td>١٣/٢٧</td><td>١٠٠٪</td><td>—</td></tr><tr><td>مدير مبيعات</td><td><code>sales_manager</code></td><td>١٣/٢٧</td><td>٢٠٪</td><td>أحمد مجلي</td></tr><tr><td>أدمن مبيعات</td><td><code>sales_admin</code></td><td>١٠/٢٧</td><td>١٠٪</td><td>يحيى · نورا · الصاوي · بكري · سارة</td></tr><tr><td>مدير مشاريع</td><td><code>project_manager</code></td><td>٧/٢٧</td><td>٠٪</td><td>طارق يوسف</td></tr><tr><td>ماليات</td><td><code>finance</code></td><td>١٣/٢٧</td><td>٠٪</td><td>عبد الرحمن ممدوح</td></tr><tr><td>مترجم</td><td><code>translator</code></td><td><strong>٠/٢٧</strong></td><td>٠٪</td><td>دعاء محمد</td></tr><tr><td>منسق</td><td><code>coordinator</code></td><td>١/٢٧</td><td>٠٪</td><td>—</td></tr></tbody></table></div>
+<h3>أدمن المبيعات — قلب التشغيل اليومي</h3>
+<p><strong>سؤاله:</strong> ما الذي يجب أن أفعله اليوم؟</p>
+<p>يستقبل الاستفسار ويسجّله ليدًا، ثم يحوّله مشروعًا ويسعّره ويمنح خصمًا حتى ١٠٪، ثم يُسلَّم ويُحصَّل.</p>
+<ul><li><strong>يرى:</strong> ليدز فريقه · عملاءه مالكًا رئيسيًّا أو فرعيًّا · سعر البيع · نسبته هو · لوحة الترتيب</li><li><strong>لا يرى:</strong> نسب زملائه (القيد الوحيد على رؤيته) · الدفاتر · الرواتب</li><li><strong>شاشاته:</strong> <code>/</code> · <code>/leads</code> · <code>/projects</code> · <code>/clients</code> · <code>/quotes</code> · <code>/commissions</code> · <code>/leaderboard</code></li></ul>
+<blockquote><strong>سارة ومحمد بكري أدمنان مستقلّان</strong> — <code>reportsTo: null</code>. والاستقلال يقع بألّا يتبع أحدًا <strong>لا بمسمّى الدور</strong>، وهو وحده ما يجعل الواحد يستحقّ حصة الأدمن والمدير معًا (٥٪).</blockquote>
+<h3>مدير المبيعات</h3>
+<p><strong>سؤاله:</strong> فريقي — من يقود ومن يتعثّر؟</p>
+<p>كلّ ما يراه الأدمن، ومعه <strong>ثلاث</strong>: نسب الفريق · إضافة المستخدمين · اعتماد الخصم. ونطاقه اتحادُ سجلاته وسجلات من يتبعونه <strong>بأي عمق</strong>.</p>
+<p>و<code>canManageRoles</code> منفصلة عن <code>canManageUsers</code> عمدًا: يضيف أدمنًا، ولا يُعيد تعريف من يرى ماذا. وحارسٌ آخر: <strong>لا يمنح أحدٌ ما لا يملك</strong> — وإلا صارت «إدارة المستخدمين» بابًا للتصعيد.</p>
+<h3>مدير المشاريع</h3>
+<p><strong>سؤاله:</strong> أين يقف الإنتاج؟</p>
+<p>يُسند المشاريع ويبني خطواتها ويدير الفريلانسرز. <strong>ولا يرى سعر البيع عمدًا</strong> — حتى لا يُبنى قرار الإسناد على قيمة الطلب. ولا يرى الليدز ولا سجل العملاء.</p>
+<blockquote><strong>مصيدة وقعت فعلًا:</strong> وصوله إلى المشاريع من <code>canAssignProduction</code> <strong>لا</strong> من <code>canViewAllLeads</code>. وكانت صفحة المشروع تفحص الثانية فيُسند ثم يُصفع بـ404. والحارس الآن <code>canOpenProject</code> — قاعدة خالصة واحدة تحكم القائمة والصفحة والتعديل، وتفتح لمن أُسند إليه المشروع منفِّذًا أو مراجعًا أو مديرًا.</blockquote>
+<h3>المحاسب</h3>
+<p><strong>سؤاله:</strong> ما حال النقد والذمم؟</p>
+<p>يرحّل القيود ويقفل الفترات ويدير الموازنة والأصول والرواتب ومحاسبة الفروع. <strong>ولا يفتح سجلات الليدز</strong> — يعرف أعدادها وتكلفتها إجمالًا (<code>canViewLeadStats</code>) ولا يرى من هم.</p>
+<h3>المترجم — بلا صلاحية واحدة</h3>
+<p>هذا <strong>مقصود وليس نقصًا</strong>. شاشة <code>/me</code> لا تحتاج إذنًا بل صاحبها: يرى إنتاجه وجودته وما أُسند إليه. وكل صلاحية تُمنح له تفتح ما لا يخصّه.</p>
+<blockquote><strong>والمنفِّذ الداخلي سجلٌّ بلا دخول:</strong> بريده وكلمة مروره اختياريان. يُسنَد إليه وتُحسب تكلفته بلا حساب يفتحه هو.</blockquote>
+<h3>المالك ومدير النظام</h3>
+<p>كل الصلاحيات. وهما وحدهما من يملك <code>canPurgeRecords</code> — <strong>الحذف النهائيّ لسجل عميل</strong>، وهو استثناء بأربعة حدود مشروح في القسم ١٢.</p>
+<p>و<strong>المدير التنفيذي محجوب عنه ثلاث</strong>: تعريف الأدوار · إعدادات النظام · الحذف النهائي. وما عداها يديره كاملًا.</p>
+<hr>
+<h2>٦ · دورة العمل — من استفسار إلى تحصيل</h2>
+<pre><code>
+ليد جديد (الهاتف أولًا)
+   ├── لم يفز → خاسر (السبب إلزامي)
+   └── فاز → مشروع: قيد الإسناد
+                ↓
+          قيد التنفيذ
+                ↓
+          قيد المراجعة
+                ↓
+          جاهز للتسليم
+                ↓
+          سُلّم ← التكلفة تُجمَّد هنا
+             ├── محصَّل
+             └── مُعاد للتعديل → قيد التنفيذ
+</code></pre>
+<h3>حالات المشروع ومن يحرّكها</h3>
+<div class="scroll"><table><thead><tr><th>من</th><th>إلى</th><th>الصلاحية اللازمة</th></tr></thead><tbody><tr><td>قيد الإسناد</td><td>قيد التنفيذ</td><td><code>canAssignProduction</code></td></tr><tr><td>قيد التنفيذ</td><td>قيد المراجعة أو جاهز</td><td><code>canAssignProduction</code></td></tr><tr><td>قيد المراجعة</td><td>جاهز أو رجوع للتنفيذ</td><td><code>canAssignProduction</code></td></tr><tr><td>جاهز للتسليم</td><td>سُلّم</td><td><code>canAssignProduction</code></td></tr><tr><td>سُلّم</td><td><strong>محصَّل</strong></td><td><code>canRecordCollection</code></td></tr><tr><td>سُلّم أو محصَّل</td><td>مُعاد للتعديل</td><td><code>canAssignProduction</code></td></tr><tr><td>أي حالة قبل التسليم</td><td>ملغى</td><td>—</td></tr></tbody></table></div>
+<p><strong>والملغى نهاية</strong> — لا يعود منه شيء، والإلغاء يمسح <code>revenueMonth</code>.</p>
+<h3>خمس قواعد مالية في الدورة</h3>
+<p><strong>١) الاعتراف بالإيراد بالحالة.</strong> لا إيراد ولا تكلفة في أي تقرير مالي إلا لمشروع <code>delivered</code> أو <code>collected</code>. وهذا ثابت <code>REVENUE_FILTER</code> يُستورد ولا يُعاد كتابته.</p>
+<p><strong>٢) الصفحة هي الوحدة، والإجمالي مشتقّ.</strong> لا خانة «إجمالي المشروع» تُكتب باليد: <code>الصفحات × سعر الصفحة</code> ثم رسم الاستعجال ثم الخصم. ومصدران للرقم الواحد يختلفان يومًا.</p>
+<p><strong>٣) التكلفة تُجمَّد عند التسليم.</strong> تغيّر راتب الشهر القادم لا يجوز أن يُعيد كتابة هوامش الشهر الماضي.</p>
+<p><strong>٤) الخصم فوق الحد يُجمّد المشروع</strong> حتى الاعتماد — والإلغاء وحده يبقى متاحًا، وإلا عَلِق بلا مخرج لو رفض الجميع.</p>
+<p><strong>٥) التحصيل من الصفّ.</strong> <code>collectNow</code> دفعةُ اليوم و<code>collectedAmount</code> الرصيدُ كلّه، <strong>والجمع في الخادم</strong>. ولو حسب المتصفّح المجموع لكفى أن يفتح أدمنان الصفّ نفسه حتى تُكتب دفعة فوق أختها فيضيع مبلغ.</p>
+<h3>معايير سرعة يحرسها e2e</h3>
+<div class="scroll"><table><thead><tr><th>العملية</th><th>الحد</th></tr></thead><tbody><tr><td>تسجيل ليد جديد</td><td>≤ ١٥ ثانية</td></tr><tr><td>تحويل ليد إلى مشروع</td><td>≤ ٢٠ ثانية</td></tr><tr><td>البحث بالهاتف</td><td>≤ ٣٠٠ ملّي ثانية</td></tr></tbody></table></div>
+<h3>الهاتف مفتاح العميل</h3>
+<p>يُطبّع بقاعدة سباعية في <code>phoneNormalized</code> وهو <strong>مفتاح منع الازدواج</strong>. فعميل عائد بنفس الرقم <strong>لا يُنشئ بطاقة ثانية</strong> بل يلتصق بالقديمة. والصفّ بلا هاتف يُجمَّع بالاسم (<code>NAME:</code> بادئة صريحة) ولا يُردّ.</p>
+<h3>ملكية بطاقة العميل</h3>
+<p>مالك <strong>رئيسي</strong> ومالك <strong>فرعي</strong>. والفرعي <strong>بابُ رؤية لا حصّةُ مال</strong>: عميل قديم دخل لأحمد مجلي ثم اشترى من يحيى — يظهر عند الحسابين ويقرأه كلاهما. <strong>والنسبة تبقى على مالك المشروع</strong> لا على مالك البطاقة.</p>
+<h3>أنماط التشغيل ومعامل الجهد</h3>
+<p>تسعة أنماط في قائمة مرجعية <code>work_mode</code> <strong>تُعدّل من الشاشة لا من الكود</strong>، ولكلٍّ معامل يضرب عدد الصفحات في معادلة <strong>الصفحات الموزونة</strong>:</p>
+<p>ترجمة بشرية كاملة <code>1.00</code> · ذكاء + مراجعة مكثفة <code>0.60</code> · ذكاء + مراجعة خفيفة <code>0.35</code> · مراجعة ترجمة <code>0.33</code> · تدقيق لغوي <code>0.20</code> · تنسيق ونشر <code>0.15</code> · مسرد <code>0.50</code> · تفريغ صوتي <code>0.45</code> · سبتايتل <code>0.55</code></p>
+<p>وإحدى عشرة قائمة مرجعية كلها تُعدَّل من <code>/settings/lists</code>: <code>work_mode</code> · <code>step_type</code> · <code>service_line</code> · <code>language</code> · <code>branch</code> · <code>channel</code> · <code>contact_method</code> · <code>loss_reason</code> · <code>volume_discount</code> · <code>payment_method</code> · <code>currency</code></p>
+<hr>
+<h2>٧ · الماليات ودفتر الأستاذ</h2>
+<p><strong>دفتر قيد مزدوج كامل</strong> — ليس مجرد تقارير فوق جدول مشاريع. شجرة حسابات بمستويات، وقيود بسطور مدينة ودائنة، وفترات تُقفَل، وميزان مراجعة يتوازن.</p>
+<h3>القواعد الحاكمة</h3>
+<p><strong>١) الدفتر يستقبل مسوّدات، والمحاسب وحده يرحّل.</strong> القيد يُنشَأ <code>draft</code> من التسليم أو التحصيل أو الرواتب، ثم يُرحّل بيد. <strong>والدفتر لا يُكتب من ظهره.</strong></p>
+<p><strong>٢) ما لا يتوازن لا يُرحّل ولا يُجبَر.</strong> إجبار الاتزان يُخفي خطأ في ورقة المحاسب بدل أن يكشفه.</p>
+<p><strong>٣) القيد الخاطئ يُعكَس بقيد مضادّ ولا يُعدّل.</strong> ولا تُقبل كتابة في فترة مقفلة.</p>
+<p><strong>٤) <code>is_cash</code> على الحساب لا على السطر.</strong> حقل يُملأ يدويًا آلاف المرات يُملأ خطأً مرة على الأقل. وكذلك <strong>تصنيف الإنفاق</strong>: مرة واحدة على الحساب، والسطر يتجاوزه للشاذّ.</p>
+<h3>مصيدتا المال — تقرأهما قبل أن تلمس رقمًا</h3>
+<p><strong>القرش الصحيح.</strong> المال يُجمع بـ<code>sum</code> من <code>src/lib/money.ts</code> <strong>لا بـ<code>+</code> على الجنيهات</strong>. الفاصلة العائمة لا تعرف عُشرًا، والكسر ينحرف عبر آلاف القيود حتى <strong>يُخرج ميزان المراجعة عن التوازن</strong>. ويحرسه <code>npm run check:money</code>.</p>
+<p><strong>القرش الأخير.</strong> كسور أطول من قرشين تتراكم عبر ألفي قيد. <strong>التسوية على آخر سطر</strong> — كما في توزيع النسب على المشاريع وتوزيع التسوية على العملاء.</p>
+<h3>التقارير الجاهزة</h3>
+<div class="scroll"><table><thead><tr><th>التقرير</th><th>الشاشة</th></tr></thead><tbody><tr><td>ميزان المراجعة</td><td><code>/finance/reports/trial</code></td></tr><tr><td>قائمة الدخل</td><td><code>/finance/reports/pl</code></td></tr><tr><td>ربحية الفروع</td><td><code>/finance/reports/branches</code></td></tr><tr><td>دفتر اليومية</td><td><code>/finance/journal</code></td></tr><tr><td>شجرة الحسابات</td><td><code>/finance/accounts</code></td></tr><tr><td>مراكز الربحية</td><td><code>/finance/profit-centers</code></td></tr><tr><td>الفترات وإقفالها</td><td><code>/finance/periods</code></td></tr><tr><td>الموازنة</td><td><code>/finance/budget</code> و<code>/budget/grid</code></td></tr><tr><td>الأصول الثابتة والإهلاك</td><td><code>/finance/assets</code></td></tr></tbody></table></div>
+<h3>مركز التكلفة مركزُ ربحية — لا وعاءً للتصنيف</h3>
+<p>بُعدان لا علاقة لأحدهما بالآخر كانا مجموعين في حقل واحد، فوُلد كلّ مشروع أنشأه المحاسب «مصاريف فرع ذاتية» ثم طولب بفرع لا يخصّه.</p>
+<p><strong>والمعنى المحاسبي:</strong> مركز الربحية وحدةٌ يُقاس ربحُها (Job Costing)، والتصنيف شيء آخر يسكن الحساب.</p>
+<h3>ثلاث معادلات يسهل كسرها</h3>
+<p><strong>التعادل قِسمة لا ضَرب:</strong></p>
+<pre><code>
+التعادل = المصاريف الثابتة ÷ (1 − مجموع النسب المتغيرة)
+</code></pre>
+<p>والخطأ يُنتج تعادلًا <strong>أقلّ من الحقيقي دائمًا</strong>: ٦٠٬٠٠٠ بنسب ٤٥٪ و٥٪ = <strong>١٢٠٬٠٠٠</strong> لا ٩٠٬٠٠٠.</p>
+<p><strong>نسبة البدل على الأساسي لا على الإجمالي</strong> — وإلا زاد البدل بزيادة بدلٍ آخر فتغيّر الراتب بترتيب الإدخال.</p>
+<p><strong>وشرائح النسب تصاعدية على الأجزاء، وشرائح العروض الاحترافية بأثر رجعي على الحجم كلّه.</strong> ٢٠٠ ألف كلمة = ١٤٬٤٠٠ ريال لا ١٥٬٢٠٠.</p>
+<hr>
+<h2>٨ · الموارد البشرية · الفريلانسرز · النسب</h2>
+<h3>الموارد البشرية — ومصدر الراتب الواحد</h3>
+<p><strong>الراتب مصدره الموارد البشرية وحدها.</strong> وكان رقمان لشيء واحد — راتب في ملف الموظف وآخر في شاشة التكاليف — فيقول النظام «منتِج بلا تكلفة» ويحسب هامشًا ١٠٠٪ وهميًّا. و<code>StaffCost</code> للنسبة والطاقة وحدهما، و<code>staffRateOf</code> يشتقّ الأجر من بنود الأجر السارية.</p>
+<p><strong>الأجر بنودٌ بتاريخ سريان، والبند لا يُعدّل بل يُنهى ويُنشَأ خلفه.</strong> تعديل بندٍ سارٍ يُعيد كتابة كشوف الماضي بأثر رجعي.</p>
+<div class="scroll"><table><thead><tr><th>الشاشة</th><th>ما فيها</th></tr></thead><tbody><tr><td><code>/hr/employees</code></td><td>ملف الموظف وبنود أجره</td></tr><tr><td><code>/hr/departments</code></td><td>الأقسام ومدراؤها</td></tr><tr><td><code>/hr/payroll</code></td><td>كشف الرواتب الشهري</td></tr><tr><td><code>/hr/performance</code></td><td>تقارير الأداء</td></tr><tr><td><code>/settings/staff-costs</code></td><td>الطاقة اليومية للمنتِج</td></tr></tbody></table></div>
+<blockquote><strong>الموارد البشرية تُعيّن، وإدارة المستخدمين تفتح الحساب.</strong> من يفتح الحساب هو من يملك منح الصلاحيات — لا من يملك ملف الموظف.</blockquote>
+<h3>الفريلانسرز</h3>
+<p>ألف وسبعة وستون مترجمًا خارجيًا، لكلٍّ أسعاره بزوج اللغات. وعند اختيار فريلانسر في خطوة يُجلَب سعره تلقائيًا — <strong>ولا يُلغي رقمًا كتبه المستخدم صراحة</strong>، فهو يعرف اتفاق اليوم.</p>
+<p>والمدفوعات في <code>/freelancers/payments</code>، والدفع ينشئ قيدًا مسوّدة في الدفتر.</p>
+<h3>نسب المبيعات</h3>
+<p><strong>القاعدة:</strong> الأدمن ٣٪ ومديره المباشر ٢٪ عن كل صفقة له. ومن لا مدير له يستحقّ الحصتين معًا (٥٪).</p>
+<ul><li><strong>مالكٌ واحد للصفقة: من أدخلها.</strong> والملكية المزدوجة أُلغيت في المرحلة ١٦.</li><li><strong>الاستحقاق مشتقّ لا مُدخَل.</strong> يُعاد بناؤه من المشاريع المحصّلة في أي لحظة، فلا إدخال يدوي ولا تعديل على مبلغ.</li><li><strong>الفترة المغلقة لا تُعاد.</strong></li><li><strong>العتبة على الإسناد لا على الخطة</strong> — يشترك عشرون في خطة واحدة ولكلٍّ تارجته.</li><li><strong>وما دون العتبة لا شيء البتّة</strong> — لا نسبة مخفّضة. النسبة مكافأةُ تجاوز لا أجرُ حضور.</li><li><strong>وبلوغ العتبة استحقاق</strong> (<code>&gt;=</code> لا <code>&gt;</code>)، وعتبة صفر تُقرأ «بلا عتبة».</li></ul>
+<blockquote><strong>حارس مهمّ لا تكسره:</strong> <code>commissionableAmount</code> — <strong>لا نسبة على ما نسبه النظام ولم يبعه أحد</strong>. مشروعٌ أنشأته التسوية (<code>settle-YYYY</code>) لا بائع له فصفر، ومشروعٌ وسّعته تُحسب نسبته على <code>preSettleTotal</code> رقمِه المرصود. <strong>وبلا هذا الحارس تكفي أول خطة نسبٍ تُسنَد ليستحقّ الفريق نسبًا على ١٬٤٨٤ مشروعًا موسّعًا و١٥٥ مُنشأً.</strong></blockquote>
+<h3>الجودة — مؤشران لا واحد</h3>
+<p><strong>كثافة الملاحظات لكل ألف كلمة</strong> — أخطاء أمسكها المكتب قبل العميل. و<strong>نسبة الإعادة</strong> — أخطاء أفلتت بعده. وصفرُ ملاحظات مع إعادةٍ متكرّرة <strong>ليس جودة بل مراجعة لا تعمل</strong>.</p>
+<p>والمعيار صناعيّ (SAE J2450 · LISA QA · MQM) ينسب الخطأ إلى حجمه — والعدد المجرّد يعاقب من ترجم خمسين صفحة ويكافئ من ترجم خمسًا.</p>
+<hr>
+<h2>٩ · الفروع ومحاسبتها</h2>
+<p>ستة فروع، ولكلّ واحد ميزانٌ يُقرأ مستقلًّا، والمصاريف المركزية تُوزَّع عليها بمعدّل تحميل.</p>
+<p><strong>١) معدل التحميل مثبّت لسنة</strong> لا محسوبًا شهريًا. الشهري يُلغي التخطيط، ويعاقب الفرع على أداء غيره، ويُخفي الرفع التشغيلي وتكلفة الطاقة العاطلة.</p>
+<p><strong>٢) فرق الاسترداد لا يُوزَّع</strong> — يبقى بندًا في المركز. وتوزيعه يُخفي تكلفة الطاقة غير المستغلة، وهي أهم مؤشر لقرار التوسّع.</p>
+<p><strong>٣) قرار الإغلاق على هامش المساهمة حصرًا.</strong> المركز ثابت لا يزول بالإغلاق: إغلاق فرعٍ مساهمته موجبة يبدأ دوامةً تنتهي بانهيار الشركة.</p>
+<p>الشاشات: <code>/finance/branches</code> · <code>/branches/[code]</code> · <code>/branches/allocation</code> · <code>/branches/capacity</code> · <code>/branches/settings</code></p>
+<blockquote><strong>والفروع بدأت ٢٠٢٦.</strong> ما قبلها بلا فرع، ودفتر المحاسب بلا بُعد فرعٍ أصلًا — فيه مراكز ربحية لا فروع. فترشيحٌ بفرعٍ على سنةٍ سابقة يُخرج صفرًا <strong>صحيحًا</strong> لا خطأً.</blockquote>
+<hr>
+<h2>١٠ · التحليلات وتكلفة اكتساب العميل</h2>
+<p><strong>قسم التحليلات يتبع عملَ صاحبه</strong> — البيعُ لمن يبيع والإنتاجُ لمن يُسند. وكان أداءُ المنفِّذين محجوبًا خلف «تحليلات الشركة» وأداءُ البائعين مفتوحًا لكل داخل.</p>
+<h3>الشاشات</h3>
+<p><code>/analytics</code> الرئيسية · <code>/analytics/acquisition</code> تكلفة الاكتساب · <code>/leaderboard</code> لوحة الترتيب · <code>/me</code> أدائي</p>
+<h3>تكلفة اكتساب العميل</h3>
+<p><strong>المصروف التسويقي مُدخَلٌ مرة واحدة: في الدفتر.</strong> والتحليلات تقرؤه ولا تسأل عنه — وخانةُ إدخالٍ ثانية تُنتج رقمين لشيء واحد لا يُعرف أيّهما الصحيح.</p>
+<ul><li><strong>قناة الإنفاق تُضبط مرة واحدة على الحساب</strong> من شاشة تكلفة الاكتساب.</li><li><strong>وقناةُ سطر الإعلان تُقرأ من بيانه</strong> حين يجمع الحسابُ قناتين — دفتر ٢٠٢٦ يجمع جوجل وفيسبوك في حساب واحد والمحاسب كتب اسم المنصّة في البيان صريحًا.</li><li><strong>و«غير منسوب» وعاءُ انتظارٍ لا قناة</strong> — لا تُقسَم أرقامه. القسمة تُنتج «تكلفة الليد ٦٣٢ ألفًا»، رقمٌ يُقرأ فيُصدَّق.</li><li><strong>وقناةُ المشروع من ليده، فإن لم يكن فمن ليدِ عميله</strong> — ١٬١٤٧ مشروعًا في ٢٠٢٦ بلا ليد، والوقوف عندها يُخرج إيرادًا صفرًا في كل قناة.</li></ul>
+<h3>مصيدة الصفر — تسري على كل التحليلات</h3>
+<blockquote><strong>«غير مقيس» تُعرض <code>—</code> لا صفرًا.</strong> الصفر يعني «أدّى ولم يُنجز»، والغياب يعني «لم يُقَس» — والفرق قرارٌ يُتّخذ في حق إنسان.</blockquote>
+<p>ومثالها الحيّ: كان الهامش يظهر <strong>١٠٠٪</strong> في كل سنة من سنوات التاريخ، وهو أثرُ غياب لا أثرُ ربح — فتكلفة المشاريع المرحَّلة غير مرصودة. فصار <code>marginPct</code> يعود <code>null</code> بلا تكلفة، والشاشة تعرض <code>—</code>.</p>
+<h3>لوحة الترتيب</h3>
+<p><strong>لوحةُ فريقٍ لا لوحةُ شركة.</strong> مديرُ المبيعات يرى أرقام فريقه لا فريقًا آخر، ولا يراها كاملة إلا المالك والمدير التنفيذي والمحاسب.</p>
+<hr>
+<h2>١١ · ترحيل بيانات المكتب من ٢٠٢٢</h2>
+<p>هذا أعقد ما في النظام، وأكثره حساسية. <strong>اقرأ <code>PHASE-19.md</code> قبل أن تلمسه.</strong></p>
+<h3>ثلاثة مصادر</h3>
+<div class="scroll"><table><thead><tr><th>المصدر</th><th>ما فيه</th><th>الوسم</th></tr></thead><tbody><tr><td>دفاتر المحاسب (٥ ملفات إكسل)</td><td>القيود والحسابات ومراكز الربحية</td><td><code>ledger-YYYY</code></td></tr><tr><td>شيت المبيعات</td><td>العملاء والمشاريع</td><td><code>sales-YYYY</code></td></tr><tr><td>شيت الليدز</td><td>الاستفسارات التي لم تتحول</td><td><code>leads-YYYY</code></td></tr><tr><td>التسوية بينها</td><td>مشاريع تُوسَّع أو تُنشَأ</td><td><code>settle-YYYY</code></td></tr></tbody></table></div>
+<p><strong>وكلّ ما يدخل موسومٌ بـ<code>importTag</code>، والوسم يُسحب بضغطة.</strong> سنةٌ دخلت خطأً لا تُنقّى بالعين من ثلاثة آلاف قيد.</p>
+<h3>قواعد القراءة</h3>
+<ul><li><strong>الترويسة تُقرأ بالأسماء لا الأعمدة بترتيبها.</strong> دفتر ٢٠٢٣ أضاف عمود «رصيد» ومستوى حسابٍ ثالثًا — وقارئٌ يعدّ الأعمدة يقرأ سنةً ويعمى عمّا بعدها.</li><li><strong>واللهجتان تُعرضان على الورقة ويفوز من قرأ ترويستها.</strong> حوّل المحاسب دفتره كلّه إلى الإنجليزية في ٢٠٢٦، وما قبله عربيّ.</li><li><strong>وقارئ إكسل مكتوبٌ عندنا بلا مكتبة</strong> (<code>src/lib/xlsx.ts</code>) — أقربُ مكتبة صالحة تزن ٢٣ ميجابايت وتجرّ ثغرة معلنة.</li><li><strong>والتطبيع للمطابقة وحدها ولا يُحفظ ناتجه.</strong></li></ul>
+<h3>التسوية — أهمّ ما في الباب</h3>
+<p><strong>دفترُ المحاسب هو الحقيقة المالية، وشيتُ المبيعات ناقصٌ لا خاطئ.</strong> والفارق عملاءُ لم يُرصدوا ومشترياتٌ متكرّرة لم تُسجَّل — لا مالٌ مفقود.</p>
+<p>وثلاث طبقات بترتيبها:</p>
+<ol><li><strong>العميل الذي سمّاه المحاسب يأخذ رقمه بالضبط.</strong> مراكز الربحية في الدفتر أسماءُ عملاء، وهذه ثلثا الإيراد.</li><li><strong>وما بقي على مركزٍ عامّ يُوزَّع بالتناسب</strong> على من رصدهم الشيت في ذلك الشهر — بالتناسب لا بالتساوي، وإلا انقلبت أوزان العملاء.</li><li><strong>وشهرٌ بلا عميل واحد يُنشأ له عميل شهريّ مجمَّع</strong> باسمه الصريح.</li></ol>
+<p><strong>وما لا يُسوَّى:</strong> فروق العملة (ربحُ صرفٍ لا بيعًا) · شهرٌ صامتٌ في الدفتر (الصمت ليس رقمًا) · والنسب على المبالغ المسوّاة.</p>
+<p><strong>وحدُّ التسوية تاريخُ الوقف لا رأسُ السنة</strong> — <code>until</code> يمنع تسوية شهرٍ ما زال يُكتب فيه.</p>
+<h3>الشاشات</h3>
+<p><code>/settings/import/history</code> الترحيل · <code>/settings/import/review</code> المراجعة اليدوية · <code>/settings/import</code> ترحيل الملفات القديمة (لصق صفوف)</p>
+<hr>
+<h2>١٢ · القواعد المُلزِمة — لا تُخالَف</h2>
+<p>هذه ليست أسلوبًا بل عقدًا. كلّ واحدة منها مكتوبة لأن كسرها كلّف شيئًا فعليًّا.</p>
+<p><strong>١) افحص الصلاحية لا اسم الدور.</strong> <code>can(user, &#x27;canViewSellPrice&#x27;)</code> ✅ · <code>user.roleName === &#x27;sales_admin&#x27;</code> ❌ الأدوار بيانات تُنشأ من الشاشة، وأي شرط على اسم دور يتعطّل فور إنشاء الإدارة دورًا جديدًا.</p>
+<p><strong>٢) الترشيح في الخادم.</strong> الحقل الذي لا يملك المستخدم صلاحيته <strong>لا يُرسل أصلًا</strong> — لا يُخفى بـCSS ولا يُرشَّح في المتصفح. وله اختبار e2e يفتّش حمولة الاستجابة عن <code>costInternal</code> و<code>marginPct</code> و<code>staffSalary</code>.</p>
+<p><strong>٣) لا شيء يُمحى.</strong> حذف منطقي + سجلّ تدقيق دائم. القيد الخاطئ <strong>يُعكَس بقيد مضادّ</strong> ولا يُعدّل. النسبة المستردّة قيد عكسي سالب لا حذف.</p>
+<blockquote><strong>واستثناء واحد بأربعة حدود:</strong> حذفُ بطاقة عميل نهائيًّا لتنقية ما أُدخل تجربةً — بصلاحية <code>canPurgeRecords</code> (المالك ومدير النظام)، وجملةٍ تُكتب بالحرف، وجردٍ يُعرض قبل الضغط، <strong>وسطرِ تدقيقٍ يُكتب قبل الحذف</strong>. وقيدُ فترةٍ مقفلة يمنعه ولا يُنقَض.</blockquote>
+<p><strong>٤) الاعتراف بالإيراد بالحالة.</strong> لا إيراد ولا تكلفة في أي تقرير مالي إلا لمشروع <code>delivered</code> أو <code>collected</code>.</p>
+<p><strong>٥) لا تخترع منطق عمل.</strong> كل معادلة في المواصفة مقصودة. إن سكتت أو تعارضت — <strong>توقّف واسأل أحمد</strong>.</p>
+<p><strong>٦) العربية RTL هي الواجهة الوحيدة</strong>، والمفاتيح البرمجية إنجليزية، والتعليقات عربية تشرح <strong>لماذا</strong> لا ماذا.</p>
+<p><strong>٧) العمود الجديد يُولد قابلًا للفراغ</strong> (أو بقيمة افتراضية)، فدفعُ القاعدة على الإنتاج المملوء <strong>يضيف ولا يحذف</strong>. والعمود لا يُحذف بل يُتقاعد، ويحرسه <code>npm run check:additive</code>.</p>
+<p><strong>٨) القاعدة الجديدة تدخل ومعها اختبارها</strong> في نفس الكوميت.</p>
+<p><strong>٩) العمل يُدفع إلى <code>main</code> بعد اجتياز دورة التحقّق كاملة</strong> — فـVercel يبني الدومين من <code>main</code> وحده. <strong>ولا يُفتح Pull Request إلا بطلب صريح.</strong></p>
+<p><strong>١٠) تغييرُ القاعدة ملفُّ SQL يُقرأ قبل أن يُطبَّق</strong> — لا دفعًا أعمى. <code>db push --accept-data-loss</code> يُطابق القاعدة بالمخطط مهما كلّف، وأمانُه عُرفٌ كُسِر مرة فأسقط النسخة العاملة.</p>
+<p><strong>١١) إخفاء الرابط من القائمة ليس حجبًا</strong> — الحجب في الصفحة. من يعرف المسار يكتبه، والقائمة زينةٌ لا حارس.</p>
+<h3>وقواعد صغيرة تقع فيها</h3>
+<ul><li><strong>الخانة الفارغة لا تعني «الكلّ»</strong> — تُكتب القيمة لتُرى وتُراجَع.</li><li><strong>معرّفُ السجل في اسم الخانة لا في حقل مخفيّ.</strong> قائمةُ اختيار في نموذج وحفظٌ في نموذجٍ آخر: من غيّر الاختيار ثم حفظ كتب أرقامًا <strong>فوق السجل القديم</strong>.</li><li><strong>الرسوم HTML خالص بلا مكتبة</strong> — ومع كل شريط رقمُه، فالمعنى لا يعتمد على اللون.</li><li><strong>الملفات تُخزَّن في القاعدة لا على القرص</strong> — النشر بلا قرص دائم.</li><li><strong>HTML المولَّد يمرّ بثلاثة حواجز</strong>: تعقيم عند الحفظ وعند العرض + سياسة محتوى وإطار معزول.</li><li><strong>الذكاء الاصطناعي بلا صلاحيات خاصة</strong> — سياقه بصلاحيات سائله، وإلا صار بابًا خلفيًا لكل ما حُجب.</li></ul>
+<hr>
+<h2>١٣ · التشغيل محليًا</h2>
+<h3>المتطلبات</h3>
+<p>Node 20+ · npm · لا حاجة لقاعدة بيانات خارجية (SQLite محليًّا).</p>
+<h3>الخطوات</h3>
+<pre><code>
+git clone https://github.com/AhmedMohsen160/crm.git
+cd crm
+npm install
+
+cp .env.example .env    # إن وُجد، وإلا أنشئه بالمتغيّرات أدناه
+npx prisma db push      # ينشئ prisma/dev.db
+npm run bootstrap       # يزرع الأدوار والفريق وشجرة الحسابات
+npm run db:seed         # بيانات تجريبية (اختياري)
+
+npm run dev             # http://localhost:3000
+</code></pre>
+<h3><code>.env</code> للتطوير</h3>
+<pre><code>
+DATABASE_URL=&quot;file:./dev.db&quot;
+AUTH_SECRET=&quot;&lt;أي نص عشوائي ٣٢ حرفًا فأكثر&gt;&quot;
+ADMIN_PASSWORD=&quot;ChangeMe123!&quot;
+TEAM_INITIAL_PASSWORD=&quot;FastTrans2026!&quot;
+</code></pre>
+<h3>بيانات الدخول بعد التجهيز</h3>
+<div class="scroll"><table><thead><tr><th>الحساب</th><th>البريد</th><th>كلمة المرور</th></tr></thead><tbody><tr><td>مدير النظام</td><td><code>admin@fasttrans.local</code></td><td>قيمة <code>ADMIN_PASSWORD</code></td></tr><tr><td>المالك</td><td><code>owner@fasttrans.local</code></td><td>قيمة <code>TEAM_INITIAL_PASSWORD</code></td></tr><tr><td>بقية الفريق</td><td><code>magly@</code> · <code>yahia@</code> · <code>noura@</code> · <code>sawy@</code> · <code>bakri@</code> · <code>sara@</code> · <code>tarek@</code> · <code>accountant@</code> · <code>doaa@</code></td><td>نفسها</td></tr></tbody></table></div>
+<blockquote><code>bootstrap</code> <strong>لا يمسّ كلمة مرور حساب موجود</strong> — يزرع مرة واحدة ثم لا يعود.</blockquote>
+<h3>مصيدة القفل في SQLite</h3>
+<p>الحفظ كان يتجمّد في التطوير بسبب قفل SQLite أحادي الكاتب خلف قراءة الصفحة. والعلاج مطبَّق: WAL + <code>busy_timeout</code> + <code>synchronous=NORMAL</code> — وكلٌّ في <code>$queryRawUnsafe</code> منفصل لأن <code>PRAGMA</code> يُعيد صفًّا.</p>
+<hr>
+<h2>١٤ · النشر ومتغيّرات البيئة</h2>
+<h3>كيف يُنشر</h3>
+<p>Vercel يبني من فرع <strong><code>main</code></strong> وحده. وأمر البناء:</p>
+<pre><code>
+node scripts/db-provider.mjs   # يستنتج نوع القاعدة من رابطها
+node scripts/check-additive.mjs # يمنع حذف عمود
+prisma generate
+node scripts/migrate.mjs        # يطبّق ملفات الترحيل
+tsx scripts/bootstrap.ts        # يزرع الناقص فقط
+next build
+</code></pre>
+<h3>مبدّل مزوّد القاعدة</h3>
+<p>Prisma لا يقرأ نوع القاعدة من متغيّر بيئة، فيكتبه <code>scripts/db-provider.mjs</code> في المخطط قبل البناء: رابط يبدأ بـ<code>postgres</code> ⇒ PostgreSQL، وغيره ⇒ SQLite. <strong>فلا تعدّل <code>provider</code> في <code>schema.prisma</code> يدويًّا.</strong></p>
+<h3>ملفات الترحيل</h3>
+<p><strong>بلهجة PostgreSQL وحدها</strong>، وجهاز التطوير يبقى على <code>db push</code>. قاعدةُ التطوير تُعاد في ثانية فلا تحتاج تاريخًا؛ وملفٌ بلهجتين لا يعمل بواحدة منهما.</p>
+<pre><code>
+npm run migration:new -- اسم_مختصر   # ينشئ الملف
+# اقرأ الملف قبل أن تدفعه — هو ما سيُنفَّذ على الإنتاج
+npm run check:migrations            # يتأكد أنه مواكب للمخطط
+</code></pre>
+<h3>متغيّرات البيئة</h3>
+<div class="scroll"><table><thead><tr><th>المتغيّر</th><th>لازم؟</th><th>بلا ضبطه</th></tr></thead><tbody><tr><td><code>DATABASE_URL</code> · <code>AUTH_SECRET</code> · <code>ADMIN_PASSWORD</code></td><td>نعم</td><td>لا يعمل شيء</td></tr><tr><td><code>SECRET_KEY</code></td><td>للبريد</td><td>يُشتقّ من <code>AUTH_SECRET</code>؛ ويُرفض حفظ الصناديق دونهما</td></tr><tr><td><code>ANTHROPIC_API_KEY</code></td><td>للذكاء</td><td>الأزرار الذكية تختفي والباقي يعمل كاملًا</td></tr><tr><td><code>AI_MODEL</code> · <code>AI_DAILY_BUDGET_USD</code></td><td>لا</td><td>نموذج متوازن وسقف ٥$ يوميًّا</td></tr><tr><td><code>CRON_SECRET</code></td><td>للجدولة</td><td><code>/api/cron</code> مغلق (٥٠٣)</td></tr><tr><td><code>TEAM_INITIAL_PASSWORD</code></td><td>للتجهيز</td><td><code>FastTrans2026!</code></td></tr></tbody></table></div>
+<h3>المهام المجدولة</h3>
+<p><code>vercel.json</code> ينادي <code>/api/cron?job=all</code> <strong>مرة يوميًّا</strong> (<code>0 6 * * *</code>) — والتواتر يوميّ لأن الخطة المجانية لا تقبل أكثر.</p>
+<blockquote><strong>مصيدة كلّفت تسعة عشر كوميتًا:</strong> جدولة كل نصف ساعة على خطة مجانية تُرفض <strong>النشرةُ عند إنشائها قبل أن يبدأ البناء</strong>، فلا تظهر في القائمة لا ناجحة ولا فاشلة ولا ملغاة — والموقع الحيّ يبقى على كوميت قديم والصمتُ التامّ يُخفي السبب.</blockquote>
+<h3>مصيدة إعادة النشر</h3>
+<p><strong>وإعادة النشر تُعاد على أحدث نشرة لا على أي نشرة.</strong> زرّ Redeploy يُعيد بناء <strong>كوميت النشرة التي ضُغط عليها</strong> — فالضغط على نشرة قديمة يُرجع الموقع الحيّ إلى الوراء بلا إنذار. وقعت فعلًا وأرجعت الموقع أربعة كوميتات.</p>
+<h3>النسخة الاحتياطية</h3>
+<p><code>/settings/backup</code> — <strong>والنسخة التي لا تملكها ليست نسخة احتياطية.</strong> مزوّد القاعدة يحتفظ بنسخه، وحسابٌ يُغلق أو خطأٌ في لوحته يُذهب سجلَّ العملاء والدفاتر بلا رجعة.</p>
+<hr>
+<h2>١٥ · الاختبارات ودورة التحقّق</h2>
+<h3>دورة التحقّق قبل أي كوميت</h3>
+<pre><code>
+npx tsc --noEmit        # صامت
+npm run test:unit       # ١٬٧٤٣ اختبار وحدة
+npm run build           # ينجح
+
+# قبل e2e: تأكّد أن المنفذ ٣٠٠٠ حرّ فعلًا
+pkill -f next-server; ss -lptn | grep &#x27;:3000&#x27;   # لا يُخرج شيئًا
+npm run start &amp;
+CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
+TEAM_INITIAL_PASSWORD=&#x27;FastTrans2026!&#x27; npm run test:e2e   # ٣٤٠
+</code></pre>
+<blockquote><strong>مصيدة وقعت مرارًا:</strong> قتلُ معرّف <code>npm run start</code> <strong>لا يقتل <code>next-server</code> تحته</strong>: يبقى ممسكًا بالمنفذ وبقاعدةٍ حُذف ملفها، فتُختبر بيانات متراكمة على كودٍ قديم وتفشل اختبارات بلا سبب في الكود.</blockquote>
+<h3>ما يفحصه e2e</h3>
+<p>ثلاثمئة وأربعون فحصًا في ٤٩ قسمًا، منها: تسجيل الدخول · جولة على كل الأقسام · معايير السرعة · قواعد انتقال الحالة · الاعتراف بالإيراد · الإسناد ومعادلات التكلفة · التسعير والخصومات والاعتماد · الفريلانسرز · النسب · الماليات · التنبيهات · <strong>مصفوفة الوصول لكل دور</strong> · محاسبة الفروع · حدّ محاولات الدخول · النسخة الاحتياطية · ترحيل تاريخ المكتب · عرض الجوال.</p>
+<h3>حرّاس إضافية</h3>
+<pre><code>
+npm run check:additive     # يمنع حذف عمود
+npm run check:migrations   # ملفات الترحيل مواكبة للمخطط
+npm run check:money        # الدفتر كلّه بالقرش الصحيح
+</code></pre>
+<h3>مصائد اختبار</h3>
+<ul><li><strong>اختبار يكتب الرقم ثم يفحصه لا يفحص شيئًا.</strong> اختبارٌ يكتب «٥٠٠٠» في خانة الإجمالي ثم يتحقّق من ٥٠٠٠ يتجاوز التسعير كلَّه. يقرأ ما حسبه النظام.</li><li><strong>الوسيط المُهمَل في <code>check</code>.</strong> إخفاقٌ لا يُقرأ لا يُعاد إنتاجه ولا يُصلَح.</li></ul>
+<hr>
+<h2>١٦ · ما هو مفتوح — وينتظر قرارًا</h2>
+<p><strong>هذه ليست عيوبًا مخفيّة.</strong> كلها معروفة ومكتوبة عمدًا، وأغلبها ينتظر قرار أحمد لا كودًا.</p>
+<h3>ستة تنتظر قرار أحمد</h3>
+<div class="scroll"><table><thead><tr><th>#</th><th>المسألة</th><th>الوضع</th></tr></thead><tbody><tr><td>١</td><td><strong>راتب أحمد جمال (السيو)</strong></td><td>المحاسب يقيّد رواتب قسم البيع في سطر واحد مجمَّع (٦١٠ آلاف)، فلا يُفصَل منه راتب السيو وتكلفة الأورجانيك ناقصة. المقترح: حقل «قناة» على ملف الموظف الآن، وحساب فرعيّ مستقلّ من أغسطس</td></tr><tr><td>٢</td><td><strong>خطط النسب</strong></td><td><strong>لا إسناد لأحد بعد</strong> — صفر إسناد في النظام. من أي شهر تبدأ؟ وتارجت سارة ٢٥ ألف ريال مذكور ولم يُسجَّل</td></tr><tr><td>٣</td><td><strong>سبب الرفض</strong></td><td>١٬٢٢٩ ليدًا خاسرًا من ١٬٢٤٣ بلا سبب. القائمة موجودة (٨ أسباب) وتحتاج <strong>إلزامًا</strong> عند الإغلاق</td></tr><tr><td>٤</td><td><strong>الدولة والمدينة</strong></td><td>نصٌّ حرّ في بطاقة العميل — ٢٬٥٠٦ بطاقة بلا دولة. و<code>src/components/country-city.tsx</code> موجود ويُستعمل في نموذج الشركة وحده</td></tr><tr><td>٥</td><td><strong>٥٠٢ ليدًا (٢٧٪) بلا فرع</strong></td><td></td></tr><tr><td>٦</td><td><strong>«دار الأسرة»</strong> (٦٨٬٧٧٤ ج)</td><td>أتتبع أكاديمية الأسرة أم عميل مستقلّ؟ تُركت مستقلّة لأن أحمد لم يذكرها، والضمّ بالاسم الصريح لا بالتقريب</td></tr></tbody></table></div>
+<h3>لوحتان مقترحتان لم تُبنيا بعد</h3>
+<p>في النظام اليوم ثلاث لوحات: بائع · مشغّل · محاسب. والمقترح:</p>
+<ul><li><strong>لوحة مدير المبيعات</strong> — أرقام كل أدمن جنبًا إلى جنب · الاستفسارات التي بردت بلا ردّ · معدل تحويل كل أدمن لا عدد صفقاته · عملاء الفريق الذين لم يشتروا منذ ٩٠ يومًا</li><li><strong>لوحة المالك</strong> — إيراد وهامش الشهر مقابل نفس الشهر العام الماضي · عائد كل قناة · هامش مساهمة كل فرع · أكبر عشرة عملاء · ما يحتاج قرارًا</li></ul>
+<h3>المخاطر التقنية</h3>
+<div class="scroll"><table><thead><tr><th>#</th><th>الخطر</th><th>الحال</th></tr></thead><tbody><tr><td>١</td><td><strong>الأموال <code>Float</code> في القاعدة</strong></td><td><strong>مخفَّف جوهريًّا</strong> — <code>money.ts</code> يجمع بالقرش و<code>check:money</code> يفحص الدفتر كلّه. وتحويل العمود إلى <code>Decimal</code> يبقى خطوة لاحقة</td></tr><tr><td>٢</td><td><code>db push --accept-data-loss</code> في بناء الإنتاج</td><td><strong>مغلق</strong> — ملفات ترحيل مراجَعة وحارسان</td></tr><tr><td>٣</td><td>لا تحديد لمحاولات الدخول</td><td><strong>مغلق</strong> — عشر محاولات في ربع ساعة، والعدّ في القاعدة</td></tr><tr><td>٤</td><td><code>/api/cron</code> يعمل داخل الطلب</td><td><strong>مغلق</strong> — نداءٌ بجدوله وميزانيةُ وقت. <strong>والتواتر يوميّ لأن الخطة المجانية لا تقبل أكثر</strong></td></tr><tr><td>٥</td><td>لا تجميع أخطاء</td><td><strong>مغلق</strong> — <code>ErrorLog</code> وشاشة «أعطال النظام»، والرسائل تُنقّى قبل حفظها</td></tr></tbody></table></div>
+<h3>نقص معروف</h3>
+<p><strong>لا مسار لإعادة تعيين كلمة المرور من الخادم.</strong> من نسي كلمته يحتاج تدخّلًا يدويًّا في القاعدة. وهذا نقص حقيقي سيُصطدم به.</p>
+<hr>
+<h2>١٧ · مستند التسليم — قائمة الاستلام</h2>
+<blockquote><strong>الغاية:</strong> يمشي المبرمج على هذه البنود بترتيبها. وكلّ بند إما <strong>نجح</strong> أو <strong>أخفق ومعه ما رآه</strong>. ولا تُعتمد المنصة قبل أن تمرّ كلها.</blockquote>
+<h3>أ · البيئة والتشغيل</h3>
+<div class="scroll"><table><thead><tr><th>#</th><th>البند</th><th>المتوقَّع</th><th>✓</th></tr></thead><tbody><tr><td>أ١</td><td><code>git clone</code> ثم <code>npm install</code></td><td>بلا أخطاء</td><td>☐</td></tr><tr><td>أ٢</td><td><code>npx prisma db push</code></td><td>ينشئ <code>prisma/dev.db</code></td><td>☐</td></tr><tr><td>أ٣</td><td><code>npm run bootstrap</code></td><td>«✅ اكتمل التجهيز» · ١٠ مستخدمين · ٢٣٤ حسابًا · ٧ مراكز</td><td>☐</td></tr><tr><td>أ٤</td><td><code>npm run dev</code> ثم فتح <code>/login</code></td><td>صفحة دخول عربية RTL</td><td>☐</td></tr><tr><td>أ٥</td><td>الدخول بـ<code>owner@fasttrans.local</code></td><td>لوحة المالك</td><td>☐</td></tr></tbody></table></div>
+<h3>ب · دورة التحقّق كاملة</h3>
+<div class="scroll"><table><thead><tr><th>#</th><th>البند</th><th>المتوقَّع</th><th>✓</th></tr></thead><tbody><tr><td>ب١</td><td><code>npx tsc --noEmit</code></td><td><strong>صامت تمامًا</strong></td><td>☐</td></tr><tr><td>ب٢</td><td><code>npm run test:unit</code></td><td><strong>١٬٧٤٣/١٬٧٤٣</strong> بلا إخفاق</td><td>☐</td></tr><tr><td>ب٣</td><td><code>npm run build</code></td><td>ينجح</td><td>☐</td></tr><tr><td>ب٤</td><td><code>npm run test:e2e</code> على قاعدة نظيفة</td><td><strong>٣٤٠/٣٤٠</strong> · «أخطاء المتصفح: لا توجد»</td><td>☐</td></tr><tr><td>ب٥</td><td><code>npm run check:additive</code></td><td>«إضافات فقط»</td><td>☐</td></tr><tr><td>ب٦</td><td><code>npm run check:migrations</code></td><td>«ملفات الترحيل مواكِبة للمخطط»</td><td>☐</td></tr><tr><td>ب٧</td><td><code>npm run check:money</code></td><td>بلا فروق</td><td>☐</td></tr></tbody></table></div>
+<h3>ج · دورة عمل كاملة بيدك</h3>
+<p>سجّل الدخول بـ<code>yahia@fasttrans.local</code> ونفّذ:</p>
+<div class="scroll"><table><thead><tr><th>#</th><th>البند</th><th>المتوقَّع</th><th>✓</th></tr></thead><tbody><tr><td>ج١</td><td>سجّل ليدًا جديدًا برقم هاتف</td><td>يُحفظ في أقل من ١٥ ثانية</td><td>☐</td></tr><tr><td>ج٢</td><td>سجّل ليدًا ثانيًا <strong>بنفس الرقم</strong></td><td>يلتصق بنفس بطاقة العميل، <strong>لا بطاقة ثانية</strong></td><td>☐</td></tr><tr><td>ج٣</td><td>أغلق ليدًا بحالة «خاسر» بلا سبب</td><td><strong>يُرفض</strong> — السبب إلزامي</td><td>☐</td></tr><tr><td>ج٤</td><td>حوّل ليدًا إلى مشروع</td><td>يُحسب الإجمالي من الصفحات × السعر</td><td>☐</td></tr><tr><td>ج٥</td><td>امنح خصمًا ١٥٪</td><td><strong>يُجمَّد المشروع</strong> بانتظار الاعتماد (حدّ الأدمن ١٠٪)</td><td>☐</td></tr><tr><td>ج٦</td><td>ادخل بـ<code>magly@</code> واعتمد الخصم</td><td>يُفكّ التجميد</td><td>☐</td></tr><tr><td>ج٧</td><td>ادخل بـ<code>tarek@</code> وأسند المشروع</td><td>يُسند، <strong>وتفتح صفحة المشروع بلا ٤٠٤</strong></td><td>☐</td></tr><tr><td>ج٨</td><td>تحقّق أن طارق <strong>لا يرى سعر البيع</strong></td><td>الحقل غائب من الصفحة ومن حمولتها</td><td>☐</td></tr><tr><td>ج٩</td><td>حرّك المشروع إلى «سُلّم»</td><td>التكلفة تُجمَّد، ويُنشأ قيد مسوّدة</td><td>☐</td></tr><tr><td>ج١٠</td><td>ادخل بـ<code>yahia@</code> وسجّل تحصيلًا جزئيًّا</td><td>الرصيد يُحسب في الخادم</td><td>☐</td></tr><tr><td>ج١١</td><td>ادخل بـ<code>accountant@</code> ورحّل القيد</td><td>يُرحَّل، وميزان المراجعة يتوازن</td><td>☐</td></tr></tbody></table></div>
+<h3>د · الصلاحيات — الحجب في الصفحة لا في القائمة</h3>
+<p>اكتب المسار <strong>مباشرة في شريط العنوان</strong> بحساب كل دور:</p>
+<div class="scroll"><table><thead><tr><th>#</th><th>الحساب</th><th>المسار</th><th>المتوقَّع</th><th>✓</th></tr></thead><tbody><tr><td>د١</td><td><code>doaa@</code> (مترجمة)</td><td><code>/leads</code></td><td>يُحوَّل — محجوب</td><td>☐</td></tr><tr><td>د٢</td><td><code>doaa@</code></td><td><code>/finance</code></td><td>يُحوَّل — محجوب</td><td>☐</td></tr><tr><td>د٣</td><td><code>doaa@</code></td><td><code>/me</code></td><td><strong>يصل</strong></td><td>☐</td></tr><tr><td>د٤</td><td><code>tarek@</code></td><td><code>/quotes</code></td><td>يُحوَّل — محجوب</td><td>☐</td></tr><tr><td>د٥</td><td><code>tarek@</code></td><td><code>/production</code></td><td><strong>يصل</strong></td><td>☐</td></tr><tr><td>د٦</td><td><code>accountant@</code></td><td><code>/leads</code></td><td>يُحوَّل — محجوب</td><td>☐</td></tr><tr><td>د٧</td><td><code>accountant@</code></td><td><code>/finance/journal</code></td><td><strong>يصل</strong></td><td>☐</td></tr><tr><td>د٨</td><td><code>magly@</code></td><td>بطاقة أي عميل</td><td><strong>لا يرى</strong> قسم «حذفٌ نهائيّ»</td><td>☐</td></tr><tr><td>د٩</td><td><code>owner@</code></td><td>بطاقة أي عميل</td><td><strong>يرى</strong> قسم «حذفٌ نهائيّ» بجرده</td><td>☐</td></tr><tr><td>د١٠</td><td><code>yahia@</code></td><td><code>/commissions</code></td><td>يرى نسبته هو <strong>ولا يرى نسب زملائه</strong></td><td>☐</td></tr></tbody></table></div>
+<h3>هـ · نطاق الرؤية</h3>
+<div class="scroll"><table><thead><tr><th>#</th><th>البند</th><th>المتوقَّع</th><th>✓</th></tr></thead><tbody><tr><td>هـ١</td><td><code>magly@</code> يفتح <code>/clients</code></td><td>يرى عملاءه <strong>وعملاء فريقه</strong> (الصاوي · نورا · يحيى)</td><td>☐</td></tr><tr><td>هـ٢</td><td><code>yahia@</code> يفتح <code>/clients</code></td><td>يرى عملاءه وحده — رئيسيًّا أو فرعيًّا</td><td>☐</td></tr><tr><td>هـ٣</td><td><code>sara@</code> يفتح <code>/clients</code></td><td>صفر (جديدة بلا تاريخ) — <strong>وهذا صحيح</strong></td><td>☐</td></tr><tr><td>هـ٤</td><td><code>owner@</code> يفتح <code>/clients</code></td><td>يرى الكلّ</td><td>☐</td></tr></tbody></table></div>
+<h3>و · سلامة البيانات المرحَّلة</h3>
+<blockquote><strong>هذه أهمّ فقرة في القائمة.</strong> إن اختلف رقم فيها فقد كُسر شيء جوهري.</blockquote>
+<div class="scroll"><table><thead><tr><th>#</th><th>البند</th><th>المتوقَّع</th><th>✓</th></tr></thead><tbody><tr><td>و١</td><td><code>/finance/reports/trial</code> لكل سنة ٢٠٢٢–٢٠٢٦</td><td><strong>المدين = الدائن</strong> في السنوات الخمس</td><td>☐</td></tr><tr><td>و٢</td><td><code>/finance/reports/pl</code> لكل سنة</td><td>يطابق جدول القسم ٢ بفارق ≤ ٤ قروش</td><td>☐</td></tr><tr><td>و٣</td><td>الميزانية لكل سنة</td><td><strong>متوازنة</strong> (الفرق = ٠)</td><td>☐</td></tr><tr><td>و٤</td><td><code>/analytics</code> — الاتجاه السنوي</td><td>يبدأ من <strong>٢٠٢٢</strong>، وبلا وسم «ناقصة»</td><td>☐</td></tr><tr><td>و٥</td><td>عمود «الهامش» في الاتجاه</td><td>يعرض <code>—</code> لا <code>١٠٠٪</code></td><td>☐</td></tr><tr><td>و٦</td><td><code>/analytics/acquisition</code> سنة ٢٠٢٦</td><td>Organic ~٤٫٦× · Google ~٢٫٢× · Meta ~٠٫٤×</td><td>☐</td></tr><tr><td>و٧</td><td>بطاقة «قرآن هاوس»</td><td>١٣ مشروعًا · مالكها <strong>أحمد محسن</strong></td><td>☐</td></tr><tr><td>و٨</td><td>بطاقة «سلام»</td><td>١٨ مشروعًا (تضمّ أسورة اليقين ومركز سلام)</td><td>☐</td></tr><tr><td>و٩</td><td>ابحث عن عميل اسمه «عملاء عامون»</td><td><strong>غير موجود</strong> — وعاء توزيع لا عميل</td><td>☐</td></tr><tr><td>و١٠</td><td><code>/finance/journal</code> — عدد القيود</td><td>٨٬٨٤٨ · كلها <code>posted</code></td><td>☐</td></tr></tbody></table></div>
+<h3>ز · الحرّاس الحرجة</h3>
+<div class="scroll"><table><thead><tr><th>#</th><th>البند</th><th>كيف تفحصه</th><th>✓</th></tr></thead><tbody><tr><td>ز١</td><td><strong>لا نسبة على المبالغ المسوّاة</strong></td><td>أسند خطة نسب لـ<code>magly@</code> ثم افتح <code>/commissions</code> — لا يظهر استحقاق على مشاريع <code>settle-*</code></td><td>☐</td></tr><tr><td>ز٢</td><td><strong>الفترة المقفلة تمنع الحذف</strong></td><td>أقفل فترة فيها قيد لعميل، ثم جرّب حذفه نهائيًّا — <strong>يُرفض</strong> مع تسمية الفترة</td><td>☐</td></tr><tr><td>ز٣</td><td><strong>الحذف النهائي لا يترك يتيمًا</strong></td><td>احذف عميلًا تجريبيًّا، ثم تأكّد: لا مشروع بلا عميل، لا سطر قيد بلا قيد</td><td>☐</td></tr><tr><td>ز٤</td><td><strong>سجل التدقيق يبقى</strong></td><td>بعد الحذف، <code>/settings/audit</code> يحمل سطرًا بجرد ما حُذف</td><td>☐</td></tr><tr><td>ز٥</td><td><strong>حدّ محاولات الدخول</strong></td><td>١١ محاولة خاطئة متتالية → يُغلق ربع ساعة</td><td>☐</td></tr><tr><td>ز٦</td><td><strong>النظام بلا جافاسكربت</strong></td><td>عطّل JS في المتصفح وسجّل ليدًا — <strong>يُحفظ</strong></td><td>☐</td></tr></tbody></table></div>
+<h3>ح · النشر</h3>
+<div class="scroll"><table><thead><tr><th>#</th><th>البند</th><th>المتوقَّع</th><th>✓</th></tr></thead><tbody><tr><td>ح١</td><td>متغيّرات البيئة على Vercel</td><td><code>DATABASE_URL</code> · <code>AUTH_SECRET</code> · <code>ADMIN_PASSWORD</code> مضبوطة</td><td>☐</td></tr><tr><td>ح٢</td><td>ادفع كوميتًا تافهًا إلى <code>main</code></td><td>تبدأ نشرة جديدة وتنجح</td><td>☐</td></tr><tr><td>ح٣</td><td>افتح <code>www.fastrans-crm.com</code></td><td>يعمل، والكوميت الأحدث ظاهر</td><td>☐</td></tr><tr><td>ح٤</td><td><code>/api/health</code></td><td>يردّ بحالة سليمة</td><td>☐</td></tr><tr><td>ح٥</td><td><code>/settings/backup</code></td><td>ينزّل نسخة فعليّة</td><td>☐</td></tr><tr><td>ح٦</td><td><code>/settings/errors</code></td><td>يفتح بلا أخطاء مسجَّلة جديدة</td><td>☐</td></tr><tr><td>ح٧</td><td><code>/settings/jobs</code></td><td>يقول حال تهيئة المهام المجدولة</td><td>☐</td></tr></tbody></table></div>
+<h3>ط · القراءة الإلزامية قبل أول تعديل</h3>
+<div class="scroll"><table><thead><tr><th>#</th><th>المستند</th><th>لماذا</th><th>✓</th></tr></thead><tbody><tr><td>ط١</td><td><code>CLAUDE.md</code></td><td>ذاكرة المشروع — كل قرار وكل خطأ بحارسه</td><td>☐</td></tr><tr><td>ط٢</td><td><code>PHASE-19.md</code></td><td>آخر مرحلة — مطابقة السنوات الخمس</td><td>☐</td></tr><tr><td>ط٣</td><td><code>docs/SPEC.md</code></td><td>المواصفة المُلزِمة</td><td>☐</td></tr><tr><td>ط٤</td><td><code>docs/FINANCE-SPEC.md</code></td><td>مواصفة الماليات</td><td>☐</td></tr><tr><td>ط٥</td><td><code>COMMISSION-SPEC.md</code></td><td>أمثلة النسب بأرقامها</td><td>☐</td></tr><tr><td>ط٦</td><td><code>docs/HANDOVER.md</code></td><td>التسليم الهندسي المفصّل (إنجليزي، ١٧ قسمًا)</td><td>☐</td></tr></tbody></table></div>
+<hr>
+<h3>إقرار الاستلام</h3>
+<div class="scroll"><table><thead><tr><th>اسم المبرمج</th><th></th></tr></thead><tbody><tr><td>التاريخ</td><td></td></tr><tr><td>نتيجة <code>test:unit</code></td><td>‎____ / ١٬٧٤٣</td></tr><tr><td>نتيجة <code>test:e2e</code></td><td>‎____ / ٣٤٠</td></tr><tr><td>بنود أخفقت (أرقامها)</td><td></td></tr><tr><td>ملاحظات</td><td></td></tr><tr><td><strong>التوقيع</strong></td><td></td></tr></tbody></table></div>
+<blockquote><strong>ولا تُعتمد المنصة نهائيًّا</strong> قبل أن تمرّ كل بنود المجموعات من (أ) إلى (ح)، وتُقرأ مستندات المجموعة (ط).</blockquote>
+</div>

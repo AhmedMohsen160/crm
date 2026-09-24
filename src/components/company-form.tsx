@@ -2,6 +2,8 @@ import Link from '@/components/link';
 import { INDUSTRIES } from '@/lib/constants';
 import { FormField, SelectField, TextAreaField } from '@/components/ui';
 import { SaveButton } from '@/components/forms';
+import CountryCity from '@/components/country-city';
+import DocumentUpload from '@/components/document-upload';
 
 type CompanyData = {
   name: string;
@@ -14,9 +16,14 @@ type CompanyData = {
   city: string | null;
   address: string | null;
   taxNumber: string | null;
+  commercialRegNo: string | null;
+  repName: string | null;
+  repPhone: string | null;
   paymentTerms: string | null;
   notes: string | null;
   ownerId: string | null;
+  commercialRegFile?: { id: string; name: string; size: number } | null;
+  taxCardFile?: { id: string; name: string; size: number } | null;
 };
 
 export default function CompanyForm({
@@ -37,7 +44,12 @@ export default function CompanyForm({
   cancelHref: string;
 }) {
   return (
-    <form method="post" action="/api/save" className="space-y-6">
+    <form
+      method="post"
+      action="/api/save"
+      encType="multipart/form-data"
+      className="space-y-6"
+    >
       <input type="hidden" name="entity" value="company" />
       <input type="hidden" name="id" value={recordId ?? ''} />
       <input type="hidden" name="back" value={backPath} />
@@ -68,11 +80,27 @@ export default function CompanyForm({
         </div>
       </section>
 
+      {/* ── ممثّل الشركة ─────────────────────────────────── */}
+      <section className="card card-pad">
+        <h2 className="mb-1 section-title">ممثّل الشركة</h2>
+        <p className="mb-4 text-xs text-slate-500">
+          من يُوقّع ويُتابع الالتزامات — غير جهة الاتصال التي قد تكون موظف تنسيق.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="اسم الممثّل" name="repName" defaultValue={company?.repName} />
+          <FormField
+            label="رقم الممثّل"
+            name="repPhone"
+            dir="ltr"
+            defaultValue={company?.repPhone}
+          />
+        </div>
+      </section>
+
       <section className="card card-pad">
         <h2 className="mb-4 section-title">العنوان والبيانات المالية</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="الدولة" name="country" defaultValue={company?.country} />
-          <FormField label="المدينة" name="city" defaultValue={company?.city} />
+          <CountryCity defaultCountry={company?.country} defaultCity={company?.city} />
           <FormField
             label="العنوان التفصيلي"
             name="address"
@@ -80,10 +108,18 @@ export default function CompanyForm({
             defaultValue={company?.address}
           />
           <FormField
-            label="الرقم الضريبي / السجل التجاري"
+            label="الرقم الضريبي"
             name="taxNumber"
+            dir="ltr"
             defaultValue={company?.taxNumber}
             hint="يظهر في عروض الأسعار والفواتير"
+          />
+          <FormField
+            label="رقم السجل التجاري"
+            name="commercialRegNo"
+            dir="ltr"
+            defaultValue={company?.commercialRegNo}
+            hint="رقمٌ آخر غير الضريبي — والفاتورة تطلبهما معًا"
           />
           <FormField
             label="شروط الدفع"
@@ -100,6 +136,27 @@ export default function CompanyForm({
               className="sm:col-span-2"
             />
           )}
+        </div>
+      </section>
+
+      {/* ── مستندات الشركة ──────────────────────────────── */}
+      <section className="card card-pad">
+        <h2 className="mb-1 section-title">مستندات الشركة</h2>
+        <p className="mb-4 text-xs text-slate-500">
+          اختيارية — ترفعها مرة فيجدها المحاسب عند إصدار الفاتورة بلا أن يطلبها من
+          العميل ثانيةً.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <DocumentUpload
+            label="السجل التجاري"
+            name="commercialRegFile"
+            file={company?.commercialRegFile}
+          />
+          <DocumentUpload
+            label="البطاقة الضريبية"
+            name="taxCardFile"
+            file={company?.taxCardFile}
+          />
         </div>
       </section>
 

@@ -1,8 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FormField, SelectField } from '@/components/ui';
 import { formatMoney } from '@/lib/utils';
+
+/** بند من قائمة الأسعار — يصل من الخادم مرة واحدة مع الصفحة */
+export type PriceListEntry = {
+  serviceLine: string;
+  langFrom: string;
+  langTo: string;
+  unitPrice: number;
+};
 
 /**
  * حاسبة السعر أمام عين المستخدم.
@@ -30,6 +38,7 @@ export default function LiveTotal({
   discountHint,
   showPrice,
   canDiscount,
+  priceList = [],
 }: {
   currency?: string;
   defaultPages?: number | null;
@@ -42,17 +51,55 @@ export default function LiveTotal({
   discountHint: string;
   showPrice: boolean;
   canDiscount: boolean;
+  priceList?: PriceListEntry[];
 }) {
   const [pages, setPages] = useState(defaultPages ?? null);
   const [unitPrice, setUnitPrice] = useState(defaultUnitPrice ?? null);
   const [discountType, setDiscountType] = useState(defaultDiscountType ?? '');
   const [percent, setPercent] = useState(defaultDiscountPercent ?? null);
   const [amount, setAmount] = useState(defaultDiscountAmount ?? null);
+  /** السعر الساري لخط الخدمة وزوج اللغات المختارَين — من القائمة لا من اليد */
+  const [listPrice, setListPrice] = useState<number | null>(null);
 
   const num = (raw: string) => {
     const value = Number(raw);
     return raw.trim() === '' || !Number.isFinite(value) ? null : value;
   };
+
+  /**
+   * **سعر القائمة يظهر قبل الحفظ لا بعده.**
+   *
+   * خط الخدمة واللغتان في قسمٍ آخر من النموذج، فتُقرأ قيمها من النموذج نفسه
+   * عند أي تغيير — بدل نقل الحقول من مكانها الطبيعي في الشاشة.
+   *
+   * وهذا **عرضٌ لا قرار**: الخادم يقرأ القائمة بنفسه عند الحفظ، فمن عطّل
+   * جافاسكربت يُسعَّر مشروعه صحيحًا كما كان.
+   */
+  const anchor = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const form = anchor.current?.form;
+    if (!form || priceList.length === 0) return;
+
+    const read = () => {
+      const value = (name: string) =>
+        (form.elements.namedItem(name) as HTMLInputElement | null)?.value ?? '';
+      const line = value('serviceLine');
+      const from = value('sourceLang');
+      const to = value('targetLang');
+      if (!line || !from || !to) return setListPrice(null);
+      const match = priceList.find(
+        (p) => p.serviceLine === line && p.langFrom === from && p.langTo === to
+      );
+      setListPrice(match?.unitPrice ?? null);
+    };
+
+    read();
+    form.addEventListener('change', read);
+    return () => form.removeEventListener('change', read);
+  }, [priceList]);
+
+  /** ما يُحسب به: المكتوب باليد يعلو على القائمة */
+  const effectivePrice = unitPrice ?? listPrice;
 
   /**
    * **الصفحة هي الوحدة، والإجمالي مشتقّ منها ومن سعرها.**
@@ -61,7 +108,10 @@ export default function LiveTotal({
    * الواحد مصدران يختلفان، ولا يُعرف أيّهما الصحيح حين يختلفان. حُذفت،
    * والإجمالي يُحسب: هنا للعرض، وفي الخادم للحفظ.
    */
-  const gross = pages !== null && unitPrice !== null ? pages * unitPrice : (defaultNetTotal ?? null);
+  const gross =
+    pages !== null && effectivePrice !== null
+      ? pages * effectivePrice
+      : (defaultNetTotal ?? null);
 
   const discount =
     gross === null
@@ -76,6 +126,7 @@ export default function LiveTotal({
 
   return (
     <>
+      <input ref={anchor} type="hidden" name="__priceAnchor" value="" />
       <FormField
         label="عدد الصفحات"
         name="pages"
@@ -97,7 +148,11 @@ export default function LiveTotal({
             min="0"
             dir="ltr"
             defaultValue={defaultUnitPrice}
-            hint="اتركه فارغًا ليُقرأ من قائمة الأسعار تلقائيًا"
+            hint={
+              listPrice !== null
+                ? `قائمة الأسعار: ${listPrice} لهذا الزوج — اتركه فارغًا ليُؤخذ منها`
+                : 'اتركه فارغًا ليُقرأ من قائمة الأسعار تلقائيًا'
+            }
             onChange={(e) => setUnitPrice(num(e.target.value))}
           />
         </>
@@ -147,9 +202,10 @@ export default function LiveTotal({
           <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-sm">
             <span className="text-slate-600">
               الإجمالي قبل الخصم
-              {pages !== null && unitPrice !== null && (
+              {pages !== null && effectivePrice !== null && (
                 <span className="mr-1 text-xs text-slate-400">
-                  ({pages} صفحة × {unitPrice})
+                  ({pages} صفحة × {effectivePrice}
+                  {unitPrice === null && listPrice !== null ? ' من القائمة' : ''})
                 </span>
               )}
             </span>

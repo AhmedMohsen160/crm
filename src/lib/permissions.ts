@@ -36,6 +36,7 @@ export const PERMISSIONS = {
   canUseEmail: 'بريد النظام',
   canUseAi: 'المساعد الذكي',
   canManageHr: 'إدارة الموارد البشرية',
+  canPurgeRecords: 'حذفٌ نهائيّ لسجل عميل',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -70,6 +71,8 @@ export const PERMISSION_HINTS: Record<Permission, string> = {
   canUseEmail: 'قراءة بريد الصناديق المتاحة له والرد عليها',
   canUseAi: 'سؤال المساعد الذكي وصياغة الردود — بحدود ما يراه هو',
   canManageHr: 'الأقسام وهياكل الأجر وكشوف الرواتب وتقارير الأداء',
+  canPurgeRecords:
+    'يمحو بطاقة عميل ومشاريعه وليدزه بلا رجعة — لتنقية ما أُدخل تجربةً. والأثر يبقى في سجل التدقيق',
 };
 
 /** نطاق ما يراه المستخدم من السجلات */
@@ -146,8 +149,15 @@ export const DEFAULT_ROLES: {
     label: 'المدير التنفيذي',
     sortOrder: 2,
     discountLimit: 1,
+    /**
+     * **والحذف النهائيّ محجوبٌ عنه أيضًا.**
+     *
+     * قالها أحمد: «تكون لمدير النظام فقط». فهي للمالك ومدير النظام وحدهما —
+     * وهما دوران يشغلهما هو. وتُمنح لغيره من شاشة الأدوار متى قرّر.
+     */
     permissions: PERMISSION_KEYS.filter(
-      (key) => key !== 'canManageRoles' && key !== 'canManageSettings'
+      (key) =>
+        key !== 'canManageRoles' && key !== 'canManageSettings' && key !== 'canPurgeRecords'
     ),
   },
   {

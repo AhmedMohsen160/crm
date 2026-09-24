@@ -32,6 +32,8 @@ export default async function CompanyDetailPage({
       owner: { select: { name: true } },
       contacts: { orderBy: { firstName: 'asc' } },
       projects: { orderBy: { updatedAt: 'desc' } },
+      commercialRegFile: { select: { id: true, name: true } },
+      taxCardFile: { select: { id: true, name: true } },
     },
   });
   if (!company) notFound();
@@ -145,6 +147,44 @@ export default async function CompanyDetailPage({
                 <span dir="ltr" className="inline-block">
                   {company.taxNumber ?? '—'}
                 </span>
+              </Field>
+              <Field label="رقم السجل التجاري">
+                <span dir="ltr" className="inline-block">
+                  {company.commercialRegNo ?? '—'}
+                </span>
+              </Field>
+              <Field label="ممثّل الشركة">
+                {company.repName ? (
+                  <>
+                    {company.repName}
+                    {company.repPhone && (
+                      <span dir="ltr" className="mr-2 text-xs text-slate-400">
+                        {company.repPhone}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  '—'
+                )}
+              </Field>
+              {/* المستندان — يفتحهما المحاسب عند الفاتورة بلا أن يطلبهما من العميل */}
+              <Field label="مستندات الشركة">
+                {company.commercialRegFile || company.taxCardFile ? (
+                  <span className="flex flex-wrap gap-x-4 gap-y-1">
+                    {company.commercialRegFile && (
+                      <a href={`/api/files/${company.commercialRegFile.id}`} className="link">
+                        السجل التجاري
+                      </a>
+                    )}
+                    {company.taxCardFile && (
+                      <a href={`/api/files/${company.taxCardFile.id}`} className="link">
+                        البطاقة الضريبية
+                      </a>
+                    )}
+                  </span>
+                ) : (
+                  '—'
+                )}
               </Field>
               <Field label="شروط الدفع">{company.paymentTerms ?? '—'}</Field>
               <Field label="الموظف المسؤول">

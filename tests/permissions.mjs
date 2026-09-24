@@ -1,3 +1,4 @@
+import { canOpenProject } from '../src/lib/projects.ts';
 /**
  * اختبار مصفوفة الأدوار والصلاحيات — §٥ وما أقرّته الإدارة في المرحلة ١٤.
  *
@@ -79,6 +80,24 @@ check(
   !has('executive_director', 'canManageRoles') && !has('executive_director', 'canManageSettings'),
   'المدير التنفيذي: تعريف الأدوار وإعدادات النظام تبقى للمالك'
 );
+/**
+ * **والحذف النهائيّ ثالثُها.** قالها أحمد: «تكون لمدير النظام فقط» — فهي
+ * للمالك ومدير النظام وحدهما، وتُمنح لغيرهما من شاشة الأدوار متى قرّر.
+ */
+check(
+  !has('executive_director', 'canPurgeRecords'),
+  '★ **والحذف النهائيّ للمالك ومدير النظام وحدهما** — «تكون لمدير النظام فقط»'
+);
+check(
+  has('owner', 'canPurgeRecords') && has('system_admin', 'canPurgeRecords'),
+  'وهما يملكانه'
+);
+check(
+  !has('sales_manager', 'canPurgeRecords') &&
+    !has('finance', 'canPurgeRecords') &&
+    !has('project_manager', 'canPurgeRecords'),
+  'ولا يملكه مدير المبيعات ولا المحاسب ولا مدير المشاريع'
+);
 check(
   has('executive_director', 'canManageUsers') &&
     has('executive_director', 'canManageHr') &&
@@ -87,8 +106,8 @@ check(
   'وما عداهما يديره كاملًا — الأقسام كلها تحته'
 );
 check(
-  roleOf('executive_director').permissions.length === PERMISSION_KEYS.length - 2,
-  'وحُجبت عنه صلاحيتان بالضبط لا أكثر'
+  roleOf('executive_director').permissions.length === PERMISSION_KEYS.length - 3,
+  'وحُجبت عنه ثلاثُ صلاحيات بالضبط لا أكثر — الأدوار والإعدادات والحذف النهائيّ'
 );
 
 // ── مدير المبيعات وأدمن المبيعات ─────────────────────────────
@@ -180,6 +199,55 @@ for (const key of ['canManageUsers', 'canManageRoles', 'canManageSettings', 'can
     `صلاحية «${PERMISSIONS[key]}» يملكها دورٌ افتراضي واحد على الأقل`
   );
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+//  بابُ صفحة المشروع
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * **بابُ الصفحة هو بابُ القائمة نفسه.**
+ *
+ * كانت القائمة تفتح لمن يملك `canAssignProduction` والصفحة تفحص
+ * `canViewAllLeads` وحدها — فيرى مديرُ المشاريع المشروعَ في القائمة ويُسنده،
+ * ثم يضغط ليبدأ التنفيذ فتقول له الصفحة «الصفحة غير موجودة». وهو مأذونٌ
+ * يبحث عمّا لا يجده.
+ */
+const PROJECT = {
+  ownerId: 'magly',
+  projectManagerId: 'tarek',
+  primaryProducerId: 'doaa',
+  reviewerId: null,
+};
+
+check(
+  canOpenProject({ id: 'tarek', seesAll: true }, PROJECT),
+  '★ **من يُسند يفتح المشروع** — والقائمة والصفحة ببابٍ واحد'
+);
+check(
+  canOpenProject({ id: 'magly', seesAll: false, scopeIds: ['magly', 'yahia'] }, PROJECT),
+  'ومالكُ المشروع يفتحه'
+);
+check(
+  canOpenProject({ id: 'sales_manager', seesAll: false, scopeIds: ['sales_manager', 'magly'] }, PROJECT),
+  'ومديرُ مالكِه يفتحه بنطاق فريقه'
+);
+check(
+  canOpenProject({ id: 'tarek', seesAll: false }, PROJECT),
+  '★ **ومن أُسند إليه المشروع يفتحه** — الإسنادُ بلا وصولٍ طريقٌ مسدود'
+);
+check(
+  canOpenProject({ id: 'doaa', seesAll: false }, PROJECT),
+  'والمنفِّذُ المسنَد إليه كذلك'
+);
+check(
+  !canOpenProject({ id: 'stranger', seesAll: false, scopeIds: ['stranger'] }, PROJECT),
+  'ومن لا يملكه ولا أُسند إليه ولا يرى الكلّ لا يفتحه'
+);
+check(
+  !canOpenProject({ id: 'yahia', seesAll: false, scopeIds: ['yahia'] }, PROJECT),
+  'وأدمنٌ آخر في الفريق نفسه لا يفتح مشروع زميله — نطاقُه نفسُه'
+);
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n═══ النتيجة: ${results.length - failed.length}/${results.length} نجحت ═══`);

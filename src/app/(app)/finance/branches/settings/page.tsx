@@ -5,10 +5,12 @@ import { requirePermission } from '@/lib/auth';
 import {
   BRANCH_STATUSES,
   BRANCH_TYPES,
-  COST_CENTER_KINDS,
+  SPEND_KINDS,
+  SPEND_KIND_KEYS,
+  SPEND_KIND_HINTS,
   MATURITY_STAGES,
   VALIDATION_RULES,
-  type CostCenterKind,
+  type SpendKind,
 } from '@/lib/branch-economics';
 import { listOptions } from '@/lib/reference';
 import { toDateInput } from '@/lib/utils';
@@ -21,9 +23,12 @@ export const dynamic = 'force-dynamic';
 /**
  * إعداد الموديول.
  *
- * ثلاث خطوات بترتيبها: **زرع الفروع** ثم **تصنيف مراكز التكلفة** ثم تعليم
- * الحسابات غير النقدية. والثانية هي التي بدونها لا يعمل شيء: فئة المركز هي
- * ما يحدّد أين يقع كل جنيه.
+ * ثلاث خطوات بترتيبها: **زرع الفروع** ثم **تصنيف حسابات المصروفات** ثم
+ * تعليم الحسابات غير النقدية. والثانية هي التي بدونها لا يعمل شيء: تصنيف
+ * الحساب هو ما يحدّد أين يقع كل جنيه.
+ *
+ * **والتصنيف على الحساب لا على مركز التكلفة** — مركز التكلفة عند المحاسب
+ * مشروعٌ تُقاس ربحيته، لا وعاءٌ لتصنيف الإنفاق.
  */
 export default async function BranchSettingsPage({
   searchParams,
@@ -33,38 +38,39 @@ export default async function BranchSettingsPage({
     edit?: string;
     seeded?: string;
     classified?: string;
+    suggested?: string;
     cash?: string;
   }>;
 }) {
   await requirePermission('canManageAccounting');
   const sp = await searchParams;
 
-  const [branches, costCenters, expenseAccounts, currencies] = await Promise.all([
+  const [branches, expenseAccounts, currencies] = await Promise.all([
     db.branch.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
-    db.costCenter.findMany({ where: { active: true }, orderBy: { name: 'asc' } }),
     db.account.findMany({
       where: { type: 'expense', isPostable: true, active: true },
-      select: { id: true, name: true, isCash: true, systemKey: true },
-      orderBy: { name: 'asc' },
+      select: { id: true, name: true, code: true, isCash: true, systemKey: true, spendKind: true },
+      orderBy: [{ code: 'asc' }, { name: 'asc' }],
     }),
     listOptions('currency'),
   ]);
 
   const editing = sp.edit ? branches.find((b) => b.id === sp.edit) : null;
-  const unclassified = costCenters.filter((c) => !c.kind || c.kind === 'branch_direct').length;
+  const unclassified = expenseAccounts.filter((a) => !a.spendKind).length;
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="إعداد محاسبة الفروع" subtitle="الفروع · فئات مراكز التكلفة · الحسابات غير النقدية">
+      <PageHeader title="إعداد محاسبة الفروع" subtitle="الفروع · تصنيف حسابات المصروفات · الحسابات غير النقدية">
         <Link href="/finance/branches" className="btn-secondary">
           اللوحة
         </Link>
       </PageHeader>
       <ErrorAlert message={sp.error} />
-      {(sp.seeded || sp.classified || sp.cash) && (
+      {(sp.seeded || sp.classified || sp.suggested || sp.cash) && (
         <p className="mb-4 rounded-lg border border-lime-300 bg-lime-50 px-4 py-3 text-sm text-lime-900">
           {sp.seeded && `زُرع ${sp.seeded} فرعًا. `}
-          {sp.classified && `صُنِّف ${sp.classified} مركزًا. `}
+          {sp.classified && `صُنِّف ${sp.classified} حسابًا. `}
+          {sp.suggested && `اقتُرح تصنيف ${sp.suggested} حسابًا — راجعها وصحّح مصاريف الفروع. `}
           {sp.cash && `حُدِّث ${sp.cash} حسابًا.`}
         </p>
       )}
@@ -263,48 +269,71 @@ export default async function BranchSettingsPage({
         </form>
       </section>
 
-      {/* ── ٢ · فئات مراكز التكلفة ──────────────────────── */}
+      {/* ── ٢ · تصنيف حسابات المصروفات ──────────────────── */}
       <section className="card card-pad mb-5">
-        <h2 className="mb-1 section-title">٢ · فئة كل مركز تكلفة</h2>
-        <p className="mb-4 text-xs leading-relaxed text-slate-500">
-          هذه الخطوة هي التي بدونها لا يعمل الموديول: <b>فئة المركز تحدّد أين يقع كل جنيه</b> —
-          في الكتلة المشتركة الثابتة أم في مصاريف فرع بعينه. وبلا تصنيف يبقى المصروف خارج
+        <h2 className="mb-1 section-title">٢ · تصنيف كل حساب مصروف</h2>
+        <p className="mb-3 text-xs leading-relaxed text-slate-500">
+          هذه الخطوة هي التي بدونها لا يعمل الموديول: <b>تصنيف الحساب يحدّد أين يقع كل جنيه</b>{' '}
+          — في الكتلة المشتركة الثابتة أم في مصاريف فرع بعينه. وبلا تصنيف يبقى المصروف خارج
           المعادلة، فتظهر الشركة أربح مما هي.
           {unclassified > 0 && (
             <span className="mr-1 font-bold text-amber-700">
-              ({unclassified} مركزًا على الافتراضي — راجعها)
+              ({unclassified} حسابًا بلا تصنيف)
             </span>
           )}
         </p>
+        <ul className="mb-4 space-y-1 rounded-lg bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600">
+          {SPEND_KIND_KEYS.map((k) => (
+            <li key={k}>
+              <b className="text-slate-800">{SPEND_KINDS[k]}</b> — {SPEND_KIND_HINTS[k]}
+            </li>
+          ))}
+        </ul>
+
+        {unclassified > 0 && (
+          <form method="post" action="/api/save" className="mb-3">
+            <input type="hidden" name="entity" value="account.suggestSpendKinds" />
+            <input type="hidden" name="id" value="" />
+            <input type="hidden" name="back" value="/finance/branches/settings" />
+            <button type="submit" className="btn-secondary">
+              املأ الفارغ باقتراح مبدئي من مجموعة الحساب
+            </button>
+            <span className="mr-2 text-xs text-slate-400">
+              اقتراحٌ يملأ الفارغ وحده — ومجموعة الحساب لا تعرف أيّ إيجارٍ إيجارُ فرع،
+              فراجِعها بعده
+            </span>
+          </form>
+        )}
 
         <form method="post" action="/api/save">
-          <input type="hidden" name="entity" value="costCenter.kinds" />
+          <input type="hidden" name="entity" value="account.spendKinds" />
           <input type="hidden" name="id" value="" />
           <input type="hidden" name="back" value="/finance/branches/settings" />
-          <div className="table-wrap max-h-80 overflow-y-auto">
+          <div className="table-wrap max-h-96 overflow-y-auto">
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>مركز التكلفة</th>
-                  <th>الفئة</th>
+                  <th>حساب المصروف</th>
+                  <th>تصنيف الإنفاق</th>
                 </tr>
               </thead>
               <tbody>
-                {costCenters.map((c) => (
-                  <tr key={c.id}>
+                {expenseAccounts.map((a) => (
+                  <tr key={a.id}>
                     <td className="text-sm text-slate-700">
-                      {c.name}
-                      {c.project && <span className="mr-2 text-xs text-slate-400">{c.project}</span>}
+                      {a.code && <span className="ml-2 text-xs text-slate-400">{a.code}</span>}
+                      {a.name}
                     </td>
                     <td>
                       <select
-                        name={`kind[${c.id}]`}
-                        defaultValue={c.kind}
+                        name={`kind[${a.id}]`}
+                        defaultValue={a.spendKind ?? ''}
                         className="input py-1 text-sm"
                       >
-                        {Object.entries(COST_CENTER_KINDS).map(([value, label]) => (
+                        <option value="">— بلا تصنيف —</option>
+                        {SPEND_KIND_KEYS.map((value) => (
                           <option key={value} value={value}>
-                            {label}
+                            {SPEND_KINDS[value]}
                           </option>
                         ))}
                       </select>

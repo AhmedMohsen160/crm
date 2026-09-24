@@ -183,6 +183,7 @@ export function FormField({
   dir,
   className,
   onChange,
+  list,
 }: {
   label: string;
   name: string;
@@ -198,6 +199,8 @@ export function FormField({
   className?: string;
   /** يُمرَّر من مكوّنات العميل وحدها — الحقل يبقى غير مضبوط فيعمل بلا جافاسكربت */
   onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  /** معرّف `datalist` للاقتراحات — يقترح ولا يحصر، فالكتابة تبقى ممكنة */
+  list?: string;
 }) {
   return (
     <div className={className}>
@@ -216,6 +219,7 @@ export function FormField({
         placeholder={placeholder}
         defaultValue={defaultValue ?? undefined}
         onChange={onChange}
+        list={list}
         className="input"
       />
       {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
