@@ -16,6 +16,8 @@ import {
   jobHealth,
   agoLabel,
   HEALTH_LABELS,
+  cronSetupState,
+  SETUP_LABELS,
 } from '../src/lib/jobs.ts';
 
 const results = [];
@@ -70,6 +72,23 @@ check(agoLabel(0) === 'الآن', 'وأقل من دقيقة: الآن');
 check(agoLabel(45).includes('45') && agoLabel(45).includes('دقيقة'), 'و٤٥ دقيقة');
 check(agoLabel(180).includes('3') && agoLabel(180).includes('ساعة'), 'و١٨٠ دقيقة = ٣ ساعات');
 check(agoLabel(2880).includes('2') && agoLabel(2880).includes('يوم'), 'ويومان يُقالان يومين لا ٢٨٨٠ دقيقة');
+
+console.log('\n── ٥ · حال التهيئة ──────────────────────────────────\n');
+
+check(cronSetupState(false, false) === 'missing', 'بلا سرّ: معطّلة');
+check(
+  cronSetupState(false, true) === 'missing',
+  '★ **وبصمةٌ قديمة لا تُخفي سرًّا رُفع** — السرّ إن زال فالمسار مغلق مهما عملت قبلًا'
+);
+check(
+  cronSetupState(true, false) === 'pending',
+  '★ **والسرّ المضبوط بلا دورةٍ بعد انتظارٌ لا عطل** — ولو قيلت الجملة نفسها في الحالين لانتظر المالك بابًا مغلقًا'
+);
+check(cronSetupState(true, true) === 'running', 'وبسرٍّ ودورةٍ نجحت: تعمل');
+check(
+  Object.values(SETUP_LABELS).every((l) => l.length > 0),
+  'ولكل حال جملةٌ عربية تُقرأ'
+);
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n═══ النتيجة: ${results.length - failed.length}/${results.length} نجحت ═══`);

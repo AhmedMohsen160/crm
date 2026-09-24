@@ -80,7 +80,11 @@ export default async function TargetsPage({
       <PageHeader
         title="أهداف الفروع الشهرية"
         subtitle="التارجت الذي تُقاس عليه نسب المبيعات — يُعدَّل هنا في أي وقت"
-      />
+      >
+        <Link href={`/settings/targets/year?year=${period.slice(0, 4)}`} className="btn-primary">
+          أدخل السنة كاملة
+        </Link>
+      </PageHeader>
       <ErrorAlert message={error} />
 
       {saved && (

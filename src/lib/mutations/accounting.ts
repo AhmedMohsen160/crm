@@ -6,10 +6,11 @@ import { str, num, date, fullName } from '@/lib/utils';
 import { logActivity, readEntityLink, linkPath, type EntityLink } from '@/lib/actions/helpers';
 import { auditEvent, auditDiff } from '@/lib/audit';
 import { fillFromLastYear } from '@/lib/budget-engine';
-import { checkClassification } from '@/lib/branch-economics';
+import { checkClassification, effectiveSpendKind } from '@/lib/branch-economics';
 import { PERMISSION_KEYS } from '@/lib/permissions';
 import { SETTING_DEFINITIONS } from '@/lib/settings-defs';
 import { findOrCreateClient } from '@/lib/clients';
+import { SPEND_CHANNELS, mayCarryChannel } from '@/lib/acquisition';
 import { normalizePhone } from '@/lib/phone';
 import {
   nextLeadCode,
@@ -193,6 +194,7 @@ export async function saveJournalEntry(fd: FormData, user: SessionUser, id?: str
     salesAdminId: string | null;
     trafficSource: string | null;
     translationType: string | null;
+    spendKind: string | null;
   }[] = [];
 
   for (let i = 0; i < 40; i += 1) {
@@ -214,6 +216,8 @@ export async function saveJournalEntry(fd: FormData, user: SessionUser, id?: str
       salesAdminId: str(fd, `lines[${i}][salesAdminId]`),
       trafficSource: str(fd, `lines[${i}][trafficSource]`),
       translationType: str(fd, `lines[${i}][translationType]`),
+      // يبقى فارغًا في الغالب الأعمّ — والتصنيف يُقرأ من الحساب
+      spendKind: str(fd, `lines[${i}][spendKind]`),
     });
   }
 
@@ -252,6 +256,7 @@ export async function saveJournalEntry(fd: FormData, user: SessionUser, id?: str
     salesAdminId: l.salesAdminId,
     trafficSource: l.trafficSource,
     translationType: l.translationType,
+    spendKind: l.spendKind,
     sortOrder: i,
   }));
 
@@ -438,6 +443,81 @@ export async function saveBudgetLines(fd: FormData, user: SessionUser) {
   return `/finance/budget?year=${budget.year}&account=${accountId}`;
 }
 
+/**
+ * الموازنة كلها من الجدول الواحد.
+ *
+ * **ومعرّف الحساب في اسم الخانة لا في حقل مخفيّ.** كانت الشاشة القديمة تحمل
+ * الحساب في حقل مخفيّ واحد بينما تختاره من قائمةٍ في نموذجٍ آخر — فمن غيّر
+ * القائمة ثم حفظ كتب أرقامًا جديدةً فوق الحساب القديم. وهنا لا يمكن ذلك:
+ * كل خانة تحمل حسابها في اسمها.
+ *
+ * **ولا يُمسّ حسابٌ لم يُرسَل** — فصفحةٌ تعرض المصروفات وحدها لا تمحو
+ * مستهدفات الإيرادات.
+ */
+export async function saveBudgetGrid(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');
+
+  const budgetId = str(fd, 'budgetId');
+  if (!budgetId) throw new MutationError('الموازنة مفقودة');
+
+  const budget = await db.budget.findUnique({ where: { id: budgetId } });
+  if (!budget) throw new MutationError('الموازنة غير موجودة');
+  if (budget.status === 'approved') {
+    throw new MutationError('الموازنة معتمدة — أعِدها إلى «قيد الإعداد» لتعديلها');
+  }
+
+  // الشهور المرسَلة لكل حساب، والرقم السنويّ إن كُتب
+  const monthsOf = new Map<string, number[]>();
+  const annualOf = new Map<string, number>();
+
+  for (const [key, raw] of fd.entries()) {
+    const monthMatch = key.match(/^m_(.+)_(\d{1,2})$/);
+    if (monthMatch) {
+      const [, accountId, month] = monthMatch;
+      const index = Number(month) - 1;
+      if (index < 0 || index > 11) continue;
+      const value = Number(String(raw).trim() || 0);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new MutationError('المستهدف يجب أن يكون رقمًا موجبًا');
+      }
+      const list = monthsOf.get(accountId) ?? Array(12).fill(0);
+      list[index] = value;
+      monthsOf.set(accountId, list);
+      continue;
+    }
+
+    const annualMatch = key.match(/^a_(.+)$/);
+    if (annualMatch) {
+      const text = String(raw).trim();
+      if (text === '') continue;
+      const value = Number(text);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new MutationError('الرقم السنويّ يجب أن يكون موجبًا');
+      }
+      annualOf.set(annualMatch[1], value);
+    }
+  }
+
+  let changed = 0;
+  for (const [accountId, months] of monthsOf) {
+    // السنويّ يعلو على الشهور — يُقسَّم والقرش الأخير على ديسمبر
+    const amounts = annualOf.has(accountId)
+      ? spreadAnnual(annualOf.get(accountId)!)
+      : months;
+
+    await db.budgetLine.deleteMany({ where: { budgetId, accountId, branch: null } });
+    const rows = amounts
+      .map((amount, i) => ({ budgetId, accountId, month: i + 1, branch: null, amount }))
+      // المستهدف صفر ومستهدف غير مضبوط شيء واحد — فلا يُخزَّن
+      .filter((row) => row.amount !== 0);
+    if (rows.length > 0) await db.budgetLine.createMany({ data: rows });
+    changed += 1;
+  }
+
+  await auditEvent(user.id, 'update', 'Budget', budgetId, `جدول الموازنة: ${changed} حسابًا`);
+  return `/finance/budget/grid?year=${budget.year}&type=${str(fd, 'type') ?? 'expense'}&saved=${changed}`;
+}
+
 /** أصل ثابت — تكلفته ونسبته وشهر بدء إهلاكه */
 export async function saveFixedAsset(fd: FormData, user: SessionUser, id?: string) {
   if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');
@@ -581,6 +661,51 @@ export async function saveAccountBehaviour(fd: FormData, user: SessionUser) {
   return `/finance/budget/plan?year=${year}&classified=${changed}`;
 }
 
+/**
+ * يُسند قناةَ الإنفاق التسويقي إلى الحسابات — دفعةً واحدة.
+ *
+ * **مرة واحدة على الحساب لا في كل قيد.** «إعلانات جوجل» جوجلُ في كل قيد
+ * يقع عليه، وسؤالُ المحاسب عنه مئات المرات يُنتج مئات الفرص للخطأ.
+ *
+ * **ومعرّفُ الحساب في اسم الخانة** (`ch_<id>`) لا في حقل مخفيّ — القاعدة
+ * التي أنقذت شاشة الموازنة: قائمةٌ في نموذجٍ وحفظٌ في آخر تكتب فوق حسابٍ
+ * لم يُقصد.
+ *
+ * **والقناة لا تُوضع إلا على مصروفٍ بيعيّ وتسويقيّ.** قناةٌ على حساب
+ * الإيجار تقسم إيجارَ المكتب على ليدز جوجل — رقمٌ لا معنى له يُبنى عليه
+ * قرارُ إنفاق.
+ */
+export async function saveAdChannels(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageAccounting')) {
+    throw new MutationError('ضبط قنوات الإنفاق للمحاسب ومدير النظام');
+  }
+
+  const allowed = new Set(SPEND_CHANNELS.map((c) => c.value));
+  let changed = 0;
+
+  for (const [key, value] of fd.entries()) {
+    const match = key.match(/^ch_(.+)$/);
+    if (!match) continue;
+    const raw = String(value).trim();
+    // الفراغ قيمةٌ صالحة: «لا قناة» — ويُعرض في «غير منسوب» ولا يُخمَّن
+    const channel = allowed.has(raw) ? raw : null;
+
+    const account = await db.account.findUnique({
+      where: { id: match[1] },
+      select: { id: true, type: true, expenseGroup: true, adChannel: true },
+    });
+    if (!account) continue;
+    if (!mayCarryChannel(account.type, account.expenseGroup)) continue;
+    if (account.adChannel === channel) continue;
+
+    await db.account.update({ where: { id: account.id }, data: { adChannel: channel } });
+    changed += 1;
+  }
+
+  await auditEvent(user.id, 'update', 'Account', 'ad-channels', `قناة الإنفاق لـ${changed} حسابًا`);
+  return `/analytics/acquisition?mapped=${changed}`;
+}
+
 /** نسبة الطوارئ وملاحظات المنهج (الخطوة ٦) */
 export async function saveBudgetPlanSettings(fd: FormData, user: SessionUser) {
   if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');
@@ -617,31 +742,35 @@ export async function saveBudgetPlanSettings(fd: FormData, user: SessionUser) {
  * تخصّ فرعًا بعينه، وبندٌ ذاتيّ بلا فرع يدخل الكتلة فتتحمّله الفروع كلها.
  * وكلاهما يُفسد قائمة كل فرع لا قائمة واحد.
  *
- * ولا يُفرض إلا حين تكون مراكز التكلفة مصنَّفة أصلًا: مكتبٌ لم يُعدّ الموديول
- * بعد لا تُقفل عليه شاشة القيود.
+ * ولا يُفرض إلا حين تكون حسابات المصروفات مصنَّفة أصلًا: مكتبٌ لم يُعدّ
+ * الموديول بعد لا تُقفل عليه شاشة القيود.
+ *
+ * **والتصنيف من الحساب لا من مركز التكلفة.** كان يُقرأ من المركز، فيُولد كل
+ * مشروعٍ أنشأه المحاسب لقياس ربحيته «مصاريف فرع ذاتية» ثم يطالب بفرع لا
+ * يخصّه — وهو خلطٌ لبُعدين لا علاقة لأحدهما بالآخر.
  */
 async function assertBranchClassification(
-  lines: { accountId: string; costCenterId: string | null; branch: string | null }[]
+  lines: {
+    accountId: string;
+    costCenterId: string | null;
+    branch: string | null;
+    spendKind?: string | null;
+  }[]
 ) {
-  const configured = await db.costCenter.count({ where: { kind: { not: 'branch_direct' } } });
+  const configured = await db.account.count({ where: { spendKind: { not: null } } });
   if (configured === 0) return;
 
   const accounts = await db.account.findMany({
     where: { id: { in: [...new Set(lines.map((l) => l.accountId))] } },
-    select: { id: true, type: true, name: true },
+    select: { id: true, type: true, name: true, spendKind: true },
   });
   const typeOf = new Map(accounts.map((a) => [a.id, a.type]));
   const nameOf = new Map(accounts.map((a) => [a.id, a.name]));
-
-  const centres = await db.costCenter.findMany({
-    where: { id: { in: lines.map((l) => l.costCenterId).filter(Boolean) as string[] } },
-    select: { id: true, kind: true },
-  });
-  const kindOf = new Map(centres.map((c) => [c.id, c.kind]));
+  const kindOf = new Map(accounts.map((a) => [a.id, a.spendKind]));
 
   for (const line of lines) {
     const check = checkClassification({
-      kind: line.costCenterId ? kindOf.get(line.costCenterId) : null,
+      kind: effectiveSpendKind(line.spendKind, kindOf.get(line.accountId)),
       branch: line.branch,
       isExpense: typeOf.get(line.accountId) === 'expense',
     });

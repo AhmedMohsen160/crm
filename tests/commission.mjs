@@ -11,6 +11,7 @@ import {
   computeCommission,
   splitByProject,
   attributeShares,
+  commissionableAmount,
   rankBy,
   medal,
   sortTiers,
@@ -352,6 +353,28 @@ check(ranked[0].achieved === 300, 'الترتيب تنازلي بالمحقَّ�
 check(rankBy([], (r) => r.achieved).length === 0, 'قائمة فارغة لا تنكسر');
 check(medal(1) === '🥇' && medal(3) === '🥉', 'أوسمة المراكز الثلاثة');
 check(medal(4) === null, 'وما بعد الثالث بلا وسام — لا وسام مشاركة');
+
+// ── لا نسبة على ما نسبه النظام ولم يبعه أحد ────────────────────
+near(
+  commissionableAmount({ amount: 5000, importTag: 'sales-2025', preSettleTotal: null }),
+  5000,
+  'ما لم تمسّه التسوية يُحسب كاملًا'
+);
+near(
+  commissionableAmount({ amount: 12000, importTag: 'sales-2025', preSettleTotal: 5000 }),
+  5000,
+  'والموسَّع يُحسب على رقمه المرصود قبل التوسيع لا بعده'
+);
+near(
+  commissionableAmount({ amount: 276567, importTag: 'settle-2024', preSettleTotal: null }),
+  0,
+  'ومشروعٌ أنشأته التسوية لا بائع له فلا نسبة عليه'
+);
+near(
+  commissionableAmount({ amount: 900 }),
+  900,
+  'ومشروعٌ عاديّ بلا وسمٍ ولا تسوية يمرّ كما هو'
+);
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n═══ النتيجة: ${results.length - failed.length}/${results.length} نجحت ═══`);

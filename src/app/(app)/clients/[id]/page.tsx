@@ -1,6 +1,6 @@
 import Link from '@/components/link';
 import { notFound } from 'next/navigation';
-import { Phone, MessageCircle, Mail, Pencil, Plus } from 'lucide-react';
+import { Phone, MessageCircle, Mail, Pencil, Plus, Trash2 } from 'lucide-react';
 import { db } from '@/lib/db';
 import { can, requireUser } from '@/lib/auth';
 import { clientTotals } from '@/lib/clients';
@@ -21,6 +21,8 @@ import {
 } from '@/lib/projects';
 import { formatMoney, formatDate } from '@/lib/utils';
 import { PageHeader, Badge } from '@/components/ui';
+import { clientPurgeInventory } from '@/lib/client-purge-engine';
+import { PURGE_PHRASE, purgeVerdict, purgeTotal } from '@/lib/client-purge';
 
 export const metadata = { title: 'بطاقة العميل' };
 export const dynamic = 'force-dynamic';
@@ -38,6 +40,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
    * ولا يظهر في حمولة الصفحة.
    */
   const showPrice = can(user, 'canViewSellPrice');
+  /** الحذف النهائيّ — للمالك ومدير النظام وحدهما */
+  const mayPurge = can(user, 'canPurgeRecords');
 
   const client = await db.client.findUnique({
     where: { id },
@@ -63,6 +67,14 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   if (!client) notFound();
 
   const totals = await clientTotals(id);
+  /**
+   * جردُ الحذف — **لا يُقرأ إلا لمن يملك الحذف.**
+   *
+   * وهو استعلامٌ ثقيل يعدّ عشرة جداول، فقراءتُه لكل من يفتح البطاقة تُبطئ
+   * شاشةً تُفتح مئة مرة في اليوم لأجل زرٍّ يراه اثنان.
+   */
+  const purge = mayPurge ? await clientPurgeInventory(id) : null;
+  const verdict = purge ? purgeVerdict(purge) : null;
   const wonCount = client.projects.filter((d) => countsAsRevenue(d.status)).length;
   const average = wonCount > 0 ? totals.totalValue / wonCount : 0;
   const branchName = await listLabel('branch', client.firstBranch);
@@ -238,6 +250,75 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           </div>
         )}
       </section>
+
+      {/* ══ الحذف النهائيّ ══════════════════════════════════════ */}
+      {mayPurge && purge && (
+        <section className="rounded-xl border-2 border-rose-200 bg-rose-50/40 p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-bold text-rose-900">
+            <Trash2 className="h-4 w-4" />
+            حذفٌ نهائيّ
+          </h2>
+          <p className="mb-4 max-w-prose text-sm text-rose-800">
+            لتنقية ما أُدخل تجربةً. يمحو البطاقة وكلَّ ما يتعلّق بها بلا رجعة، ويبقى سطرٌ في
+            سجل التدقيق يقول ماذا حُذف ومن حذفه.
+          </p>
+
+          <div className="mb-4 rounded-lg border border-rose-200 bg-white p-4">
+            <p className="mb-2 text-sm font-semibold text-slate-800">
+              سيُحذف <span className="nums">{purgeTotal(purge.counts)}</span> سجلًّا:
+            </p>
+            {Object.keys(purge.counts).length === 0 ? (
+              <p className="text-sm text-slate-500">البطاقة وحدها — لا سجلات تابعة</p>
+            ) : (
+              <ul className="grid gap-x-6 gap-y-1 text-sm text-slate-700 sm:grid-cols-2">
+                {Object.entries(purge.counts).map(([label, n]) => (
+                  <li key={label} className="flex justify-between gap-3">
+                    <span>{label}</span>
+                    <b className="nums">{n}</b>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {verdict && !verdict.ok ? (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <b>الحذف موقوف.</b> {verdict.reason}.
+            </p>
+          ) : (
+            <>
+              {verdict?.warnings.map((warning) => (
+                <p
+                  key={warning}
+                  className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900"
+                >
+                  {warning}
+                </p>
+              ))}
+              <form method="post" action="/api/save" className="mt-3 flex flex-wrap items-end gap-3">
+                <input type="hidden" name="entity" value="client.purge" />
+                <input type="hidden" name="clientId" value={client.id} />
+                <div>
+                  <label className="label" htmlFor="confirm">
+                    اكتب «{PURGE_PHRASE}»
+                  </label>
+                  <input
+                    id="confirm"
+                    name="confirm"
+                    required
+                    autoComplete="off"
+                    placeholder={PURGE_PHRASE}
+                    className="input w-80"
+                  />
+                </div>
+                <button type="submit" className="btn-danger">
+                  احذف نهائيًا
+                </button>
+              </form>
+            </>
+          )}
+        </section>
+      )}
     </div>
   );
 }

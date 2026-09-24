@@ -1,7 +1,15 @@
-import { Clock, CheckCircle2, AlertTriangle, CircleDashed } from 'lucide-react';
+import { Clock, CheckCircle2, AlertTriangle, CircleDashed, KeyRound } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/auth';
-import { JOBS, lastOkKey, jobHealth, agoLabel, HEALTH_LABELS } from '@/lib/jobs';
+import {
+  JOBS,
+  lastOkKey,
+  jobHealth,
+  agoLabel,
+  HEALTH_LABELS,
+  cronSetupState,
+  SETUP_LABELS,
+} from '@/lib/jobs';
 import { formatDate } from '@/lib/utils';
 import { PageHeader, Badge } from '@/components/ui';
 
@@ -40,16 +48,88 @@ export default async function JobsPage() {
 
   const troubled = scheduled.filter((s) => s.state !== 'ok');
 
+  /**
+   * **وجودُ السرّ لا قيمتُه.** الشاشة تقول «مضبوط» ولا تعرضه: سرٌّ يُطبع في
+   * صفحة يُلتقط في أول لقطة شاشة.
+   */
+  const setup = cronSetupState(Boolean(process.env.CRON_SECRET), scheduled.some((s) => s.at));
+
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <PageHeader
         title="المهام المجدولة"
         subtitle={
-          troubled.length === 0
-            ? 'كل المهام تعمل في مواعيدها'
-            : `${troubled.length} مهمة تحتاج انتباهك`
+          setup !== 'running'
+            ? SETUP_LABELS[setup]
+            : troubled.length === 0
+              ? 'كل المهام تعمل في مواعيدها'
+              : `${troubled.length} مهمة تحتاج انتباهك`
         }
       />
+
+      {setup !== 'running' && (
+        <section
+          className={`card card-pad space-y-3 text-sm ${
+            setup === 'missing'
+              ? 'border-rose-200 bg-rose-50 text-rose-900'
+              : 'border-amber-200 bg-amber-50 text-amber-900'
+          }`}
+        >
+          <h2 className="flex items-center gap-2 font-semibold">
+            <KeyRound className="h-4 w-4" />
+            {SETUP_LABELS[setup]}
+          </h2>
+
+          {setup === 'missing' ? (
+            <>
+              <p>
+                لا تنبيهات ولا سحب بريد حتى تُضبط كلمة السرّ في لوحة النشر. وهذا مقصود:
+                مسارٌ يفتح صناديق البريد بلا حماية بابٌ مفتوح على بريد المكتب كلّه.
+              </p>
+              <ol className="list-decimal space-y-1 pr-5 leading-relaxed">
+                <li>افتح لوحة النشر واختر مشروع النظام على vercel.com</li>
+                <li>من الشريط العلوي اضغط Settings</li>
+                <li>ومن القائمة الجانبية اضغط Environment Variables</li>
+                <li>
+                  الاسم <b dir="ltr">CRON_SECRET</b> والقيمة أيّ نصّ طويل لا يُخمَّن — ثلاثون
+                  حرفًا فأكثر من حروف وأرقام
+                </li>
+                <li>اترك البيئات الثلاث مؤشَّرة كما هي ثم اضغط Save</li>
+                <li>ومن صفحة Deployments أعد نشر آخر نشرة بزرّ Redeploy</li>
+              </ol>
+              <p className="text-xs opacity-80">
+                القيمة لا يحتاجها أحد بعد اللصق: النظام يقرؤها من لوحة النشر وحدها، ولا
+                تُعرض في هذه الشاشة ولا في غيرها.
+              </p>
+            </>
+          ) : (
+            <p>
+              السرّ وصل والمسار مفتوح. أول دورة تعمل خلال ساعة على الأكثر، ويظهر تاريخها
+              في العمود الأخير. وإن بقيت الشاشة على حالها بعد ساعتين فأعد نشر آخر نشرة من
+              صفحة Deployments — فمتغيّرات البيئة لا تصل إلا لنشرةٍ بُنيت بعدها.
+            </p>
+          )}
+        </section>
+      )}
+
+      {/**
+        * **الشاشة تقول قيدَ الخطة لا تسكت عنه.** الجدول اليوميّ ليس اختيارًا
+        * هندسيًّا بل حدُّ الخطة المجانية — ومن يفتح الشاشة فيجد «كل يوم» بلا
+        * تفسيرٍ يظنّه إهمالًا، ويطلب رفعه فلا يجد من يرفعه.
+        */}
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-700">
+        <p className="mb-1 font-semibold text-slate-800">لماذا مرة واحدة يوميًّا؟</p>
+        <p>
+          خطة الاستضافة المجانية تقبل مهمةً مجدولة <b>مرة واحدة في اليوم</b> ولا تقبل
+          أكثر. وقد طلبنا يومًا دورةً كل نصف ساعة، فرفضت المنصّة <b>النشر كلَّه</b> بلا
+          رسالةٍ ظاهرة، وبقي الموقع على نسخةٍ قديمة تسعة عشر كوميتًا حتى انكشف السبب.
+        </p>
+        <p className="mt-2">
+          <b>ولرفع التكرار طريقان:</b> ترقية الخطة إلى Pro، أو جدولةٌ خارجية مجانية تنادي
+          العنوان <code className="font-mono" dir="ltr">/api/cron?job=email&amp;key=…</code>{' '}
+          بأي تواتر تشاء — والمسار مبنيٌّ لها أصلًا، فهو يُحمى بالسرّ لا بمصدر النداء.
+        </p>
+      </div>
 
       <div className="card table-wrap">
         <table className="tbl">
@@ -70,7 +150,9 @@ export default async function JobsPage() {
                 <td className="whitespace-nowrap text-sm text-slate-600">
                   {job.everyMinutes < 60
                     ? `${job.everyMinutes} دقيقة`
-                    : `${job.everyMinutes / 60} ساعة`}
+                    : job.everyMinutes >= 24 * 60
+                      ? `${job.everyMinutes / (24 * 60)} يوم`
+                      : `${job.everyMinutes / 60} ساعة`}
                 </td>
                 <td className="whitespace-nowrap text-sm text-slate-600">
                   {at ? (
@@ -107,11 +189,11 @@ export default async function JobsPage() {
       <section className="card card-pad space-y-3 text-sm text-slate-700">
         <h2 className="flex items-center gap-2 font-semibold text-slate-800">
           <Clock className="h-4 w-4 text-brand-600" />
-          إن كانت «لم تعمل بعد»
+          كيف تُقرأ هذه الشاشة
         </h2>
         <p>
-          المهام لا تعمل حتى يُضبط <b dir="ltr">CRON_SECRET</b> في إعدادات النشر. وهذا
-          مقصود: مسارٌ يفتح صناديق البريد بلا حماية بابٌ مفتوح على بريد المكتب كلّه.
+          لكل مهمة دورةٌ متوقَّعة، وتُعدّ «متأخّرة» إن مضى ثلاثة أضعافها بلا نجاح — فتأخّرٌ
+          بدورةٍ أو دورتين أمرٌ عادي لا عطل.
         </p>
         <p className="text-xs text-slate-500">
           وكل إخفاق يدخل «أعطال النظام» بسببه — لا يمرّ صامتًا.

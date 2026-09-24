@@ -3,7 +3,7 @@ import Link from '@/components/link';
 import { notFound } from 'next/navigation';
 import { Pencil, AlertTriangle, ArrowRight, FileText, Zap } from 'lucide-react';
 import { db } from '@/lib/db';
-import { requireUser, can } from '@/lib/auth';
+import { requireUser, can, visibleUserIds } from '@/lib/auth';
 import { listLabel } from '@/lib/reference';
 import {
   DISCOUNT_TYPES,
@@ -14,6 +14,7 @@ import {
   projectBalance,
   isOverdue,
   countsAsRevenue,
+  canOpenProject,
   performerRole,
   workModeIsReview,
   type ProjectStatus,
@@ -49,7 +50,6 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const { error } = await searchParams;
   const user = await requireUser();
-  const seeAll = can(user, 'canViewAllLeads');
   const showPrice = can(user, 'canViewSellPrice');
 
   const project = await db.project.findUnique({
@@ -69,7 +69,26 @@ export default async function ProjectDetailPage({
     },
   });
   if (!project) notFound();
-  if (!seeAll && project.ownerId !== user.id) notFound();
+  /**
+   * **بابُ الصفحة هو بابُ القائمة نفسه** — وكان غيرَه.
+   *
+   * القائمة تفتح لمن يملك `canAssignProduction`، والصفحة كانت تفحص
+   * `canViewAllLeads` وحدها: فيرى مديرُ المشاريع المشروعَ ويُسنده ثم يضغط
+   * ليبدأ التنفيذ فتقول له «الصفحة غير موجودة».
+   */
+  if (
+    !canOpenProject(
+      {
+        id: user.id,
+        seesAll: can(user, 'canViewAllLeads') || can(user, 'canAssignProduction'),
+        scopeIds: await visibleUserIds(user),
+      },
+      project
+    )
+  ) {
+    notFound();
+  }
+  const seeAll = can(user, 'canViewAllLeads') || can(user, 'canAssignProduction');
 
   const link = { projectId: id };
   const status = project.status as ProjectStatus;

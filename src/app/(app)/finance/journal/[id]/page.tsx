@@ -111,7 +111,7 @@ export default async function JournalEntryPage({
               <th>مدين</th>
               <th>دائن</th>
               <th>الفرع</th>
-              <th>مركز التكلفة</th>
+              <th>مركز الربحية</th>
               <th>البيان</th>
             </tr>
           </thead>
