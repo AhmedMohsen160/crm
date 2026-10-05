@@ -61,7 +61,8 @@
     "check:additive": "node scripts/check-additive.mjs",
     "test:import-ledger-en": "tsx tests/import-ledger-en.mjs",
     "test:client-purge": "tsx tests/client-purge.mjs",
-    "test:import-leads": "tsx tests/import-leads.mjs"
+    "test:import-leads": "tsx tests/import-leads.mjs",
+    "docs:handover": "node scripts/build-handover-docx.js /tmp/handover-raw.docx && python3 scripts/handover-docx-rtl.py /tmp/handover-raw.docx \"docs/out/دليل المبرمج ومستند التسليم — فاست ترانس CRM.docx\""
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",
