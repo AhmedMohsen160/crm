@@ -1,5 +1,5 @@
 import Link from '@/components/link';
-import { Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Upload, CheckCircle2, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/auth';
 import { listOptions } from '@/lib/reference';
@@ -58,8 +58,8 @@ export default async function ImportPage({
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <PageHeader
-        title="ترحيل الملفات القديمة"
-        subtitle="الليدز والمبيعات — لا يُحذف صف ولا يُخمَّن، وما لا يُحسم يذهب للمراجعة"
+        title="ترحيل باللصق — صفوفٌ تُنسخ من الشيت"
+        subtitle="لدفعةٍ صغيرة تُلصق باليد. ولملفات المكتب الكاملة استعمل «ترحيل تاريخ المكتب»"
       >
         <Link href="/settings/import/review" className="btn-secondary">
           قائمة المراجعة
@@ -67,6 +67,25 @@ export default async function ImportPage({
         </Link>
       </PageHeader>
       <ErrorAlert message={error} />
+
+      {/**
+        * **شاشتان متشابهتا الاسم أوقعت أحمد في الخطأ** — فتح هذه وأراد تلك.
+        * والحلّ لافتةٌ في رأس الصفحة لا تعديلُ الاسم وحده.
+        */}
+      <div className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900">
+        <p className="mb-1 flex items-center gap-2 font-semibold">
+          <FileSpreadsheet className="h-4 w-4" />
+          معك ملف إكسل؟ فمكانه ليس هنا
+        </p>
+        <p className="mb-3 text-xs leading-relaxed">
+          هذه الشاشة تأخذ صفوفًا <b>تُنسخ وتُلصق</b> في مربّع نصّ — وهي للدفعة الصغيرة.
+          أمّا دفاتر المحاسب السنوية وشيت المبيعات فتُرفع <b>ملفًّا كما هو</b> من شاشة
+          «ترحيل تاريخ المكتب»، وهي التي تقرأ التواريخ بنفسها وتسوّي على الدفتر.
+        </p>
+        <Link href="/settings/import/history" className="btn-primary btn-sm">
+          اذهب إلى ترحيل تاريخ المكتب
+        </Link>
+      </div>
 
       {source === 'accounting' && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">

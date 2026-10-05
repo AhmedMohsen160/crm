@@ -17,9 +17,9 @@ import {
   matchAdmin,
   isLostInquiry,
   isConverted,
-  isIncompleteYear,
   mergeNotes,
 } from '../src/lib/migration.ts';
+import * as migration from '../src/lib/migration.ts';
 
 const results = [];
 function check(ok, label, detail = '') {
@@ -195,8 +195,17 @@ check(!isConverted('', null), 'وبلا الاثنين ← غير محوَّل')
 // العمود يعلو على السعر حين يكون صريحًا
 check(!isConverted('لا', 0), '«لا» صريحة تُحترم');
 
-check(isIncompleteYear(2024), '٢٠٢٤ معلَّمة ناقصة — لا تصلح خط أساس (§١٤)');
-check(!isIncompleteYear(2025), 'و٢٠٢٥ كاملة');
+/**
+ * **وسمُ «٢٠٢٤ ناقصة» أُلغي — والاختبار انقلب إلى ضدّه ومعه سببُه.**
+ *
+ * كان الوسم صحيحًا حين كان شيت المبيعات المصدرَ الوحيد: تسعون صفًّا للسنة
+ * كلها. ثم دخل دفتر المحاسب وسُوّيت السنة عليه، فصار إيرادُها في النظام
+ * رقمَ المحاسب نفسه. والتغطية تُقرأ اليوم من آخر شهرٍ فيه تسليم.
+ */
+check(
+  !Object.keys(migration).includes('isIncompleteYear'),
+  'لا سنةَ معلَّمة «ناقصة» بعد أن سُوّيت السنوات على دفاتر المحاسب'
+);
 
 eq(mergeNotes('أ', null, 'ب'), 'أ · ب', 'ملاحظات التصحيح تُجمع في نص واحد');
 eq(mergeNotes(null, undefined), null, 'وبلا ملاحظات ← فراغ');

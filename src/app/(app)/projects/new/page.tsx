@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 import { requireUser, can } from '@/lib/auth';
 import { listOptionsMany } from '@/lib/reference';
 import { DISCOUNT_TYPES } from '@/lib/projects';
-import { discountLimitOf } from '@/lib/pricing';
+import { discountLimitOf, activePriceList } from '@/lib/pricing';
 import { PageHeader, ErrorAlert } from '@/components/ui';
 import ProjectForm, { type ProjectFormLists } from '@/components/project-form';
 
@@ -18,7 +18,7 @@ export default async function NewProjectPage({
   const seeAll = can(user, 'canViewAllLeads');
   const params = await searchParams;
 
-  const [lists, companies, contacts, users, client, limit] = await Promise.all([
+  const [lists, companies, contacts, users, client, limit, priceList] = await Promise.all([
     listOptionsMany('service_line', 'language', 'currency'),
     db.company.findMany({
       select: { id: true, name: true },
@@ -44,6 +44,7 @@ export default async function NewProjectPage({
         })
       : Promise.resolve(null),
     discountLimitOf(user),
+    activePriceList(),
   ]);
 
   return (
@@ -72,6 +73,7 @@ export default async function NewProjectPage({
         canAssign={seeAll}
         showPrice={can(user, 'canViewSellPrice')}
         canDiscount={can(user, 'canDiscount')}
+        priceList={priceList}
         discountTypes={Object.entries(DISCOUNT_TYPES)
           .filter(([v]) => v === 'percent' || v === 'amount')
           .map(([value, label]) => ({ value, label }))}

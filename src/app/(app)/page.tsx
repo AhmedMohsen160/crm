@@ -27,6 +27,7 @@ import {
 import { formatMoney, formatDate, isOverdue, cn, fullName } from '@/lib/utils';
 import { StatCard, Badge, Avatar, EmptyState } from '@/components/ui';
 import OpsDashboard from '@/components/ops-dashboard';
+import FinanceDashboard from '@/components/finance-dashboard';
 import CollectButton from '@/components/collect-button';
 
 export const metadata = { title: 'لوحة التحكم' };
@@ -57,6 +58,17 @@ export default async function DashboardPage() {
    */
   if (can(user, 'canAssignProduction') && !can(user, 'canViewSellPrice')) {
     return <OpsDashboard user={user} />;
+  }
+
+  /**
+   * **ومن يمسك الدفاتر ولا يبيع له لوحته كذلك.** كان المحاسب يفتح لوحة
+   * المبيعات: مسار صفقات وقيمتها وترتيب البائعين — أرقامٌ لا قرار له فيها.
+   * وأسئلته هو غيرها تمامًا: النقد، والذمم وأعمارها، وما ينتظر يده، وربح
+   * الشهر. والشرط صلاحيةٌ لا اسمُ دور — والمالك يملك الاثنتين فيبقى على
+   * لوحة الشركة.
+   */
+  if (can(user, 'canManageAccounting') && !can(user, 'canConvertProject')) {
+    return <FinanceDashboard user={user} />;
   }
 
   const seesLeadStats = can(user, 'canViewLeadStats');

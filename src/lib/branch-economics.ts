@@ -24,25 +24,43 @@ export function round2(value: number): number {
 //  ١ · التصنيفات
 // ═══════════════════════════════════════════════════════════════
 
-/** فئات مراكز التكلفة — وهي ما يحدّد أين يقع كل جنيه (§٣) */
-export const COST_CENTER_KINDS = {
-  production: 'الإنتاج والتشغيل',
+/**
+ * **تصنيفات الإنفاق** — وهي ما يحدّد أين يقع كل جنيه (§٣).
+ *
+ * كانت تُحمل على **مركز التكلفة**، وهو خلطٌ لبُعدين: مركز التكلفة عند
+ * المحاسب مشروعٌ مستمرّ تُقاس ربحيته، لا وعاءٌ لتصنيف الإنفاق. فانتقلت إلى
+ * **الحساب** — يُصنَّف «الإيجار» مرة واحدة ولا يُسأل عنه في كل قيد.
+ */
+export const SPEND_KINDS = {
+  production: 'الإنتاج والتشغيل المركزي',
   central_marketing: 'التسويق المؤسسي',
   general_admin: 'الإدارة العامة',
   branch_direct: 'مصاريف الفرع الذاتية',
 } as const;
-export type CostCenterKind = keyof typeof COST_CENTER_KINDS;
-export const COST_CENTER_KIND_KEYS = Object.keys(COST_CENTER_KINDS) as CostCenterKind[];
+export type SpendKind = keyof typeof SPEND_KINDS;
+export const SPEND_KIND_KEYS = Object.keys(SPEND_KINDS) as SpendKind[];
+
+/** شرحٌ بلغة العمل لكل تصنيف — يُعرض في شاشة الإعدادات لا في الكود وحده */
+export const SPEND_KIND_HINTS: Record<SpendKind, string> = {
+  production:
+    'تشغيلٌ يخدم الفروع كلها: أجور الإنتاج المركزي وأدواته وتراخيصه',
+  central_marketing:
+    'تسويق العلامة كلها: الموقع وتحسين الظهور والمحتوى — لا إعلانَ منطقةِ فرع',
+  general_admin:
+    'إدارةٌ عامة تخدم الشركة: الإدارة العليا والمالية والقانونية والمقر الرئيسي',
+  branch_direct:
+    'يخصّ فرعًا واحدًا: إيجاره وأدمن مبيعاته وعمولاته ونثرياته وإعلان منطقته',
+};
 
 /** الثلاثة الأولى هي **الكتلة المشتركة** — ثابتة لا تتحرّك بحجم المبيعات */
-export const SHARED_KINDS: CostCenterKind[] = [
+export const SHARED_KINDS: SpendKind[] = [
   'production',
   'central_marketing',
   'general_admin',
 ];
 
 export function isShared(kind: string | null | undefined): boolean {
-  return SHARED_KINDS.includes(kind as CostCenterKind);
+  return SHARED_KINDS.includes(kind as SpendKind);
 }
 
 export const BRANCH_TYPES = {
@@ -104,8 +122,22 @@ export const REJECTED_BASIS: AllocationBasis = 'orders';
 //  ٢ · قواعد التصنيف الإلزامية (§١٣)
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * **تصنيف الإنفاق الساري** — من الحساب، إلا أن يتجاوزه السطر.
+ *
+ * مصدرُه الحساب لأن «الإيجار» إيجارٌ في كل قيد، وسؤالُ المحاسب عنه آلاف
+ * المرات يُنتج آلاف الفرص للخطأ. والتجاوز على السطر للحالة الشاذّة وحدها:
+ * إعلانٌ من حساب التسويق المؤسسي وُجّه لمنطقة فرع بعينه.
+ */
+export function effectiveSpendKind(
+  lineKind: string | null | undefined,
+  accountKind: string | null | undefined
+): string | null {
+  return lineKind || accountKind || null;
+}
+
 export type ClassificationInput = {
-  /** فئة مركز التكلفة على السطر */
+  /** تصنيف الإنفاق الساري — من `effectiveSpendKind` */
   kind: string | null | undefined;
   /** الفرع على السطر */
   branch: string | null | undefined;
@@ -129,10 +161,15 @@ export function checkClassification(line: ClassificationInput): ClassificationCh
   if (!line.isExpense) return { ok: true };
 
   if (!line.kind) {
-    return { ok: false, error: 'كل بند مصروف يلزمه مركز تكلفة — لا بند بلا تصنيف' };
+    return {
+      ok: false,
+      error:
+        'حساب المصروف بلا تصنيف إنفاق — صنّفه مرة واحدة من «إعدادات المصاريف» ' +
+        'ولن تُسأل عنه بعدها في قيد',
+    };
   }
-  if (!COST_CENTER_KIND_KEYS.includes(line.kind as CostCenterKind)) {
-    return { ok: false, error: `فئة مركز التكلفة «${line.kind}» غير معروفة` };
+  if (!SPEND_KIND_KEYS.includes(line.kind as SpendKind)) {
+    return { ok: false, error: `تصنيف الإنفاق «${line.kind}» غير معروف` };
   }
 
   if (isShared(line.kind) && line.branch) {
@@ -161,7 +198,7 @@ export function checkClassification(line: ClassificationInput): ClassificationCh
  * وSEO والمحتوى) = مشترك. والخلط بينهما **يُفسد قياس كفاءة الفرع الإعلانية**
  * — وهي المؤشر الحاكم في §١٥٫٤.
  */
-export function suggestAdKind(memo: string, hasBranch: boolean): CostCenterKind {
+export function suggestAdKind(memo: string, hasBranch: boolean): SpendKind {
   if (hasBranch) return 'branch_direct';
   const text = memo ?? '';
   if (/سيو|seo|علامة|براند|محتوى|روابط|منصات|هوية/i.test(text)) return 'central_marketing';

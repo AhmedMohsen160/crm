@@ -36,9 +36,14 @@ const RUN_DIGITS = String(Date.now()).slice(-6);
 console.log('معرّف التشغيل:', RUN);
 
 const results = [];
-const check = (ok, label) => {
-  results.push({ ok, label });
-  console.log(`${ok ? '✓' : '✗'} ${label}`);
+/**
+ * **والتفصيل يُطبع عند الإخفاق.** كان الوسيط الثالث يُهمَل، فيقول اختبارُ
+ * مصفوفة الوصول «فلانٌ لم يُحجب» ولا يقول عن أيّ مسار — فلا يُعرف أهو خللٌ
+ * في الصلاحية أم في الاختبار نفسه، ولا يُعاد إنتاجه.
+ */
+const check = (ok, label, detail = '') => {
+  results.push({ ok, label, detail });
+  console.log(`${ok ? '✓' : '✗'} ${label}${ok || !detail ? '' : ` — ${detail}`}`);
 };
 
 async function go(path, name) {
@@ -1245,7 +1250,11 @@ check(await waitForText('كشف الفروع'), 'كشف الفروع يفتح');
 // ── 10ط. ترحيل الملفات القديمة والتحليلات (المرحلة ٩) ───────
 
 await go('/settings/import', '30-import');
-check(await waitForText('ترحيل الملفات القديمة'), 'شاشة الترحيل تفتح');
+check(await waitForText('ترحيل باللصق'), 'شاشة ترحيل اللصق تفتح');
+check(
+  await waitForText('اذهب إلى ترحيل تاريخ المكتب'),
+  '★ **وتدلّ على شاشة الملفات** — الاسمان تشابها فأوقعا المالك في الخطأ'
+);
 
 // دفعة تحمل عيوب المصدر الفعلية: تاريخًا نصيًّا، وعملة مخلوطة،
 // وصفًّا بلا سعر، وهاتفًا تالفًا، وأدمن غير مطابَق
@@ -1371,13 +1380,58 @@ check(
   await waitForText('لا بيانات'),
   'وقناة بلا عملاء تقول «لا بيانات» ولا تعرض CAC صفرًا (والصفر كذبة)'
 );
-check(await waitForText('الاتجاه على أربع سنوات'), 'والاتجاه السنوي');
+check(await waitForText('الاتجاه السنوي'), 'والاتجاه السنوي');
 
-// ٢٠٢٤ معلَّمة ناقصة — لا تصلح خط أساس (§١٤)
-const trendText = await page.evaluate(() => document.body.innerText);
+/**
+ * ★ **شاشة تكلفة الاكتساب الكاملة.**
+ *
+ * كانت القسمة تربط القناة **برمز الحساب**، ورموزُ الشجرة المزروعة وحدها —
+ * وحسابات المحاسب المرحَّلة بلا رموز. فوقع إنفاق المكتب كلُّه في «غير
+ * منسوب» ولم تظهر تكلفةُ عميلٍ واحد رغم أن الإنفاق مقيَّد في الدفتر.
+ */
+await go('/analytics/acquisition', '32b-acquisition');
+const cac = await page.locator('body').innerText();
 check(
-  trendText.includes('ناقصة'),
-  '**٢٠٢٤ معلَّمة «ناقصة»** — والنمو المقارَن بها يُعرض «غير موثوق»'
+  cac.includes('تكلفة اكتساب العميل'),
+  '★ **شاشة تكلفة اكتساب العميل تفتح** — الإنفاق من الدفتر مقسومًا على من جاء'
+);
+check(
+  cac.includes('تكلفة الليد') && cac.includes('تكلفة العميل المكتسب'),
+  'ومؤشّراها: تكلفةُ من تواصل وتكلفةُ من دفع'
+);
+check(
+  cac.includes('لا على من اشترى وحده'),
+  '★ **والقسمة على كل من تواصل** — وإلا بدا الإعلان أرخص ممّا هو'
+);
+check(
+  cac.includes('قناة كل حساب') && cac.includes('مرة واحدة'),
+  '★ **وجدول ضبط القناة في الشاشة نفسها** — تُضبط مرة واحدة على الحساب لا في كل قيد'
+);
+check(
+  (await page.locator('select[name^="ch_"]').count()) >= 1,
+  '★ **ومعرّفُ الحساب في اسم الخانة** — لا في حقل مخفيّ يكتب فوق حسابٍ لم يُقصد',
+  `وُجد ${await page.locator('select[name^="ch_"]').count()} منتقيًا`
+);
+check(
+  cac.includes('المصروفات البيعية والتسويقية'),
+  'وتقول أيّ الحسابات تظهر هنا'
+);
+
+// نعود إلى شاشة التحليلات — ما بعده يقرأ صفحتها هي
+await go('/analytics', '32c-analytics-back');
+
+/**
+ * **والاتجاه يبدأ من ٢٠٢٢ — سنةِ أول دفتر.**
+ *
+ * كان أربع سنوات ثابتة، فسقطت ٢٠٢٢ من الشاشة بعد أن دخل دفترها. ووسمُ
+ * «٢٠٢٤ ناقصة» أُلغي معه: السنة سُوّيت على دفتر المحاسب فصار إيرادُها رقمَه
+ * بالقرش، والتغطية تُقرأ اليوم من آخر شهرٍ فيه تسليم لا من قائمةٍ مكتوبة.
+ */
+const trendText = await page.evaluate(() => document.body.innerText);
+check(!trendText.includes('ناقصة'), '★ **ولا سنةَ معلَّمة «ناقصة»** — كلُّها سُوّيت على الدفتر');
+check(
+  trendText.includes('2022'),
+  '★ **والاتجاه يبدأ من ٢٠٢٢** — سنةُ أول دفتر، وكانت تسقط خارج نافذة الأربع سنوات'
 );
 
 await go('/analytics?scope=month');
@@ -1409,9 +1463,13 @@ const notifCount = await page.locator('main article').count();
 check(notifCount > 0, `التنبيهات وصلت (${notifCount} بطاقة)`);
 
 // **القاعدة المنصوصة**: ملخص واحد لكل حدث لا بطاقة لكل سجل
+//
+// والعنوان **السطر الثاني** لا الأول: الأول شارةُ أهمية («يحتاج انتباهًا» ·
+// «للعلم») يتقاسمها حدثان مختلفان. وقراءته عنوانًا تُسقط الاختبار كلما وصل
+// تنبيهٌ جديد بنفس الأهمية — إخفاقٌ لا يدلّ على خلل.
 const digestShape = await page.evaluate(() => {
   const cards = [...document.querySelectorAll('main article')];
-  const titles = cards.map((c) => c.innerText.split('\n')[0] ?? '');
+  const titles = cards.map((c) => c.innerText.split('\n')[1] ?? '');
   const withCounts = cards
     .map((c) => {
       const m = c.innerText.match(/\((\d+)\)/);
@@ -1775,7 +1833,10 @@ await loginAs('admin@fasttrans.local');
 // المُختبَر هنا **القاعدتان ٥ و٦**: المؤشران معًا دائمًا، وقرار الإغلاق على
 // المساهمة حصرًا — وهو ما يمنع «دوامة الإغلاق» التي تُهلك الشركة.
 await go('/finance/branches/settings', '21-branch-settings');
-check(await waitForText('فئة كل مركز تكلفة'), 'شاشة إعداد محاسبة الفروع تفتح (اختبار ٢١)');
+check(
+  await waitForText('تصنيف كل حساب مصروف'),
+  'شاشة إعداد محاسبة الفروع تفتح (اختبار ٢١)'
+);
 
 // زرع الفروع من القائمة القائمة بمفاتيحها نفسها
 if (await page.locator('button:has-text("ازرعها من قائمة الفروع")').count()) {
@@ -1923,8 +1984,8 @@ await loginAs('admin@fasttrans.local');
 await go('/finance/journal', '24-journal');
 const journalText = await page.locator('body').innerText();
 check(
-  journalText.includes('البيان والحسابان') && journalText.includes('أدمن المبيعات'),
-  'دفتر اليومية يعرض الحسابين والعميل وأدمن المبيعات في الصف (اختبار ٢٤)'
+  journalText.includes('البيان والحسابان') && journalText.includes('الموظف المسؤول'),
+  'دفتر اليومية يعرض الحسابين والعميل والموظف المسؤول في الصف (اختبار ٢٤)'
 );
 const draftButtons = await page.locator('[data-testid=post-entry]').count();
 if (draftButtons > 0) {
@@ -1994,6 +2055,28 @@ const ACCESS = [
     ['/leads', '/freelancers', '/quotes', '/finance', '/hr', '/analytics', '/settings/users'],
   ],
 ];
+
+/**
+ * ★ **وقسمُ الحذف النهائيّ محجوبٌ عن كل من لا يملك صلاحيته.**
+ *
+ * وهو حجبٌ في الصفحة لا في القائمة: القسم في بطاقة العميل نفسها، ومن يفتحها
+ * بحسابٍ بلا `canPurgeRecords` لا يرى الجملة ولا الخانة.
+ */
+await loginAs('magly@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/clients', '25b-purge-denied');
+const anyClient = page.locator('a[href^="/clients/c"]').first();
+if (await anyClient.count()) {
+  await go(await anyClient.getAttribute('href'), '25b-purge-hidden');
+  const body = await page.locator('body').innerText();
+  check(
+    !body.includes('احذف هذا العميل نهائيًا'),
+    '★ **ومدير المبيعات لا يرى الحذف النهائيّ** — للمالك ومدير النظام وحدهما'
+  );
+  check(
+    (await page.locator('input[name="confirm"]').count()) === 0,
+    'ولا تُرسل خانتُه في حمولة الصفحة أصلًا'
+  );
+}
 
 for (const [email, password, role, allowed, denied] of ACCESS) {
   await loginAs(email, password);
@@ -2227,6 +2310,29 @@ check(
   '★ ولا يصل زرُّ التحصيل من لا يملك تسجيله'
 );
 
+/**
+ * **ومن رأى المشروع في القائمة يفتحه.**
+ *
+ * كانت القائمة تفتح بصلاحية الإسناد والصفحةُ تحجب بصلاحية الليدز الواسعة —
+ * فيُسند مديرُ المشاريع المشروعَ ثم يضغط ليبدأ التنفيذ فيجد «الصفحة غير
+ * موجودة». وهو مأذونٌ يبحث عمّا لا يجده.
+ */
+const pmProjectLink = await page.locator('a[href^="/projects/c"]').first().getAttribute('href');
+check(Boolean(pmProjectLink), 'ومديرُ المشاريع يجد مشاريعَ ليُسندها', 'لا رابط مشروع في القائمة');
+if (pmProjectLink) {
+  await go(pmProjectLink, '28b-pm-opens-project');
+  const pmProject = await page.locator('body').innerText();
+  check(
+    !pmProject.includes('الصفحة غير موجودة'),
+    '★ **ومن يُسند يفتح المشروع ليبدأ تنفيذه** — لا ٤٠٤ بعد الإسناد'
+  );
+  check(
+    !pmProject.includes('سعر البيع') && !pmProject.includes('إجمالي المشروع'),
+    'ولا يرى سعرَ البيع وهو مفتوحٌ له — البابُ بابُ الصفحة لا بابُ أرقامها'
+  );
+}
+await go('/projects?view=list');
+
 // ── 29أ. الجودة بالمعيار الصناعي ────────────────────────────
 //
 // **الخطأ يُنسب إلى حجمه** — ولا يُقاس بوحدتين في شاشتين.
@@ -2342,6 +2448,264 @@ check(
   'وسجل الأعطال يفتح لمن يملك الإعدادات'
 );
 
+// ── 33. لوحة المحاسب · تصنيف الإنفاق · ربحية المشاريع ───────
+
+// المحاسب يفتح النظام فيجد لوحته هو لا لوحة المبيعات
+await loginAs('accountant@fasttrans.local', process.env.TEAM_INITIAL_PASSWORD ?? 'FastTrans2026!');
+await go('/', '33-finance-home');
+const financeHome = await page.locator('body').innerText();
+check(
+  financeHome.includes('أعمار الذمم') && financeHome.includes('ما ينتظر يدك'),
+  '★ **المحاسب يفتح لوحته هو** — النقد والذمم وطابور عمله (اختبار ٣٣)'
+);
+check(
+  !financeHome.includes('مسار المبيعات') && !financeHome.includes('ترتيب الفريق'),
+  'ولا مسارَ مبيعات ولا ترتيبَ بائعين — أرقامٌ لا قرار له فيها'
+);
+check(
+  financeHome.includes('النقد والبنوك') && financeHome.includes('لنا عند العملاء'),
+  'وأسئلته هو: كم عندنا نقدًا وكم لنا عند العملاء'
+);
+
+// وتصنيف الإنفاق صار على الحساب لا على مركز التكلفة
+await go('/finance/branches/settings', '33-spend-kinds');
+const settingsText = await page.locator('body').innerText();
+check(
+  settingsText.includes('تصنيف كل حساب مصروف'),
+  '★ **تصنيف الإنفاق على الحساب** — يُصنَّف «الإيجار» مرة ولا يُسأل عنه في كل قيد'
+);
+check(
+  settingsText.includes('مصاريف الفرع الذاتية') && settingsText.includes('التسويق المؤسسي'),
+  'والتصنيفات الأربعة معروضة بشرح كلٍّ منها بلغة العمل'
+);
+
+// ومركز التكلفة عاد لمعناه: مشروع تُقاس ربحيته
+await go('/finance/profit-centers', '33-profit-centers');
+check(
+  (await page.locator('body').innerText()).includes('ربحية المشاريع'),
+  'وشاشة ربحية المشاريع تفتح — وهي ما أنشأ المحاسب المراكز من أجله'
+);
+
+await loginAs('admin@fasttrans.local');
+
+// ── 34. المرونة: خانات الشركة · تارجت السنة · جدول الموازنة ──
+
+// الدولة قائمةٌ تُختار لا خانةٌ تُكتب، والمدينة تتبعها
+await go('/companies/new', '34-company-form');
+const companyForm = await page.locator('body').innerText();
+check(
+  (await page.locator('select[name="country"]').count()) === 1,
+  '★ **الدولة تُختار من قائمة** — والكتابة الحرّة تُنتج «مصر» و«Egypt» صفّين لشيء واحد (اختبار ٣٤)'
+);
+check(
+  (await page.locator('select[name="country"] option[value="مصر"]').count()) === 1,
+  'وفيها مصر — أغلب البيع'
+);
+check(
+  companyForm.includes('ممثّل الشركة') && companyForm.includes('اسم الممثّل'),
+  'وخانتا ممثّل الشركة واسمه ورقمه'
+);
+check(
+  companyForm.includes('السجل التجاري') && companyForm.includes('البطاقة الضريبية'),
+  'ورفع السجل التجاري والبطاقة الضريبية — اختياريان'
+);
+check(
+  (await page.locator('input[name="commercialRegFile"][type="file"]').count()) === 1,
+  'وحقل الرفع حقلُ ملفٍّ فعلًا'
+);
+
+// تارجت السنة كاملة في صفحة واحدة
+await go('/settings/targets/year', '34-year-targets');
+const yearTargets = await page.locator('body').innerText();
+check(
+  yearTargets.includes('وزّع رقمًا سنويًّا') && yearTargets.includes('يناير') && yearTargets.includes('ديسمبر'),
+  '★ **السنة كاملة في صفحة واحدة** — كانت ٧٢ خانة في ٢٤ رحلة (اختبار ٣٤)'
+);
+check(
+  (await page.locator('input[name^="t_"]').count()) >= 12,
+  'وخانةٌ لكل شهر لكل فرع في الجدول نفسه'
+);
+
+// جدول الموازنة: كل الحسابات في صفحة واحدة، ومعرّف الحساب في اسم الخانة
+await go('/finance/budget/grid', '34-budget-grid');
+const budgetGrid = await page.locator('body').innerText();
+check(
+  budgetGrid.includes('جدول الموازنة'),
+  'وجدول الموازنة يفتح'
+);
+if (!budgetGrid.includes('لا موازنة لسنة')) {
+  check(
+    (await page.locator('input[name^="m_"]').count()) >= 12,
+    '★ **ومعرّف الحساب في اسم الخانة لا في حقل مخفيّ** — فلا يُكتب فوق حسابٍ آخر'
+  );
+}
+
+// ── 32. المهام المجدولة تقول حال تهيئتها ────────────────────
+// جهاز التطوير بلا `CRON_SECRET`، فالشاشة يجب أن تقول «معطّلة» وتُملي الخطوات
+await go('/settings/jobs', '32-jobs');
+const jobsText = await page.locator('body').innerText();
+check(
+  jobsText.includes('لم يُضبط سرّ الجدولة'),
+  '★ **الشاشة تقول إن المهام معطّلة بلا سرّ** — لا «لم تعمل بعد» وحدها (اختبار ٣٢)'
+);
+check(
+  jobsText.includes('CRON_SECRET') &&
+    jobsText.includes('Environment Variables') &&
+    jobsText.includes('Redeploy'),
+  'وتُملي خطوات لوحة النشر بأسمائها الإنجليزية كما تُرى فيها'
+);
+check(
+  !jobsText.includes('في انتظار أول دورة'),
+  'ولا تخلط الحالين: انتظارُ الدورة جوابُ سرٍّ ضُبط لا سرٍّ غاب'
+);
+
+/**
+ * ★ **ملكية بطاقة العميل تُعدَّل — ولم تكن تُعدَّل من أي مكان.**
+ *
+ * كان `ownerId` يُكتب عند الإنشاء وحده ولا يمسّه التحديث، فبطاقةٌ وقعت على
+ * الحساب الخطأ تبقى عليه للأبد. وبيانات المكتب استُوردت كلها بحسابٍ واحد.
+ */
+await go('/clients', '35b-clients');
+const clientLink = page.locator('a[href^="/clients/"]').filter({ hasNotText: 'عميل جديد' }).first();
+const clientHref = (await clientLink.count()) ? await clientLink.getAttribute('href') : null;
+if (clientHref && /^\/clients\/[^/]+$/.test(clientHref)) {
+  await go(`${clientHref}/edit`, '35b-client-owner');
+  const form = await page.locator('body').innerText();
+  check(
+    (await page.locator('select[name="ownerId"]').count()) === 1,
+    '★ **خانةُ المالك الرئيسي في شاشة تعديل العميل**'
+  );
+  check(
+    (await page.locator('select[name="coOwnerId"]').count()) === 1,
+    '★ **وخانةُ المالك الفرعي معها** — «يظهر عند الحسابين ويستطيع كليهما قراءته»'
+  );
+  check(
+    form.includes('ولا تمسّ النسبة'),
+    '★ **والشاشة تقول إن الفرعيّ بابُ رؤيةٍ لا حصّةُ مال** — النسبة على مالك المشروع'
+  );
+}
+
+/**
+ * ★ **والحذف النهائيّ لسجل عميل — لمدير النظام وحده.**
+ *
+ * قالها أحمد: «البيانات التي أقوم بإدخالها كتجربة للسيستم أستطيع حذفها…
+ * ويكأنه لم يدخل السيستم أصلًا». وهو استثناءٌ من «لا شيء يُمحى» محدودٌ
+ * بصلاحيةٍ خاصة وجملةٍ تُكتب وجردٍ يُعرض وسجلِّ تدقيقٍ يبقى.
+ */
+if (clientHref && /^\/clients\/[^/]+$/.test(clientHref)) {
+  await go(clientHref, '35c-client-purge');
+  const card = await page.locator('body').innerText();
+  check(card.includes('حذفٌ نهائيّ'), '★ **قسمُ الحذف النهائيّ في بطاقة العميل** لمن يملكه');
+  check(card.includes('سيُحذف'), 'ويعرض جردَ ما سيُحذف قبل الضغط — لا يُحذف على العماية');
+  check(
+    card.includes('احذف هذا العميل نهائيًا'),
+    '★ **وجملةٌ تُكتب بالحرف** — لا زرَّ تأكيدٍ يُنقر مرورًا'
+  );
+  check(
+    card.includes('سجل التدقيق'),
+    'ويقول إنّ الأثر يبقى في سجل التدقيق — فهو حذفٌ لا محوٌ للأثر'
+  );
+  check(
+    (await page.locator('input[name="confirm"]').count()) === 1,
+    'وخانةُ التأكيد موجودة'
+  );
+}
+
+// ── 35. ترحيل تاريخ المكتب ──────────────────────────────────
+// الغاية: «لتكون كأن النظام مبنيّ من ٢٠٢٢» — دفتر المحاسب وشيت المبيعات
+// والتسوية بينهما، وكلٌّ بوسمه الذي يُسحب بضغطة
+await page.setViewportSize({ width: 1280, height: 900 });
+await go('/settings/import/history', '35-history');
+const history = await page.locator('body').innerText();
+check(
+  history.includes('ترحيل تاريخ المكتب') && history.includes('دفتر المحاسب'),
+  '★ **شاشة ترحيل تاريخ المكتب تفتح** — دفاتر المحاسب وشيت المبيعات (اختبار ٣٥)'
+);
+check(
+  history.includes('يأخذ رقمه بالضبط') && history.includes('يُوزَّع بالتناسب'),
+  '★ **وتقول قاعدة التسوية بلغة العمل** — العميل المسمّى يأخذ رقمه، والباقي بالتناسب'
+);
+check(
+  history.includes('عميل شهريّ مجمَّع'),
+  'وشهرٌ بلا عميلٍ مرصود يُنشأ له عميل شهريّ مجمَّع باسمه الصريح'
+);
+check(
+  (await page.locator('input[type="file"]').count()) >= 2,
+  'وحقلا رفعٍ فعليّان: الدفتر والشيت — لا لصقٌ بالنسخ'
+);
+check(
+  (await page.locator('textarea[name="executiveNames"]').count()) >= 1,
+  '★ **وأسماء عملاء المدير التنفيذي تُعدَّل من الشاشة** — لا في الكود، فهو يتذكّر غيرهم'
+);
+check(
+  history.includes('الصمت ليس رقمًا'),
+  'وسنةٌ بلا دفترٍ تبقى كما رصدها الشيت ولا تُصفَّر'
+);
+check(
+  history.includes('ابدأ من هنا') && history.includes('خمس رفعات'),
+  '★ **والشاشة تُملي خطواتها بترتيبها** — «لم أفهم ماذا أفعل» جوابُها في الشاشة لا في مستند'
+);
+check(
+  history.includes('وكيف يفرّق النظام بين السنوات؟'),
+  'وتجيب: السنة تُكتب للدفتر، ويقرؤها النظام بنفسه من عمود تاريخ الشيت'
+);
+
+/**
+ * ★ **وتاريخ الوقف خانةٌ في الشاشتين.**
+ *
+ * «نغلق الداتا ونظبطها على نهاية يوليو بحيث من أول أغسطس تكون مدخلات
+ * لاحقة» — والوقفُ في الترحيل لا في الملف: الدفتر ينمو كل يوم، ورفعُه غدًا
+ * يجب أن يبدأ من حيث وقف.
+ */
+const cutoffs = page.locator('input[name="until"]');
+check(
+  (await cutoffs.count()) >= 2,
+  '★ **وخانة «حتى تاريخ» في الدفتر والشيت معًا** — لا في أحدهما',
+  `وُجدت ${await cutoffs.count()} خانة`
+);
+check(
+  (await cutoffs.first().getAttribute('value')) === '2026-07-31',
+  'ومضبوطةٌ سلفًا على نهاية يوليو ٢٠٢٦ — لا فارغةً تُملأ باليد',
+  `القيمة ${await cutoffs.first().getAttribute('value')}`
+);
+check(
+  history.includes('الأرصدة الافتتاحية') && history.includes('يحسب المال مرتين'),
+  '★ **والشاشة تقول لماذا تُسقط الأرصدة الافتتاحية** — شركةٌ واحدة مستمرّة لا دفتران'
+);
+check(
+  (await page.locator('input[name="keepOpening"]').count()) === 1,
+  'وإدخالُها خيارٌ مطويّ لمن رحّل ٢٠٢٦ وحدها — لا قرارٌ محسومٌ في الكود'
+);
+check(
+  history.includes('لا يُسوَّى شهرٌ بعده'),
+  '★ **وحدُّ التسوية تاريخُ الوقف لا رأسُ السنة** — فتدخل شهورُ ٢٠٢٦ المقفلة ويبقى ما بعدها للفريق'
+);
+
+/**
+ * ★ **وشيت الليدز ثالثُ الشيتات.**
+ *
+ * الدفتر يقول ما دخل الخزينة، وشيت المبيعات يقول من اشترى — وكلاهما صامتٌ
+ * عن ثلثي من تواصل مع المكتب. وبلا هؤلاء لا تُقاس تكلفةُ اكتساب عميل ولا
+ * معدلُ تحويل ولا سببُ رفض.
+ */
+check(
+  (await page.locator('input[type="file"]').count()) >= 3,
+  '★ **وثلاثة حقول رفعٍ لا اثنان** — الدفتر والمبيعات والليدز',
+  `وُجد ${await page.locator('input[type="file"]').count()}`
+);
+check(
+  history.includes('شيت الليدز') && history.includes('من سأل ولم يشترِ'),
+  'وقسمُ الليدز يقول ما فيه بلغة العمل'
+);
+check(
+  history.includes('يلتصق ببطاقة عميله'),
+  '★ **والمحوَّل يلتصق ببطاقة عميله ولا يُفتح له مشروعٌ ثانٍ** — وإلا تضاعف الإيراد'
+);
+check(
+  history.includes('الملخص الشهري') && history.includes('مُدخَلٌ مرة واحدة'),
+  'وورقةُ الإنفاق الشهري لا تُقرأ — المصروف التسويقي في الدفتر وحده'
+);
+
 // ── 12. عرض الجوال ──────────────────────────────────────────
 await page.setViewportSize({ width: 390, height: 844 });
 await go('/projects', '12-mobile');
@@ -2351,6 +2715,10 @@ check(true, 'العرض على الجوال');
 console.log('\n═══ أخطاء المتصفح ═══');
 console.log(errors.length ? errors.join('\n') : 'لا توجد ✓');
 const failed = results.filter((r) => !r.ok);
+if (failed.length) {
+  console.log('\n═══ ما أخفق ═══');
+  for (const f of failed) console.log(`✗ ${f.label}${f.detail ? ` — ${f.detail}` : ''}`);
+}
 console.log(`\n═══ النتيجة: ${results.length - failed.length}/${results.length} نجحت ═══`);
 await browser.close();
 process.exit(failed.length ? 1 : 0);

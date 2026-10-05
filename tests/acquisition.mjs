@@ -9,6 +9,8 @@
 import {
   ACCOUNT_CHANNEL,
   UNATTRIBUTED,
+  UNATTRIBUTED_LABEL,
+  adChannelOfMemo,
   channelOfAccount,
   channelMetrics,
   acquisitionSummary,
@@ -74,7 +76,18 @@ const free = channelMetrics({
   won: 10,
   revenue: 20_000,
 });
-check(free.costPerLead === 0, 'وقناةٌ بلا إنفاق تكلفة ليدها صفر — وهو صحيح لا مخترع');
+/**
+ * ★ **انقلب هذا الاختبار إلى ضدّه — ومعه سببُه.**
+ *
+ * كان يؤكّد أن قناةً بلا إنفاق تكلفةُ ليدها **صفر**، بحجّة أنه «قياسٌ صحيح».
+ * وهو خطأ: الصفر يقول «جاءنا هذا الليد مجانًا»، والحقيقة في دفتر ٢٠٢٦ أن
+ * الإنفاق موجودٌ (٩٠٩ آلاف) وغيرُ منسوبٍ للقناة بعد. ومن يقرأ «تكلفة الليد
+ * صفر» يزيد الإنفاق على القناة — قرارٌ يُبنى على رقمٍ كاذب.
+ */
+check(
+  free.costPerLead === null,
+  '★ **وقناةٌ بلا إنفاقٍ منسوب: «غير مقيس» لا صفر** — الصفر يقول «جاءنا مجانًا»'
+);
 check(
   free.roas === null,
   '★ **وبلا إنفاق لا عائد إنفاق** — لا عائدٌ لا نهائي'
@@ -102,6 +115,95 @@ check(
   empty.costPerLead === null && empty.roas === null && empty.spend === 0,
   'وبلا قنوات لا رقم يُخترع'
 );
+
+console.log('\n── ٤ · القناة من الحساب ومن البيان ──────────────────\n');
+
+/**
+ * ★ **الحقل المضبوط من الشاشة يعلو على الرمز المزروع.**
+ *
+ * كان الربط بالرمز وحده، وحسابات المحاسب المرحَّلة من دفاتره **بلا رموز** —
+ * فوقع إنفاق المكتب كلُّه (٩٠٩ آلاف في ٢٠٢٦) في «غير منسوب» ولم تظهر
+ * تكلفةُ عميلٍ واحد.
+ */
+check(
+  channelOfAccount(null, 'google_ads') === 'google_ads',
+  '★ **حسابٌ بلا رمز تُقرأ قناتُه من حقله** — وهذا حال كل حساب مرحَّل'
+);
+check(
+  channelOfAccount('exp_ads_google', 'meta_ads') === 'meta_ads',
+  'والحقل يعلو على الرمز حين يختلفان — الأحدث قصدُ من ضبطه'
+);
+check(channelOfAccount('exp_ads_google', null) === 'google_ads', 'والرمز يعمل بلا حقل');
+check(channelOfAccount(null, null) === UNATTRIBUTED, 'وبلا هذا ولا ذاك: غير منسوب — ولا يُخمَّن');
+
+/**
+ * ★ **وقناةُ السطر من بيانه حين يجمع الحسابُ قناتين.**
+ *
+ * دفتر ٢٠٢٦ يضع جوجل وفيسبوك في `Paid Advertising via Platforms Expenses`
+ * والتمييز في البيان وحده. وليست تخمينًا: المحاسب كتب اسم المنصّة صريحًا.
+ */
+check(
+  adChannelOfMemo('Payment of Selling and Marketing Expenses | Paid Advertising via Platforms Expenses - Google Ads') === 'google_ads',
+  '★ بيانٌ إنجليزيّ يذكر Google Ads'
+);
+check(
+  adChannelOfMemo('سداد مصروفات بيعية وتسويقية | م. إشتركات في مجلات وإعلانات - جوجل') === 'google_ads',
+  'وبالعربية «جوجل»'
+);
+check(
+  adChannelOfMemo('سداد مصروفات بيعية وتسويقية | م. إشتركات في مجلات وإعلانات - سوشيال ميديا (فيسبوك)') === 'meta_ads',
+  'و«سوشيال ميديا (فيسبوك)» ميتا'
+);
+check(
+  adChannelOfMemo('سداد مصروفات بيعية وتسويقية - م.خدمات تسويقية عن طريق الغير - كتابة محتوي لموقع فاست ترانس') === 'organic',
+  'و«كتابة محتوي» سيو — وهي تكلفة الأورجانيك كما قالها أحمد'
+);
+check(
+  adChannelOfMemo('Payment of Selling and Marketing Expenses | Outsourced Marketing Services Expenses – Content Writing') === 'organic',
+  'و«Content Writing» كذلك'
+);
+check(adChannelOfMemo('سداد مصروف الكهرباء للمقر الإداري') === null, 'وبيانٌ لا يذكر منصّةً لا يُنسب');
+check(adChannelOfMemo('') === null, 'والفراغ لا قناة له');
+
+console.log('\n── ٥ · وعاء «غير منسوب» ─────────────────────────────\n');
+
+/**
+ * ★ **«غير منسوب» وعاءُ انتظارٍ لا قناة.**
+ *
+ * إنفاقُه لم يُنسب بعد، و«ليدزه» ليدزٌ لم تُسجَّل قناتُها — ولا علاقة بين
+ * الطرفين. وقسمةُ ٦٣٢ ألفًا على ليدٍ واحد تُنتج «تكلفة الليد ٦٣٢ ألفًا»،
+ * وهو رقمٌ يُقرأ فيُصدَّق.
+ */
+const pending = channelMetrics({
+  channel: UNATTRIBUTED,
+  label: UNATTRIBUTED_LABEL,
+  spend: 631_998,
+  leads: 1,
+  won: 0,
+  revenue: 0,
+});
+check(
+  pending.costPerLead === null && pending.costPerWon === null && pending.roas === null,
+  '★ ولا يُقسَم إنفاقُه على ليدزه — لا رقم بلا معنى'
+);
+check(pending.spend === 631_998, 'ويبقى مبلغُه ظاهرًا ليُضبط — لا يُخفى');
+
+/** ★ وبلا إنفاقٍ منسوب لا تكلفةَ ليد — لا صفر */
+const noSpend = channelMetrics({
+  channel: 'organic',
+  label: 'Organic',
+  spend: 0,
+  leads: 533,
+  won: 120,
+  revenue: 90_000,
+});
+check(
+  noSpend.costPerLead === null,
+  '★ **وقناةٌ بليدز بلا إنفاقٍ منسوب: «غير مقيس» لا صفر**',
+  'الصفر يقول «جاءنا مجانًا» فيُزاد الإنفاق على رقمٍ كاذب'
+);
+check(noSpend.conversionPct === 22.5, 'ونسبة تحويلها تبقى مقيسة — لا تحتاج إنفاقًا');
+
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n═══ النتيجة: ${results.length - failed.length}/${results.length} نجحت ═══`);

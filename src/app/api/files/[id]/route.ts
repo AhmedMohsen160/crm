@@ -23,6 +23,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     return new NextResponse('لا صلاحية', { status: 403 });
   }
 
+  /**
+   * مستندا الشركة (سجل تجاري · بطاقة ضريبية) لمن يتعامل تجاريًّا مع العميل:
+   * البائع والمحاسب. ومدير المشاريع لا يراهما — لا يحتاجهما ولا يخصّانه،
+   * والصلاحية أضيق ما تكفي.
+   */
+  if (file.purpose === 'company_doc' && !can(user, 'canViewSellPrice')) {
+    return new NextResponse('لا صلاحية', { status: 403 });
+  }
+
   // الصور وPDF تُعرض داخل المتصفّح، وما عداها يُنزَّل — والعرض داخل الصفحة
   // مقصور عليهما فلا يُفتح مستند مجهول في سياق النظام
   const inline = file.mimeType === 'application/pdf' || file.mimeType.startsWith('image/');

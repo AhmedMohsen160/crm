@@ -8,7 +8,7 @@ import {
   BRANCH_STATUSES,
   BRANCH_TYPES,
   MATURITY_STAGE_KEYS,
-  COST_CENTER_KIND_KEYS,
+  SPEND_KIND_KEYS,
   ALLOCATION_BASES,
   REJECTED_BASIS,
 } from '@/lib/branch-economics';
@@ -110,30 +110,72 @@ export async function seedBranches(_fd: FormData, user: SessionUser) {
   return `/finance/branches/settings?seeded=${created}`;
 }
 
-// ── فئة مركز التكلفة ───────────────────────────────────────────
+// ── تصنيف الإنفاق ──────────────────────────────────────────────
 
 /**
- * تصنيف مراكز التكلفة — الخطوة التي بدونها لا يعمل الموديول كلّه.
+ * تصنيف حسابات المصروفات — الخطوة التي بدونها لا يعمل الموديول كلّه.
  *
- * فئة المركز هي ما يحدّد **أين يقع كل جنيه**: في الكتلة المشتركة أم في
- * مصاريف فرع. وبلا تصنيف يبقى المصروف معلَّقًا خارج المعادلة، فتظهر الشركة
- * أربح مما هي.
+ * التصنيف هو ما يحدّد **أين يقع كل جنيه**: في الكتلة المشتركة أم في مصاريف
+ * فرع. وبلا تصنيف يبقى المصروف معلَّقًا خارج المعادلة، فتظهر الشركة أربح
+ * مما هي.
+ *
+ * **وموضعه الحساب لا مركز التكلفة.** كان على المركز، فاختلط بُعدان: مركز
+ * التكلفة عند المحاسب مشروعٌ تُقاس ربحيته (جمعية التبيان) لا وعاءٌ لتصنيف
+ * الإنفاق — فكان كل مشروع يُولد «مصاريف فرع ذاتية» ثم يطالب بفرع لا يخصّه.
+ *
+ * **والحفظ يقبل الجزء**: الشاشة تعرض عشرات الحسابات، ومن صنّف عشرة منها
+ * وحفظ لا يُطالَب بالباقي — وإلا صار الإعداد كلَّه أو لا شيء.
  */
-export async function saveCostCenterKinds(fd: FormData, user: SessionUser) {
+export async function saveSpendKinds(fd: FormData, user: SessionUser) {
   if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');
 
   let changed = 0;
   for (const [key, value] of fd.entries()) {
     const match = key.match(/^kind\[(.+)\]$/);
     if (!match) continue;
-    const kind = String(value);
-    if (!COST_CENTER_KIND_KEYS.includes(kind as never)) continue;
-    await db.costCenter.update({ where: { id: match[1] }, data: { kind } });
+    const raw = String(value);
+    // الفراغ اختيارٌ صريح: «أعِد الحساب بلا تصنيف» — لا تخطٍّ صامت
+    const kind = raw === '' ? null : raw;
+    if (kind !== null && !SPEND_KIND_KEYS.includes(kind as never)) continue;
+    await db.account.update({ where: { id: match[1] }, data: { spendKind: kind } });
     changed += 1;
   }
 
-  await auditEvent(user.id, 'update', 'CostCenter', 'kinds', `تصنيف ${changed} مركزًا`);
+  await auditEvent(user.id, 'update', 'Account', 'spendKind', `تصنيف ${changed} حسابًا`);
   return `/finance/branches/settings?classified=${changed}`;
+}
+
+/**
+ * **اقتراح مبدئي** لتصنيف ما لم يُصنَّف بعد — بضغطة يختارها المحاسب.
+ *
+ * ومجموعةُ الحساب (`expenseGroup`) **لا تعرف** أمركزيّ هو أم فرعيّ: هي
+ * تجميعٌ لقائمة الدخل لا للفروع. فلا يُطبَّق هذا في التهيئة ولا في النشر —
+ * ولو طُبِّق لصار كل مصروف «مركزيًّا»، فيُرفض أول قيدٍ يحمل فرعًا، ويجد
+ * المحاسب بابًا مغلقًا لم يفتحه أحد.
+ *
+ * وهو هنا زرٌّ يملأ **الفارغ وحده**، ثم يراجعه المحاسب سطرًا سطرًا ويصحّح
+ * مصاريف الفروع بيده — وهو الوحيد الذي يعرف أن هذا الإيجار إيجارُ المقطم.
+ */
+export async function suggestSpendKinds(fd: FormData, user: SessionUser) {
+  if (!can(user, 'canManageAccounting')) throw new MutationError('لا صلاحية');
+
+  const FROM_GROUP: Record<string, string> = {
+    production_operating: 'production',
+    selling_marketing: 'central_marketing',
+    general_admin: 'general_admin',
+  };
+
+  let filled = 0;
+  for (const [group, kind] of Object.entries(FROM_GROUP)) {
+    const { count } = await db.account.updateMany({
+      where: { type: 'expense', expenseGroup: group, spendKind: null },
+      data: { spendKind: kind },
+    });
+    filled += count;
+  }
+
+  await auditEvent(user.id, 'update', 'Account', 'spendKind', `اقتراح مبدئي لـ${filled} حسابًا`);
+  return `/finance/branches/settings?suggested=${filled}`;
 }
 
 /** الحسابات غير النقدية — الإهلاك أساسًا، ويُستبعد من التعادل النقدي */

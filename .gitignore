@@ -22,3 +22,6 @@ npm-debug.log*
 tsconfig.tsbuildinfo
 next-env.d.ts
 test-screenshots/
+
+# ملفات الوورد المولَّدة — تُبنى من docs/DEVELOPER-HANDOVER.md بأمر واحد
+docs/out/

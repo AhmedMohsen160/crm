@@ -58,8 +58,10 @@ export default async function FinancePage({
     { href: '/finance/reports/trial', icon: Scale, title: 'ميزان المراجعة', desc: 'أرصدة كل حساب ومجموعا العمودين' },
     { href: '/finance/branches', icon: Building2, title: 'محاسبة الفروع', desc: 'المساهمة والصافي المحمَّل وفرق الاسترداد — ومنع دوامة الإغلاق' },
     { href: '/finance/reports/branches', icon: Scale, title: 'كشف الفروع', desc: 'مبيعات ومصاريف وعمولات كل فرع' },
+    { href: '/finance/profit-centers', icon: Target, title: 'ربحية المشاريع', desc: 'المشروع المستمرّ بإيراده وتكلفته وهامشه وحده' },
     { href: '/finance/budget/plan', icon: ClipboardList, title: 'بناء الموازنة', desc: 'سبع خطوات: التاريخ · التوقّع · الثابت · المتغيّر · الهامش · الطوارئ · المراجعة' },
-    { href: '/finance/budget', icon: Target, title: 'جدول الموازنة', desc: 'المستهدف الشهري وانحرافه عن الفعلي' },
+    { href: '/finance/budget/grid', icon: Target, title: 'جدول الموازنة', desc: 'كل الحسابات في صفحة واحدة — شهرًا بشهر أو رقمًا سنويًّا يُقسَّم' },
+    { href: '/finance/budget', icon: Scale, title: 'انحراف الموازنة', desc: 'المستهدف مقابل الفعلي، مرتَّبًا بالأكبر أثرًا' },
     { href: '/finance/assets', icon: Landmark, title: 'الأصول الثابتة', desc: 'التكلفة والإهلاك والقيمة الدفترية' },
     { href: '/finance/periods', icon: Lock, title: 'إقفال الشهور', desc: 'الشهر المقفل لا يُعدَّل' },
   ];

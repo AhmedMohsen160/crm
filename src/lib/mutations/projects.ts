@@ -111,6 +111,9 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
     delete (data as Partial<typeof data>).netTotal;
     delete (data as Partial<typeof data>).unitPrice;
     delete (data as Partial<typeof data>).deposit;
+    // والعملة معها: النموذج لا يعرضها لمن لا يرى السعر، فقيمتُها الافتراضية
+    // كانت تُعيد كل مشروعٍ بالريال إلى الجنيه
+    if (id) delete (data as Partial<typeof data>).currency;
   }
 
   // الخصم: يُقبل ممّن يملك صلاحيته، ويُوقف المشروع إن تجاوز حدّ دوره.
@@ -125,36 +128,49 @@ export async function saveProject(fd: FormData, user: SessionUser, id?: string) 
    *
    * كانت الشاشة تطلب «إجمالي المشروع» يدويًّا إلى جانب سعر الصفحة، فصار
    * للرقم مصدران يختلفان ولا يُعرف أيّهما الصحيح. الآن يُحسب:
-   * `الصفحات × سعر الصفحة`، ثم رسم الاستعجال، ثم الخصم — بنفس المعادلة
-   * التي يُسعَّر بها الليد عند تحويله، فلا تختلف شاشتان على رقم واحد.
+   * `الصفحات × سعر الصفحة`، ثم رسم الاستعجال، ثم الخصم.
    *
-   * والإجمالي المرسَل صراحةً (من نموذج قديم أو تعديل يدوي) يُحترم كما هو.
+   * **وسعر الصفحة يُقرأ من قائمة الأسعار حين لا يُكتب.** كانت القائمة تُسأل
+   * في مسارٍ واحد فقط — تحويل الليد إلى مشروع — أما «مشروع جديد» مباشرةً
+   * فينتظر رقمًا يكتبه المستخدم بيده، فمن ضبط التسعير في الإعدادات ثم أدخل
+   * الصفحات لم يخرج له شيء. وصار المساران يسألان `priceForProject` نفسها،
+   * فلا تختلف شاشتان على رقم واحد.
+   *
+   * والإجمالي المرسَل صراحةً (تعديل يدوي أو سعرٌ بالاتفاق) يُحترم كما هو.
    */
   if (can(user, 'canViewSellPrice')) {
-    const unitPrice = num(fd, 'unitPrice');
-    const settings = await allSettings();
+    const manualUnitPrice = num(fd, 'unitPrice');
+    const explicitTotal = num(fd, 'netTotal');
 
-    if (!fd.has('netTotal') && pages && unitPrice) {
-      const priced = priceProject({
+    if (pages) {
+      const priced = await priceForProject({
+        serviceLine: data.serviceLine,
+        langFrom: data.sourceLang,
+        langTo: data.targetLang,
         pages,
-        unitPrice,
         isRush: data.isRush,
-        discount: { type: discountType, value: discountValue },
-        settings: {
-          rushSurcharge: Number(settings.rush_surcharge) || 0,
-          minOrderValue: Number(settings.min_order_value) || 0,
-        },
+        clientId: data.clientId,
+        manualUnitPrice,
+        manualDiscountType: discountType,
+        manualDiscountValue: discountValue,
+        user,
+        // السعر بتاريخ المشروع لا بتاريخ اليوم — تعديل القائمة لا يمسّ الماضي
+        asOf: id ? undefined : new Date(),
       });
-      data.netTotal = priced.netTotal;
-    }
 
-    if (discountType && discountType !== 'none' && discountValue) {
-      const gross = (pages ?? 0) * (unitPrice ?? 0);
-      const afterRush = data.isRush ? gross * (1 + (Number(settings.rush_surcharge) || 0)) : gross;
-      const limit = await discountLimitOf(user);
-      const ratio = discountRatio({ type: discountType, value: discountValue }, afterRush);
-      if (ratio > limit + 1e-9) {
-        approvalPatch = { approvalState: 'pending', approvedById: null, approvedAt: null };
+      /**
+       * **وبلا سعرٍ لا يُخترع رقم.** لا يدويّ ولا في القائمة يعني أن الطلب
+       * لم يُسعَّر بعد — فيبقى الإجمالي كما أُرسل (صفرًا غالبًا) ويمسكه حقل
+       * التنبيه في بطاقة المشروع. ولو حُسب لطبَّق **الحدّ الأدنى للطلب** على
+       * مشروعٍ بلا سعر، فبدا مسعَّرًا وهو ليس كذلك.
+       */
+      if (priced.unitPrice > 0) {
+        // ما وُجد في القائمة يُثبَّت على المشروع، فيبقى مرئيًّا في الشاشة
+        if (!manualUnitPrice) data.unitPrice = priced.unitPrice;
+        if (!explicitTotal) data.netTotal = priced.netTotal;
+        if (priced.needsApproval) {
+          approvalPatch = { approvalState: 'pending', approvedById: null, approvedAt: null };
+        }
       }
     }
   }

@@ -221,11 +221,20 @@ export async function teamClients(opts: {
           _sum: { netTotal: true },
         })
       : Promise.resolve([] as { clientId: string | null; _sum: { netTotal: number | null } }[]),
-    // من أنشأ الفريق بطاقته ولم يشترِ بعد — ولا معنى لها في نطاق التشغيل
+    /**
+     * من تقع بطاقتُه على الفريق ولم يشترِ بعد — ولا معنى لها في نطاق التشغيل.
+     *
+     * **والمالك الفرعيّ يُدخل البطاقة في نطاقه كالرئيسي.** هذا هو معنى
+     * «يظهر عند الحسابين ويستطيع كليهما قراءته»: عميلٌ قديم لأحمد مجلي
+     * اشترى من يحيى يبقى لمجلي رئيسيًّا ويراه يحيى في سجلّه.
+     */
     opts.production
       ? Promise.resolve([] as { id: string }[])
       : db.client.findMany({
-          where: { ...(scoped ? { ownerId: { in: scoped } } : {}), ...dateFilter },
+          where: {
+            ...(scoped ? { OR: [{ ownerId: { in: scoped } }, { coOwnerId: { in: scoped } }] } : {}),
+            ...dateFilter,
+          },
           select: { id: true },
           take: 2000,
         }),

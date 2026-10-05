@@ -205,6 +205,33 @@ export function splitByProject(
 // ═══════════════════════════════════════════════════════════════
 
 /** مشروع في الفترة، ومعه من يستحق حصة المدير عنه هو بعينه */
+/**
+ * المبلغ الذي تُحسب عليه النسبة من مشروعٍ مسَّته التسوية.
+ *
+ * **لا نسبة على مالٍ نسبه النظام ولم يبعه أحد.** التسوية توسّع مبالغ الشيت
+ * لتبلغ ما رصده دفتر المحاسب — وما زادته مشترياتٌ لم يرصدها الشيت، لا صفقةٌ
+ * أتمّها موظف. فالبائع يستحقّ على ما سجّله هو:
+ *
+ *   · **مشروعٌ أنشأته التسوية** (`settle-YYYY`) — لا بائع له أصلًا فلا نسبة.
+ *   · **مشروعٌ وسّعته التسوية** — النسبة على `preSettleTotal`، رقمِه المرصود
+ *     قبل التوسيع.
+ *   · **وما لم تمسّه** يمرّ كما هو.
+ *
+ * وكانت القاعدة مكتوبةً في تعليقٍ ولا يطبّقها الكود: تكفي أول خطة نسبٍ
+ * تُسنَد ليستحقّ الفريق نسبًا على ١٬٤٨٤ مشروعًا موسَّعًا و١٥٥ مُنشأً.
+ */
+export function commissionableAmount(project: {
+  amount: number;
+  importTag?: string | null;
+  preSettleTotal?: number | null;
+}): number {
+  if (project.importTag?.startsWith('settle-')) return 0;
+  if (project.preSettleTotal !== null && project.preSettleTotal !== undefined) {
+    return Math.min(project.amount, project.preSettleTotal);
+  }
+  return project.amount;
+}
+
 export type AttributableProject = {
   projectId: string;
   collected: number;

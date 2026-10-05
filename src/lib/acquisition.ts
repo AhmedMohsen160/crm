@@ -31,9 +31,90 @@ export const ACCOUNT_CHANNEL: Record<string, string> = {
 export const UNATTRIBUTED = 'general';
 export const UNATTRIBUTED_LABEL = 'تسويق عام (غير منسوب لقناة)';
 
-export function channelOfAccount(code: string | null): string {
+/**
+ * قناةُ الحساب.
+ *
+ * **والحقل المضبوط من الشاشة يعلو على الرمز المزروع.** الرمز يخدم شجرةَ
+ * الحسابات التي زرعها النظام، وحسابات المحاسب المرحَّلة بلا رموز أصلًا —
+ * فبلا `adChannel` كان إنفاقُ المكتب كلُّه يقع في «غير منسوب» ولا تظهر
+ * تكلفةُ عميلٍ واحد.
+ */
+export function channelOfAccount(code: string | null, adChannel?: string | null): string {
+  if (adChannel) return adChannel;
   if (!code) return UNATTRIBUTED;
   return ACCOUNT_CHANNEL[code] ?? UNATTRIBUTED;
+}
+
+/**
+ * القنوات التي يصحّ أن يُنسب إليها إنفاق.
+ *
+ * **وهي قنواتُ الليدز نفسها** — لأن القسمة تقع بينهما: إنفاقُ جوجل على
+ * ليدز جوجل. وقناةٌ في جانبٍ بلا نظيرها في الآخر تُنتج كسرًا بلا مقام.
+ */
+export const SPEND_CHANNELS: { value: string; label: string }[] = [
+  { value: 'google_ads', label: 'Google Ads' },
+  { value: 'meta_ads', label: 'Meta Ads' },
+  { value: 'organic', label: 'Organic — السيو والمحتوى' },
+  { value: 'website', label: 'الموقع الإلكتروني' },
+  { value: 'referral', label: 'توصية' },
+  { value: 'walk_in', label: 'زيارة فرع' },
+];
+
+/**
+ * قنواتٌ يأتي منها ليدٌ ولا يُنفَق عليها.
+ *
+ * **تُعرض ولا تُضبط**: «عميل قديم» ليس بابًا يُشترى، لكنه يُعدّ في القمع —
+ * وبلا اسمِه في الشاشة يظهر مفتاحُه البرمجيّ خامًا (`returning`) في شاشةٍ
+ * عربيّة يقرؤها المالك.
+ */
+const SPEND_LABELS = new Map<string, string>([
+  ...SPEND_CHANNELS.map((c) => [c.value, c.label] as [string, string]),
+  ['returning', 'عميل قديم'],
+  ['other', 'أخرى'],
+  ['unknown', 'بلا قناة مسجَّلة'],
+]);
+
+export function channelLabel(channel: string): string {
+  return SPEND_LABELS.get(channel) ?? (channel === UNATTRIBUTED ? UNATTRIBUTED_LABEL : channel);
+}
+
+/**
+ * قناةُ السطر من **بيان القيد** — حين يجمع الحسابُ الواحد قناتين.
+ *
+ * **ولماذا نقرأ البيان أصلًا:** دفتر ٢٠٢٦ يضع جوجل وفيسبوك في حسابٍ واحد
+ * (`Paid Advertising via Platforms Expenses`)، والتمييز بينهما في البيان
+ * وحده: `… - Google Ads` و«… - سوشيال ميديا (فيسبوك)». فبلا قراءته يبقى
+ * ٢١٣ ألفًا كتلةً واحدة لا تُقسَم على قناة.
+ *
+ * **وليست تخمينًا**: المحاسب هو من كتب اسم القناة صريحًا. والكلمات أدناه
+ * أسماءُ المنصّات نفسها لا استنتاجٌ من سياق.
+ *
+ * **وتُقرأ عند الترحيل وحده** ثم تُحفظ على السطر — فمن صحّحها بيده بعد ذلك
+ * لا يُكتب فوق عمله في رفعةٍ تالية.
+ */
+const MEMO_CHANNELS: [RegExp, string][] = [
+  [/google\s*ads?|جوجل|جوحل/i, 'google_ads'],
+  [/facebook|meta\s*ads?|instagram|فيسبوك|فيس بوك|انستجرام|إنستجرام|سوشيال ميديا/i, 'meta_ads'],
+  [/\bseo\b|سيو|باك ?لينك|back\s*link|content\s*writing|كتابة محتوي|كتابة محتوى/i, 'organic'],
+];
+
+export function adChannelOfMemo(memo: string | null | undefined): string | null {
+  const text = String(memo ?? '');
+  if (!text) return null;
+  for (const [pattern, channel] of MEMO_CHANNELS) {
+    if (pattern.test(text)) return channel;
+  }
+  return null;
+}
+
+/**
+ * هل يصحّ أن يحمل هذا الحساب قناةً؟
+ *
+ * **المصروف البيعيّ والتسويقيّ وحده.** ووضعُ قناةٍ على حساب الإيجار يقسم
+ * إيجارَ المكتب على ليدز جوجل — وهو رقمٌ لا معنى له يُبنى عليه قرارُ إنفاق.
+ */
+export function mayCarryChannel(type: string, expenseGroup: string | null | undefined): boolean {
+  return type === 'expense' && expenseGroup === 'selling_marketing';
 }
 
 // ── المؤشرات ───────────────────────────────────────────────────
@@ -76,10 +157,35 @@ function ratio(numerator: number, denominator: number): number | null {
  * على أساسه.
  */
 export function channelMetrics(row: ChannelInput): ChannelResult {
+  /**
+   * **و«غير منسوب» وعاءُ انتظارٍ لا قناة.**
+   *
+   * إنفاقُه لم يُنسب بعد، و«ليدزه» ليدزٌ لم تُسجَّل قناتُها — ولا علاقة بين
+   * الطرفين. فقسمةُ أحدهما على الآخر تُنتج رقمًا بلا معنى (٦٣٢ ألفًا لليد
+   * الواحد)، وهو رقمٌ يُقرأ فيُصدَّق.
+   */
+  if (row.channel === UNATTRIBUTED) {
+    return {
+      ...row,
+      costPerLead: null,
+      costPerWon: null,
+      conversionPct: row.leads > 0 ? ratio(row.won * 100, row.leads) : null,
+      roas: null,
+      net: money(row.revenue - row.spend),
+    };
+  }
+
   return {
     ...row,
-    costPerLead: row.leads > 0 ? money(row.spend / row.leads) : null,
-    costPerWon: row.won > 0 ? money(row.spend / row.won) : null,
+    /**
+     * **وبلا إنفاقٍ منسوبٍ لا تكلفة — لا صفر.**
+     *
+     * صفرٌ يقول «جاءنا هذا الليد مجانًا»، وهو ادّعاءٌ لا يصحّ حين يكون
+     * الإنفاق موجودًا في الدفتر وغيرَ منسوبٍ للقناة بعد. والفرق قرارُ
+     * إنفاقٍ يُتّخذ: من يقرأ «تكلفة الليد صفر» يزيد الإنفاق على القناة.
+     */
+    costPerLead: row.leads > 0 && row.spend > 0 ? money(row.spend / row.leads) : null,
+    costPerWon: row.won > 0 && row.spend > 0 ? money(row.spend / row.won) : null,
     conversionPct: row.leads > 0 ? ratio(row.won * 100, row.leads) : null,
     roas: row.spend > 0 ? ratio(row.revenue, row.spend) : null,
     net: money(row.revenue - row.spend),

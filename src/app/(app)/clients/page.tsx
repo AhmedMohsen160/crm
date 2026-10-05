@@ -35,6 +35,9 @@ export default async function ClientsPage({
     type?: string;
     branch?: string;
     sort?: string;
+    /** بعد حذفٍ نهائيّ — اسم من حُذف وجردُ ما مضى معه */
+    purged?: string;
+    line?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -134,6 +137,13 @@ export default async function ClientsPage({
           />
         )}
       </div>
+
+      {params.purged && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          حُذف «<b>{params.purged}</b>» نهائيًّا{params.line ? ` — ${params.line}` : ''}. والأثر في
+          سجل التدقيق.
+        </p>
+      )}
 
       <ClientsBoard
         initialRows={rows}
